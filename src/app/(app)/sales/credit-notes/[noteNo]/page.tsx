@@ -144,7 +144,7 @@ export default async function NotePage({
                 <Attachments
                   action={attachToNote}
                   hidden={{ note_no: memo.memoNo }}
-                  mayAttach={false}
+                  mayAttach={mayAttach}
                   objectId={memo.id}
                   objectType="customer_credit_memo"
                 />
@@ -320,7 +320,13 @@ export default async function NotePage({
               />
             </AttachmentsButton>
             <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
-              <RecordHistory objectId={note.id} objectType={notes.PERMISSION_OBJECT} />
+              {/* The note's events are the credit memo object's (it governs
+                  notes); its files are filed under its own, so they are named. */}
+              <RecordHistory
+                objectId={note.id}
+                objectType={notes.PERMISSION_OBJECT}
+                related={[{ objectType: 'attachment', field: 'parent', value: `${notes.ATTACHMENT_OBJECT}:${note.id}` }]}
+              />
             </HistoryButton>
           </>
         }

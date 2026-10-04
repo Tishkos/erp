@@ -69,11 +69,14 @@ export async function attachToNote(formData: FormData): Promise<void> {
   // Where files go and who may read them back — registered before the first upload of a cold process.
   registerAllRecords();
   await runAdminAndReturn(async (tx, ctx) => {
+    // A note files under its own object; a credit memo (which this screen also
+    // opens) under the memo's, so the paperclip works on both.
     const found = await notes.viewByNo(tx, noteNo);
-    if (!found) redirect(withQuery(record(noteNo), 'error', 'not_found'));
+    const memo = found ? null : await notes.memoByNo(tx, noteNo);
+    if (!found && !memo) redirect(withQuery(record(noteNo), 'error', 'not_found'));
     await attachments.upload(tx, ctx, {
-      objectType: notes.ATTACHMENT_OBJECT,
-      objectId: found.id,
+      objectType: found ? notes.ATTACHMENT_OBJECT : 'customer_credit_memo',
+      objectId: found ? found.id : memo!.id,
       fileName: upload.name,
       content,
     });

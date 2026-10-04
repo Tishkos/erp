@@ -18,7 +18,7 @@
  * ageing's `openItems`, the subledger, the reconciliation, the credits
  * register — so a green run means the screens agree with each other.
  */
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { ownerPool, resetTestData, seedBranch } from './setup';
 import { withScope } from '@/server/db/client';
@@ -37,6 +37,11 @@ import { parseDecimal } from '@/server/domain/money';
 import { parseQuantity } from '@/server/domain/uom';
 import { assertApplicable, creditOnPosting, daysLate } from '@/server/domain/customer-credits';
 import type { ActorContext } from '@/server/services/chart-of-accounts';
+import { registerAttachmentRuntime } from '@/server/attachments-runtime';
+import * as attachments from '@/server/services/attachments';
+import * as audit from '@/server/services/audit';
+import { prepareExport } from '@/server/print/export';
+import type { ExportKey } from '@/server/print/registry';
 
 const BAGHDAD = 'BGW';
 const PANEL = 'ITM-PANEL';
@@ -592,6 +597,144 @@ describe('§14 · sales return, reconciliation', () => {
     }
     const control = rows.find((row) => row.accountCode.startsWith('A8RC'));
     expect(Number(control!.subledgerBalance)).toBe(100000 - 130000 + 12000 - 2000);
+  });
+});
+
+describe('the four doors, from the draft (owner, 2026-10-04)', () => {
+  /*
+   * "Every invoice — notes, attachments, audit, print — after the draft is
+   * created." Each receivables record, the moment it exists: a print model
+   * that builds, a file that may be stapled to it (the parent check in
+   * attachments-runtime knows the object), and a history with its first event.
+   */
+  beforeAll(() => {
+    registerAttachmentRuntime();
+    const files = new Map<string, Buffer>();
+    attachments.registerStorage({ put: async (key, content) => void files.set(key, content), get: async (key) => files.get(key) ?? null });
+    attachments.registerScanner(() => ({ status: 'clean' }));
+  });
+
+  const doors = async (objectType: string, objectId: string, exportKey: ExportKey, number: string) => {
+    const before = (await as(clerk, (tx) => attachments.currentFor(tx, objectType, objectId))).length;
+    await as(clerk, (tx) =>
+      attachments.upload(tx, clerk, { objectType, objectId, fileName: 'paper.pdf', content: Buffer.from('%PDF-1.4 paper') }),
+    );
+    expect(await as(clerk, (tx) => attachments.currentFor(tx, objectType, objectId))).toHaveLength(before + 1);
+    const printed = await as(manager, (tx) =>
+      prepareExport(tx, manager, { key: exportKey, format: 'pdf', locale: 'en', input: { id: number, query: new URLSearchParams() } }),
+    );
+    expect(printed.status, exportKey).toBe(200);
+    if (printed.status === 200) expect(printed.model.number).toBe(number);
+    return as(manager, (tx) => audit.timelineWithAttachments(tx, objectType, objectId));
+  };
+
+  it('a draft sales invoice prints, takes a file and has a history', async () => {
+    const made = await as(clerk, (tx) =>
+      ar.createDirect(tx, clerk, {
+        customerId,
+        branchCode: BAGHDAD,
+        invoiceDate: '2026-09-01',
+        lines: [{ itemCode: PANEL, quantity: qty('1'), unitPriceIqd: iqd('100000'), warehouseCode: WAREHOUSE }],
+      }),
+    );
+    const view = await as(manager, (tx) => ar.view(tx, made.id));
+    expect(view.status).toBe('draft');
+    const history = await doors(ar.PERMISSION_OBJECT, made.id, 'sales_invoice', view.invoiceNo);
+    expect(history.map((row) => row.action)).toEqual(expect.arrayContaining(['ar_invoice.created']));
+  });
+
+  it('a draft receipt, a draft credit note and a draft debit note do too', async () => {
+    const receipt = await as(clerk, (tx) =>
+      receipts.create(tx, clerk, {
+        customerId,
+        branchCode: BAGHDAD,
+        receiptDate: '2026-09-10',
+        bankCashAccountId: bankAccountId,
+        amountIqd: iqd('5000'),
+        bankReference: 'TT-DRAFT',
+      }),
+    );
+    expect((await doors(receipts.PERMISSION_OBJECT, receipt.id, 'customer_receipt', receipt.receiptNo)).length).toBeGreaterThan(0);
+
+    for (const kind of ['credit', 'debit'] as const) {
+      const made = await as(clerk, (tx) =>
+        notes.create(tx, clerk, {
+          kind,
+          customerId,
+          branchCode: BAGHDAD,
+          noteDate: '2026-09-15',
+          dueDate: null,
+          arInvoiceId: null,
+          amountIqd: iqd('1000'),
+          reason: 'Draft door check',
+        }),
+      );
+      const seen = await as(manager, (tx) => notes.viewByNo(tx, made.noteNo));
+      expect(seen?.status).toBe('draft');
+      await doors(notes.ATTACHMENT_OBJECT, made.id, 'customer_note', made.noteNo);
+      expect((await as(manager, (tx) => audit.timelineWithAttachments(tx, notes.PERMISSION_OBJECT, made.id))).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('a sales return from the moment it is raised, and the credit memo it settles into', async () => {
+    const invoice = await sell('100000', { quantity: '10' });
+    const created = await as(clerk, (tx) =>
+      sr.request(tx, clerk, {
+        arInvoiceId: invoice.id,
+        requestedOn: '2026-09-20',
+        reason: 'One panel cracked',
+        offsetKind: 'receivable',
+        lines: [{ arInvoiceLineId: invoice.lineId, quantity: qty('1') }],
+      }),
+    );
+    const raised = await as(manager, (tx) => sr.view(tx, created.id));
+    expect(raised.status).toBe('submitted');
+    expect((await doors(sr.PERMISSION_OBJECT, created.id, 'sales_return', raised.returnNo)).length).toBeGreaterThan(0);
+
+    await as(manager, (tx) =>
+      sr.receiveGoods(tx, manager, created.id, {
+        receivedOn: '2026-09-20',
+        lines: [{ salesReturnLineId: raised.lines[0]!.id, quantity: qty('1') }],
+      }),
+    );
+    await as(manager, (tx) =>
+      sr.inspect(tx, manager, created.id, [
+        { salesReturnLineId: raised.lines[0]!.id, acceptedQuantity: qty('1'), disposition: 'saleable', destinationWarehouseCode: WAREHOUSE },
+      ]),
+    );
+    const settled = await as(manager, (tx) => sr.acceptAndSettle(tx, manager, created.id));
+    const memo = await as(manager, (tx) => notes.memoByNo(tx, settled.creditMemoNo));
+    expect(memo).not.toBeNull();
+    await doors('customer_credit_memo', memo!.id, 'customer_note', settled.creditMemoNo);
+  });
+
+  it('refuses a file on a return in a branch the reader cannot see', async () => {
+    const invoice = await sell('5000');
+    const created = await as(clerk, (tx) =>
+      sr.request(tx, clerk, {
+        arInvoiceId: invoice.id,
+        requestedOn: '2026-09-20',
+        reason: 'Wrong item',
+        offsetKind: 'receivable',
+        lines: [{ arInvoiceLineId: invoice.lineId, quantity: qty('1') }],
+      }),
+    );
+    // The same grants, in Erbil only: row security hides Baghdad's return, so
+    // the parent check answers "no record" and the file is refused.
+    await seedBranch('ERB', 'Erbil');
+    const id = randomUUID();
+    await ownerPool.query(`insert into app_user (id, email, display_name) values ($1,$2,'Erbil clerk')`, [id, `${id}@example.com`]);
+    await ownerPool.query(`insert into user_role (user_id, role_code) values ($1,'accounting_officer')`, [id]);
+    await ownerPool.query(`insert into user_branch_scope (user_id, branch_code) values ($1,'ERB')`, [id]);
+    const erbil: ActorContext = {
+      principal: await withScope({ userId: id, branchCode: 'ERB' }, (tx) => authz.loadPrincipal(tx, id)),
+      branchCode: 'ERB',
+    };
+    await expect(
+      withScope({ userId: id, branchCode: 'ERB' }, (tx) =>
+        attachments.upload(tx, erbil, { objectType: sr.PERMISSION_OBJECT, objectId: created.id, fileName: 'x.pdf', content: Buffer.from('%PDF-1.4 x') }),
+      ),
+    ).rejects.toThrow(/cannot access the record/);
   });
 });
 
