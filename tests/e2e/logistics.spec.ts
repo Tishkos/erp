@@ -72,9 +72,16 @@ test.describe('REQ-LOG-001 · the Logistics module', () => {
     await signIn(page);
     // The module's dropdown: four headings, fifteen items, in the owner's order.
     await page.goto('/logistics/shipments');
-    for (const item of ['Customs Pre-Declarations', 'Customs Declarations', 'Update from ASYCUDA', 'Customs Duties & Taxes', 'Customs Documents', 'Bills of Lading', 'Containers', 'Ports & Routes', 'Freight & Shipping Costs', 'Shipment Documents', 'In-Transit Inventory', 'Shipment Tracking', 'Landed Costs', 'Cost Allocation']) {
-      await expect(page.getByRole('link', { name: item, exact: true }).first()).toBeVisible();
+    const nav = page.getByRole('navigation', { name: 'Primary navigation' });
+    await nav.getByRole('button', { name: 'Logistics' }).click();
+    for (const heading of ['Customs — ASYCUDA', 'Shipping', 'In Transit', 'Landed Costs']) {
+      await expect(nav.getByRole('heading', { name: heading, exact: true })).toBeVisible();
     }
+    const items = ['Customs Pre-Declarations', 'Customs Declarations', 'Update from ASYCUDA', 'Customs Duties & Taxes', 'Customs Documents', 'Shipments', 'Bills of Lading', 'Containers', 'Ports & Routes', 'Freight & Shipping Costs', 'Shipment Documents', 'In-Transit Inventory', 'Shipment Tracking', 'Landed Costs', 'Cost Allocation'];
+    for (const item of items) await expect(nav.getByRole('link', { name: item, exact: true })).toBeVisible();
+    const order = await nav.getByRole('link').evaluateAll((nodes) => nodes.map((node) => node.textContent?.trim() ?? ''));
+    expect(order.filter((name) => items.includes(name))).toEqual(items);
+    await page.keyboard.press('Escape');
 
     await page.goto('/payables/invoices/new');
     await page.getByLabel('Supplier Code').fill('SUP-00001');

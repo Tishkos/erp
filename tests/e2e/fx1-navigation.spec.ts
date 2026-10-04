@@ -40,16 +40,24 @@ test.describe('FX2 · the module dropdowns', () => {
     }
   });
 
-  test('Logistics holds customs and shipping', async ({ page }) => {
+  test('Logistics is four headings: customs, shipping, in transit, landed costs (REQ-LOG-001)', async ({ page }) => {
     const nav = page.getByRole('navigation', { name: 'Primary navigation' });
     await nav.getByRole('button', { name: 'Logistics' }).click();
-    await expect(nav.getByRole('heading', { name: 'Customs (ASYCUDA)', exact: true })).toBeVisible();
-    await expect(nav.getByRole('heading', { name: 'Shipping', exact: true })).toBeVisible();
+    for (const heading of ['Customs — ASYCUDA', 'Shipping', 'In Transit', 'Landed Costs']) {
+      await expect(nav.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+    }
     await expect(nav.getByRole('link', { name: 'Customs Pre-Declarations', exact: true })).toHaveAttribute('href', '/payables/pd');
+    await expect(nav.getByRole('link', { name: 'Customs Declarations', exact: true })).toHaveAttribute('href', '/logistics/customs-declarations');
     await expect(nav.getByRole('link', { name: 'Update from ASYCUDA', exact: true })).toHaveAttribute('href', '/payables/pd/asycuda');
-    await expect(nav.getByRole('link', { name: 'Bills of Lading', exact: true })).toBeVisible();
-    await expect(nav.getByRole('link', { name: 'Containers', exact: true })).toBeVisible();
-    await expect(nav.getByRole('link', { name: 'Invoice Status Tracking', exact: true })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'Bills of Lading', exact: true })).toHaveAttribute('href', '/payables/shipments');
+    await expect(nav.getByRole('link', { name: 'Containers', exact: true })).toHaveAttribute('href', '/payables/containers');
+    await expect(nav.getByRole('link', { name: 'In-Transit Inventory', exact: true })).toHaveAttribute('href', '/logistics/in-transit');
+    for (const item of ['Customs Duties & Taxes', 'Customs Documents', 'Shipments', 'Ports & Routes', 'Freight & Shipping Costs', 'Shipment Documents', 'Shipment Tracking', 'Landed Costs', 'Cost Allocation']) {
+      await expect(nav.getByRole('link', { name: item, exact: true })).toBeVisible();
+    }
+    // Invoice Status Tracking was absorbed; the client jobs are not in the dropdown.
+    await expect(nav.getByRole('link', { name: 'Invoice Status Tracking', exact: true })).toHaveCount(0);
+    await expect(nav.getByRole('link', { name: 'Logistics Jobs', exact: true })).toHaveCount(0);
   });
 
   test('Treasury & Banking holds the loans and the deposits beside the accounts', async ({ page }) => {
