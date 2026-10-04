@@ -81,6 +81,9 @@ const BUILDERS = {
   hr_payroll_register: (ctx, input) => hrReports.payrollRegister(ctx, input.query),
   hr_unsettled_advances: (ctx, input) => hrReports.unsettledAdvances(ctx, input.query),
   project_certificate: byId(projectDocuments.projectCertificate),
+  project_budget: byId(projectDocuments.projectBudget),
+  project_change_order: byId(projectDocuments.changeOrder),
+  project_material_issue: byId(projectDocuments.materialIssue),
 } satisfies Record<ExportKey, Builder>;
 
 export function exportable(key: ExportKey): Exportable {

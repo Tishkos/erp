@@ -65,6 +65,10 @@ export const EXPORT_ACCESS = {
   hr_unsettled_advances: { kind: 'report', route: '/hr/reports', object: 'employee_advance' },
   // REQ-PM-001 PM-5 — the progress certificate, the client's invoice for work done (shared, 2026-10-04).
   project_certificate: { kind: 'document', route: '/projects/billing', object: 'project' },
+  // The Project System's other documents, printed from their own pages (shared, 2026-10-04).
+  project_budget: { kind: 'document', route: '/projects/budgets', object: 'project' },
+  project_change_order: { kind: 'document', route: '/projects/change-orders', object: 'project' },
+  project_material_issue: { kind: 'document', route: '/projects/material-issues', object: 'project' },
 } as const satisfies Record<
   string,
   { readonly kind: 'document' | 'report'; readonly route: string; readonly object: string; readonly selfService?: boolean }

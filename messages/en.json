@@ -5869,7 +5869,10 @@
       "bill_of_lading": "Bill of Lading",
       "asycuda_reading": "ASYCUDA Reading",
       "import_application": "Import Application",
-      "project_certificate": "Progress Certificate"
+      "project_certificate": "Progress Certificate",
+      "project_budget": "Budget Document",
+      "project_change_order": "Change Order",
+      "project_material_issue": "Material Issue"
     }
   }
 }

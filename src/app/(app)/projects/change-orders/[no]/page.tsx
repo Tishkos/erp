@@ -1,10 +1,15 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, Hidden, Submit, admin as s } from '@/components/admin';
+import { readAttachments } from '@/components/admin/attachments';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
+import { HistoryButton } from '@/components/admin/icon-dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordAttachmentsDoor } from '@/components/admin/record-attachments-door';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
+import { ExportIcon } from '@/components/print/export-menu';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, formatTimestamp, type Locale } from '@/i18n/config';
 import { toDecimalString } from '@/server/domain/money';
@@ -13,6 +18,7 @@ import { visibleRoute } from '@/server/delivered';
 import { isNotFoundError } from '@/server/not-found';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as pb from '@/server/services/project-budget';
+import * as recordNotes from '@/server/services/record-notes';
 import { approveChangeOrder, rejectChangeOrder } from '../actions';
 
 /**
@@ -20,7 +26,9 @@ import { approveChangeOrder, rejectChangeOrder } from '../actions';
  * document window with the change's fields, the status chip, the two
  * approvals as its actions, the budget it moves as its lines; then the
  * project's position (baseline beside revised, R2) and the versions,
- * stacked underneath; then the history.
+ * stacked underneath. The four doors in its title bar from the draft on —
+ * printer, paperclip, notes, clock (shared, 2026-10-04) — and the project
+ * and the budget document as links to their own pages.
  */
 export const dynamic = 'force-dynamic';
 
@@ -47,7 +55,9 @@ export default async function ChangeOrderPage({ params, searchParams }: { params
 
   const view = await withCurrentUser(async (tx) => {
     try {
-      return await pb.changeOrder(tx, actor, variationNo);
+      const found = await pb.changeOrder(tx, actor, variationNo);
+      const ref = { object: pb.VARIATION_DOCUMENT_TYPE, recordId: found.variation.variationNo };
+      return { ...found, notes: await recordNotes.listNotes(tx, ref), files: await readAttachments(tx, ref.object, ref.recordId) };
     } catch (error) {
       if (isNotFoundError(error)) return null;
       throw error;
@@ -68,14 +78,7 @@ export default async function ChangeOrderPage({ params, searchParams }: { params
   const fields: DocumentField[] = [
     { label: column('document_no'), value: <bdi dir="ltr">{v.variationNo}</bdi> },
     { label: column('status'), value: status(v.status), status: v.status },
-    {
-      label: x('project'),
-      value: (
-        <Link className={s.sapLink} href={`/projects/${encodeURIComponent(v.projectCode)}`}>
-          <bdi dir="ltr">{v.projectCode}</bdi>
-        </Link>
-      ),
-    },
+    { label: x('project'), value: <ProfileLink code={v.projectCode} kind="project" /> },
     { label: column('name'), value: <bdi dir="auto">{view.project.name}</bdi> },
     { label: column('date'), value: <bdi dir="ltr">{day(v.raisedOn)}</bdi> },
     { label: x('version'), value: <bdi dir="ltr">{`v${v.version}${view.supersedesNo ? ` · ${x('supersedes')} ${view.supersedesNo}` : ''}`}</bdi> },
@@ -86,18 +89,7 @@ export default async function ChangeOrderPage({ params, searchParams }: { params
     { label: x('approval_commercial'), value: <bdi dir="auto">{v.commercialApprovedAt ? `${view.people.commercialBy ?? '—'} · ${when(v.commercialApprovedAt)}` : t('none')}</bdi> },
     { label: x('approval_budget'), value: <bdi dir="auto">{v.budgetApprovedAt ? `${view.people.budgetBy ?? '—'} · ${when(v.budgetApprovedAt)}` : t('none')}</bdi> },
     ...(v.rejectedAt ? [{ label: x('rejected_by'), value: <bdi dir="auto">{`${view.people.rejectedBy ?? '—'} · ${when(v.rejectedAt)} · ${v.rejectedReason ?? ''}`}</bdi> }] : []),
-    ...(view.budgetDocumentNo
-      ? [
-          {
-            label: x('budget_document'),
-            value: (
-              <Link className={s.sapLink} href={`/projects/budgets/${encodeURIComponent(view.budgetDocumentNo)}`}>
-                <bdi dir="ltr">{view.budgetDocumentNo}</bdi>
-              </Link>
-            ),
-          },
-        ]
-      : []),
+    ...(view.budgetDocumentNo ? [{ label: x('budget_document'), value: <ProfileLink code={view.budgetDocumentNo} kind="project_budget" /> }] : []),
     { label: column('description'), value: <bdi dir="auto">{v.description}</bdi> },
     ...(v.scopeNote ? [{ label: x('scope_note'), value: <bdi dir="auto">{v.scopeNote}</bdi> }] : []),
   ];
@@ -133,8 +125,17 @@ export default async function ChangeOrderPage({ params, searchParams }: { params
             {v.status === 'draft' && isRaiser ? <p className={s.sapNote}>{x('four_eyes_note')}</p> : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={t('history')}
+        titleActions={
+          <>
+            {/* Printer, paperclip, notes, clock — from the draft on (2026-10-04). */}
+            <ExportIcon exportKey="project_change_order" id={v.variationNo} title={`${x('change_order')} ${v.variationNo}`} />
+            <RecordAttachmentsDoor files={view.files} mayAttach={can(principal, 'edit_draft', pb.PERMISSION_OBJECT)} object={pb.VARIATION_DOCUMENT_TYPE} recordId={v.variationNo} />
+            <RecordNotesDoor notes={view.notes} object={pb.VARIATION_DOCUMENT_TYPE} recordId={v.variationNo} />
+            <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
+              <RecordHistory objectId={v.variationNo} objectType={pb.VARIATION_DOCUMENT_TYPE} />
+            </HistoryButton>
+          </>
+        }
         documentType={x('change_order')}
         fields={fields}
         id="change-order"
@@ -248,9 +249,7 @@ export default async function ChangeOrderPage({ params, searchParams }: { params
                   {view.versions.map((row) => (
                     <tr key={row.variationNo}>
                       <td>
-                        <Link className={s.sapLink} href={`/projects/change-orders/${encodeURIComponent(row.variationNo)}`}>
-                          <bdi dir="ltr">{row.variationNo}</bdi>
-                        </Link>
+                        <ProfileLink code={row.variationNo} kind="project_variation" />
                       </td>
                       <td>v{row.version}</td>
                       <td>
@@ -267,7 +266,6 @@ export default async function ChangeOrderPage({ params, searchParams }: { params
         </section>
       ) : null}
 
-      <RecordHistory objectId={v.variationNo} objectType={pb.VARIATION_DOCUMENT_TYPE} />
     </AdminPage>
   );
 }

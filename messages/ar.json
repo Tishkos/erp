@@ -5869,7 +5869,10 @@
       "bill_of_lading": "بوليصة الشحن",
       "asycuda_reading": "قراءة أسيكودا",
       "import_application": "طلب استيراد",
-      "project_certificate": "شهادة الإنجاز"
+      "project_certificate": "شهادة الإنجاز",
+      "project_budget": "مستند الموازنة",
+      "project_change_order": "أمر التغيير",
+      "project_material_issue": "صرف مواد"
     }
   }
 }
