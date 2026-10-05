@@ -41,7 +41,7 @@ Document numbers (opening stock, transfer, reconciliation, stock count), item co
 After a successful save the screen shows **Saved.** (تم الحفظ.). When the system refuses, it shows **That could not be saved.** (تعذّر الحفظ.) followed by one sentence saying why and what to do; the refusal sentence itself is in English. If you may not open a screen you see **Not available to you** (غير متاح لك) — ask an administrator for access to that screen. If a button described in this guide is missing, you do not hold the permission for that action.
 
 ### The four icons on a record — Concepts, Inventory
-An Opening Stock record and a Stock Count record carry four icons in the title bar, in this order:
+An Opening Stock record, a Stock Count record, a Transfer record and an Item Reconciliation record carry four icons in the title bar, in this order:
 1. **Printer** — **Print / Export** (طباعة / تصدير): downloads the record as PDF, Excel (.xlsx) or Word (.docx), in English or العربية. PDF needs the print permission, Excel and Word need the export permission; a format you may not have is not offered.
 2. **Paperclip** — **Attachments** (المرفقات): the files kept with the record, with a count. To add one press **Choose a file** (اختر ملفاً) then **Attach** (إرفاق). Up to 25MB; programs and archives are refused.
 3. **Speech bubble** — **Notes** (الملاحظات): what people wrote about the record (When, Who, Note), newest first. Type in **Add note** (إضافة ملاحظة) and press **Add note**. A note is dated and signed and can never be edited or removed; at most 2,000 characters.
@@ -235,8 +235,8 @@ Nothing is saved on this screen; it is read-only. A row appears as soon as a doc
 
 ## Transfer (التحويل)
 Path: Inventory → Inventory & Warehouses → Transfer   |   Arabic: المخزون ← المخزون والمستودعات ← التحويل
-Address: /inventory/transfers
-Needs: `view` on `warehouse_transfer` to open; `create` on `warehouse_transfer` and `execute` on `inventory_movement` to make a transfer; `print` / `export` on `warehouse_transfer` for copies.
+Address: /inventory/transfers (one transfer: /inventory/transfers/<transfer number>)
+Needs: `view` on `warehouse_transfer` to open the list and a transfer's record; `create` on `warehouse_transfer` and `execute` on `inventory_movement` to make a transfer; `print` / `export` on `warehouse_transfer` for copies; `create` on `warehouse_transfer` to add a note or a file to a transfer's record.
 What it is for: Moves an item from one warehouse to another inside the same branch. Saving the form moves the stock at once — out of the first warehouse, into the second — at the cost it already carries. There is no request to approve and nothing stays "on the way".
 
 ### How to transfer stock between warehouses — Transfer
@@ -247,11 +247,36 @@ What it is for: Moves an item from one warehouse to another inside the same bran
 5. **To Warehouse** (إلى مستودع): the warehouse it goes to. It must be a different one.
 6. **Quantity** (الكمية): in the item's base unit.
 7. **Date** (التاريخ): today by default.
-8. Press **Create** (إنشاء). The transfer gets its number and appears in the list with **Recorded** (مسجّل) in the **Stock Movement** (حركة المخزون) column.
+8. Press **Create** (إنشاء). The transfer gets its number and appears in the list with **Recorded** (مسجّل) in the **Stock Movement** (حركة المخزون) column. The screen returns to the list; click the new transfer's **Number** (الرقم) to open its record.
 
 ### How to search the list and print a transfer — Transfer
 1. Type in **Search this list** (ابحث في هذه القائمة) — any part of the number, date, item code or name, or warehouse code — and press Enter. **Clear** (مسح) shows everything again.
-2. On the transfer's row open **Print / Export** (طباعة / تصدير) and choose PDF, Excel (.xlsx) or Word (.docx), in English or العربية.
+2. Click a transfer's **Number** (الرقم) to open its record (see "How to open a transfer and what it shows").
+3. To take a copy without opening it: on the transfer's row open **Print / Export** (طباعة / تصدير) and choose PDF, Excel (.xlsx) or Word (.docx), in English or العربية. The same copy is behind the printer icon on the record.
+
+### How to open a transfer and what it shows — Transfer
+Needs: `view` on `warehouse_transfer`.
+1. In the list click the transfer's **Number** (الرقم). The record opens titled with the number; the back button **Transfer** (التحويل) returns to the list.
+2. The header: **Number** (الرقم); **Status** (الحالة) — **Recorded** (مسجّل) or **No ledger entry** (لا قيد في السجل); **Item Name** (اسم الصنف), **From Warehouse** (من مستودع), **To Warehouse** (إلى مستودع) and **Branch** (الفرع) — each a link to its own page; **Date** (التاريخ); **Quantity** (الكمية) with the base unit; **Cost carried (IQD)** (الكلفة المنقولة (د.ع)) — what the moved stock cost, in total; **Created** (تاريخ الإنشاء) — who made the transfer and when.
+3. The lines, **Layers carried** (الطبقات المنقولة): one row for each FIFO layer the transfer took stock from, oldest first — #, **Item Code** (رمز الصنف), **Item Name** (اسم الصنف), **Batch** (الدفعة), **Layer date** (تاريخ الطبقة) — the layer's FIFO date, **Quantity** (الكمية) taken from that layer, **Unit cost (IQD)** (كلفة الوحدة (د.ع)) and **Value (IQD)** (القيمة (د.ع)). A transfer of 15 units that emptied a layer of 10 and took 5 from the next shows two rows. At the foot: the total **Quantity** and **Cost carried (IQD)**; the rows add up to them.
+4. Under the window, **Stock positions** (أرصدة المخزون) "as the Stock Ledger carries them": one row for the warehouse the stock left and one for the warehouse it went to — **Warehouse** (المخزن), **Before** (قبل), **Change** (التغيّر) — minus for the first, plus for the second — and **After** (بعد). Before + Change = After.
+5. The title bar carries the four icons — see "The four icons and the printed copy".
+There is no button on the record: a transfer is complete when it is saved, so there is nothing to approve, edit, cancel or reverse here.
+
+### How to read the layers and the positions — Transfer
+- The costs on a transfer's record are the exact figures the stock ledger holds — 12.5 a unit, 37.5 for three — to as many as four decimals, not rounded to whole dinars. This is so that the layer rows can be added up and checked against **Cost carried (IQD)**.
+- Each layer arrives in the second warehouse with the same unit cost and the same FIFO date it had in the first. That is why a transfer changes no value and posts no journal.
+- **Before** and **After** are the item's balance in that warehouse in the Stock Ledger's own order, just before and just after this transfer. A document entered later — even one dated the same day — does not change them. To see today's balance open the Stock Ledger or Availability.
+- Example: Main held 40 and Shop held 6; a transfer of 15 shows Main Before 40, Change -15, After 25 and Shop Before 6, Change +15, After 21.
+- **No ledger entry** (لا قيد في السجل) in the status, with "No layers: the Stock Movement ledger holds nothing for this transfer." and no positions: the transfer moved nothing the system can see. It is a leftover of data removed outside the application — report it to the accounting manager, do not enter it again.
+
+### The four icons and the printed copy — Transfer
+A transfer's record carries the four icons in its title bar from the moment it is saved:
+1. **Printer** — **Print / Export** (طباعة / تصدير): PDF needs `print` on `warehouse_transfer`, Excel (.xlsx) and Word (.docx) need `export`; in English or العربية.
+2. **Paperclip** — **Attachments** (المرفقات): for example the signed slip between the two warehouses. **Choose a file** (اختر ملفاً), then **Attach** (إرفاق). Adding a file needs `create` on `warehouse_transfer` and the permission to attach files.
+3. **Speech bubble** — **Notes** (الملاحظات): dated, signed notes, never edited. The box **Add note** (إضافة ملاحظة) shows to whoever holds `create` on `warehouse_transfer`.
+4. **Clock** — **Audit log** (سجل التدقيق): what has been recorded about this transfer — who made it and when, and the notes added since.
+The printed copy is titled **Transfer** (تحويل مخزني) and carries what the record shows: the header facts, the **Layers carried** table (batch, layer date, quantity, unit cost to four decimals, value, with totals), the **Stock positions** table (each warehouse with its code and name: Before, Change, After) and the signature boxes. A transfer with **No ledger entry** prints stamped DRAFT / NOT POSTED.
 
 ### Fields — Transfer
 New transfer form:
@@ -261,11 +286,11 @@ New transfer form:
 - **Quantity** (الكمية) — required; above zero; base unit; cannot be more than the first warehouse has available (held minus reserved).
 - **Date** (التاريخ) — required; default today. The date of both movements.
 
-List columns: **Number** (الرقم), **Date** (التاريخ), **Item Code** (رمز الصنف), **Item Name** (اسم الصنف), **From Warehouse** (من مستودع), **To Warehouse** (إلى مستودع), **Quantity** (الكمية), **Stock Movement** (حركة المخزون), **Print / Export** (طباعة / تصدير).
+List columns: **Number** (الرقم) — opens the transfer's record, **Date** (التاريخ), **Item Code** (رمز الصنف), **Item Name** (اسم الصنف), **From Warehouse** (من مستودع), **To Warehouse** (إلى مستودع), **Quantity** (الكمية), **Stock Movement** (حركة المخزون), **Print / Export** (طباعة / تصدير).
 - **Stock Movement** (حركة المخزون) shows **Recorded** (مسجّل) when the stock ledger holds the transfer's movements — always the case for a transfer made on this screen. **No ledger entry** (لا قيد في السجل) means the transfer has no lines in the stock ledger and moved nothing; it is a leftover of data removed outside the application — report it to the accounting manager, do not enter it again.
 
 ### After you save — Transfer
-There are no statuses and no approval: the transfer is done when it is saved. The system writes the stock out of the first warehouse and into the second on the chosen date, oldest stock first. Each cost layer arrives with the same unit cost, the same FIFO date and the same supplier it had, so the value of the stock does not change. No journal entry is posted. Both movements show on Stock Movement and the Stock Ledger with the type **Transfer** (تحويل), the warehouse it came from and the one it went to. Pressing Create twice on the same form moves the stock only once. There is no edit, cancel or reverse button on this screen; a new transfer in the opposite direction moves the stock back.
+There is no approval and no status to move through: the transfer is done when it is saved (the **Status** on its record only says whether the stock ledger holds it — **Recorded** — or not). The system writes the stock out of the first warehouse and into the second on the chosen date, oldest stock first. Each cost layer arrives with the same unit cost, the same FIFO date and the same supplier it had, so the value of the stock does not change. No journal entry is posted. Both movements show on Stock Movement and the Stock Ledger with the type **Transfer** (تحويل), the warehouse it came from and the one it went to. Pressing Create twice on the same form moves the stock only once. There is no edit, cancel or reverse button, on the list or on the transfer's record; a new transfer in the opposite direction moves the stock back. What the transfer did can be read afterwards on its record: the layers it carried and what both warehouses held before and after.
 
 ### Refusals — Transfer
 - "No item ''. Choose an item from the list." — the item name did not match an item exactly; pick it from the suggestions.
@@ -281,6 +306,7 @@ There are no statuses and no approval: the transfer is done when it is saved. Th
 - "… is a service, not a stock item, so it has no inventory." — services cannot be transferred.
 - "A stock movement dated … cannot be written: the period is closed" — choose a date in an open period.
 - "Permission denied: 'execute' on 'inventory_movement' is not granted to this user." — you may raise transfers but not move stock; ask an administrator.
+- **That page does not exist** (هذه الصفحة غير موجودة) on a transfer's address — no transfer has that number, or it belongs to a branch you are not assigned to. Open it from the list.
 
 ## Stock Movement (حركة المخزون)
 Path: Inventory → Inventory & Warehouses → Stock Movement   |   Arabic: المخزون ← المخزون والمستودعات ← حركة المخزون
@@ -441,8 +467,8 @@ Nothing moves and nothing is posted until **Adjust the books**. Then, for every 
 
 ## Item Reconciliation (تسوية الأصناف)
 Path: Inventory → Inventory & Warehouses → Item Reconciliation   |   Arabic: المخزون ← المخزون والمستودعات ← تسوية الأصناف
-Address: /inventory/stock-reconciliation
-Needs: `view` on `stock_reconciliation` to open; `create` on `stock_reconciliation` and `execute` on `inventory_movement` to make one; `print` / `export` on `stock_reconciliation` for copies.
+Address: /inventory/stock-reconciliation (one reconciliation: /inventory/stock-reconciliation/<reconciliation number>)
+Needs: `view` on `stock_reconciliation` to open the list and a reconciliation's record; `create` on `stock_reconciliation` and `execute` on `inventory_movement` to make one; `print` / `export` on `stock_reconciliation` for copies; `create` on `stock_reconciliation` to add a note or a file to a record; `view` on `journal_entry` to see the journal's lines on a record.
 What it is for: A quick correction of one item in one warehouse to bring the system's quantity to what is really on the shelf: **In** adds stock that was found, **Out** removes stock that is missing. It moves the stock and posts the value at once, with no approval. For counting a whole warehouse use Stock Count.
 
 ### How to make a reconciliation (adjustment) — Item Reconciliation
@@ -453,11 +479,42 @@ What it is for: A quick correction of one item in one warehouse to bring the sys
 5. **In/Out** (إدخال/إخراج): **In** (إدخال) to add stock that was found, **Out** (إخراج) to remove stock that is missing.
 6. **Adjustment Quantity** (كمية التسوية): the difference, in the item's base unit — not the new total.
 7. **Date** (التاريخ): today by default.
-8. Press **Create** (إنشاء). The reconciliation gets its number and appears in the list.
+8. Press **Create** (إنشاء). The reconciliation gets its number and appears in the list. The screen returns to the list; click the new reconciliation's **Number** (الرقم) to open its record and see the journal it posted.
 
 ### How to search the list and print a reconciliation — Item Reconciliation
 1. Type in **Search this list** (ابحث في هذه القائمة) — number, date, item or warehouse — and press Enter; **Clear** (مسح) shows everything again.
-2. On the row open **Print / Export** (طباعة / تصدير) for a PDF, Excel or Word copy in English or العربية.
+2. Click a reconciliation's **Number** (الرقم) to open its record (see "How to open a reconciliation and what it shows").
+3. To take a copy without opening it: on the row open **Print / Export** (طباعة / تصدير) for a PDF, Excel or Word copy in English or العربية. The same copy is behind the printer icon on the record.
+
+### How to open a reconciliation and what it shows — Item Reconciliation
+Needs: `view` on `stock_reconciliation`; the journal's lines also need `view` on `journal_entry`.
+1. In the list click the reconciliation's **Number** (الرقم). The record opens titled with the number; the back button **Item Reconciliation** (تسوية الأصناف) returns to the list.
+2. The header: **Number** (الرقم); **Status** (الحالة); **Item Name** (اسم الصنف), **Warehouse** (المخزن) and **Branch** (الفرع) — each a link to its own page; **Date** (التاريخ); **In/Out** (إدخال/إخراج) — **In** (إدخال) or **Out** (إخراج); **Adjustment Quantity** (كمية التسوية) with the base unit; **Value (IQD)** (القيمة (د.ع)) — what the adjusted stock was worth at cost; **Journal** (القيد) — the number of the journal it posted (a link if you may open journals), or "—"; **Created** (تاريخ الإنشاء) — who made it and when.
+3. The lines. For an Out: **Layers taken out** (الطبقات المُخرَجة) — one row for each FIFO layer the stock left, oldest first. For an In: **Layer brought in** (الطبقة المُدخَلة) — the one new layer it created. Columns: #, **Item Code** (رمز الصنف), **Item Name** (اسم الصنف), **Batch** (الدفعة), **Layer date** (تاريخ الطبقة), **Quantity** (الكمية), **Unit cost (IQD)** (كلفة الوحدة (د.ع)), **Value (IQD)** (القيمة (د.ع)). At the foot: the total **Adjustment Quantity** and **Value (IQD)**.
+4. Under the window, **Stock position** (رصيد المخزون) "as the Stock Ledger carries it": the warehouse with **Before** (قبل), **Change** (التغيّر) — plus for an In, minus for an Out — and **After** (بعد).
+5. Then **Posting** (الترحيل), with the journal's number as a link: #, **Account** (الحساب) — a link to the account, **Debit** (مدين), **Credit** (دائن). It is shown only to a reader who may open journal entries.
+6. The title bar carries the four icons — see "The four icons and the printed copy".
+There is no button on the record: a reconciliation is complete when it is saved, so there is nothing to approve, edit, cancel or reverse here.
+
+### How to read the status, the layers and the journal — Item Reconciliation
+The **Status** (الحالة) of a reconciliation's record is not typed by anyone; it says what stands behind the document:
+- **Posted** (مرحّل) — its stock movement is in the stock ledger and its journal is posted. The normal case.
+- **Reversed** (معكوس) — its journal has since been reversed.
+- **Recorded** (مسجّل) — the stock moved but no journal was posted, because the stock it moved carried no cost. **Journal** shows "—".
+- **No ledger entry** (لا قيد في السجل) — the stock ledger holds nothing for this reconciliation ("No layers: the Stock Movement ledger holds nothing for this reconciliation."). It is a leftover of data removed outside the application: report it to the accounting manager, do not enter it again.
+Reading the figures:
+- Costs are the exact figures of the stock ledger and the journal, to as many as four decimals (12.5 a unit, 37.5 for three), not rounded to whole dinars — so the layer rows add up to **Value (IQD)**, and **Value (IQD)** equals the journal's debit and credit.
+- An Out of 8 that emptied a layer of 5 at 100 and took 3 from a layer at 120 shows two rows, 500 and 360, and a journal of 860: debit Inventory Adjustment, credit the item's inventory account.
+- An In shows one row: the new layer, whose **Batch** (الدفعة) is the reconciliation's own number, at the unit cost the system gave it (see "After you save"). Journal: debit the item's inventory account, credit Inventory Adjustment.
+- **Before** and **After** are the item's balance in that warehouse just before and just after this reconciliation, in the Stock Ledger's own order; a document entered later does not change them.
+
+### The four icons and the printed copy — Item Reconciliation
+A reconciliation's record carries the four icons in its title bar from the moment it is saved:
+1. **Printer** — **Print / Export** (طباعة / تصدير): PDF needs `print` on `stock_reconciliation`, Excel (.xlsx) and Word (.docx) need `export`; in English or العربية.
+2. **Paperclip** — **Attachments** (المرفقات): for example the count sheet or the damage report that explains the difference. **Choose a file** (اختر ملفاً), then **Attach** (إرفاق). Adding a file needs `create` on `stock_reconciliation` and the permission to attach files.
+3. **Speech bubble** — **Notes** (الملاحظات): dated, signed notes, never edited — the place to say why the quantity was corrected. The box **Add note** (إضافة ملاحظة) shows to whoever holds `create` on `stock_reconciliation`.
+4. **Clock** — **Audit log** (سجل التدقيق): what has been recorded about this reconciliation — who made it and when, and the notes added since.
+The printed copy is titled **Item Reconciliation** (تسوية صنف) and carries what the record shows: the header facts with the status and the journal number, the layers table (batch, layer date, quantity, unit cost to four decimals, value, with totals), the **Stock position** table (Before, Change, After) and the signature boxes. The **Posting** table — the journal's accounts with debit, credit and totals — is printed only for a reader who may open journal entries. A reconciliation with **No ledger entry** prints stamped DRAFT / NOT POSTED.
 
 ### Fields — Item Reconciliation
 - **Item Code** (رمز الصنف) / **Item Name** (اسم الصنف) — required; an active stock item chosen from the list. The item must have an inventory account.
@@ -467,13 +524,13 @@ What it is for: A quick correction of one item in one warehouse to bring the sys
 - **Date** (التاريخ) — required; default today; the date of the movement and of the journal.
 - There is no price field: stock found is valued by the system (see After you save).
 
-List columns: **Number** (الرقم), **Date** (التاريخ), **Item Code** (رمز الصنف), **Item Name** (اسم الصنف), **Warehouse** (المخزن), **In/Out** (إدخال/إخراج), **Adjustment Quantity** (كمية التسوية), **Print / Export** (طباعة / تصدير).
+List columns: **Number** (الرقم) — opens the reconciliation's record, **Date** (التاريخ), **Item Code** (رمز الصنف), **Item Name** (اسم الصنف), **Warehouse** (المخزن), **In/Out** (إدخال/إخراج), **Adjustment Quantity** (كمية التسوية), **Print / Export** (طباعة / تصدير).
 
 ### After you save — Item Reconciliation
-There are no statuses and no approval: the adjustment is done when it is saved.
+There is no approval and no status to move through: the adjustment is done when it is saved (the **Status** on its record only reports its journal and its stock movement — see "How to read the status, the layers and the journal").
 - **In**: the quantity is received into the warehouse at what the item already costs — the average cost of what is left of it in that warehouse; if nothing is left there, the average anywhere; if nothing anywhere, the last cost it had. A new FIFO layer is created with the reconciliation's number as its batch. Journal: debit the item's inventory account, credit Inventory Adjustment.
 - **Out**: the quantity leaves the oldest FIFO layers first, at what they cost. Journal: debit Inventory Adjustment, credit the item's inventory account.
-The journal is dated the reconciliation date. The movement shows on Stock Movement as **Reconciliation** (تسوية) and on Stock Receipts / Stock Issues as **Count / reconciliation**. Pressing Create twice on the same form adjusts only once. There is no edit, cancel or reverse button; a wrong reconciliation is corrected by a new one in the opposite direction.
+The journal is dated the reconciliation date. The movement shows on Stock Movement as **Reconciliation** (تسوية) and on Stock Receipts / Stock Issues as **Count / reconciliation**. Pressing Create twice on the same form adjusts only once. There is no edit, cancel or reverse button, on the list or on the reconciliation's record; a wrong reconciliation is corrected by a new one in the opposite direction. What a reconciliation did can be read afterwards on its record: the layers it took out or the layer it brought in, the warehouse's quantity before and after, and the journal with its accounts.
 
 ### Refusals — Item Reconciliation
 - "No item ''. Choose an item from the list." — the item was not picked from the list.
@@ -489,6 +546,8 @@ The journal is dated the reconciliation date. The movement shows on Stock Moveme
 - "… is tracked by serial, so this movement needs a serial number. …" — the item is tracked by serial number and this form cannot adjust it.
 - "The form is stale. Open it again." — reload the page and open **New reconciliation** again.
 - "A stock movement dated … cannot be written: the period is closed" or "No accounting period covers …" — choose a date in an open period.
+- **That page does not exist** (هذه الصفحة غير موجودة) on a reconciliation's address — no reconciliation has that number, or it belongs to a branch you are not assigned to. Open it from the list.
+- No **Posting** table and a journal number that is not a link on a record — you do not hold `view` on `journal_entry`; the reconciliation is still complete.
 
 ## Inventory Checks (فحوصات المخزون)
 Path: Inventory → Inventory & Warehouses → Inventory Checks   |   Arabic: المخزون ← المخزون والمستودعات ← فحوصات المخزون

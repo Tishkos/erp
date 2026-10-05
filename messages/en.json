@@ -8840,6 +8840,8 @@
     "record_customer_receipt": "Customer receipt",
     "record_sales_return": "Sales return",
     "record_bank_loan": "Bank loan",
+    "record_task": "Task",
+    "record_exception": "Exception",
     "record_journal_entry": "Journal entry",
     "record_employee": "Employee",
     "record_project": "Project",
@@ -8897,7 +8899,7 @@
       "customs_declaration": "Customs declarations",
       "attachment": "Files",
       "screen": "Screens",
-      "task": "Task",
+      "task": "Tasks",
       "exception": "Exceptions"
     },
     "status": {

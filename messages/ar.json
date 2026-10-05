@@ -8840,6 +8840,8 @@
     "record_customer_receipt": "سند قبض من عميل",
     "record_sales_return": "مرتجع مبيعات",
     "record_bank_loan": "قرض مصرفي",
+    "record_task": "مهمة",
+    "record_exception": "استثناء",
     "record_journal_entry": "قيد يومية",
     "record_employee": "موظف",
     "record_project": "مشروع",
@@ -8897,7 +8899,7 @@
       "customs_declaration": "البيانات الجمركية",
       "attachment": "الملفات",
       "screen": "الشاشات",
-      "task": "مهمة",
+      "task": "المهام",
       "exception": "الاستثناءات"
     },
     "status": {

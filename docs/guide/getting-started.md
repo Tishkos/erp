@@ -2,8 +2,8 @@
 
 This guide covers what every user needs before any one module: getting in, finding your way, and the parts every screen shares.
 You **sign in** with the account an administrator issued; the first time, with a **temporary password** that must be replaced before anything else opens.
-The **top bar** then carries the module menu, the Active branch, search, notifications, the language button and your own menu (profile, language, appearance, sign out).
-The **Dashboard** is the first screen and shows what is waiting for you; **My Approvals** is where requests sent to you are decided.
+The **top bar** then carries the module menu, the Active branch, search, notifications, messages, the language button and your own menu (profile, language, appearance, sign out).
+The **Dashboard** (Home) is the first screen and shows what is waiting for you; **My Approvals** lists the documents that wait for your decision. Both — with Notifications, Global Search and Saved views — are described in full in the Workspace guide; this guide keeps a short block for each.
 Every module is made of the same two things — a **list** with a search box and filters, and a **record** window with a status chip, action buttons and four icons (print, attachments, notes, history).
 Every action is answered with the same messages: "Saved." or "That could not be saved." followed by the reason.
 
@@ -20,7 +20,7 @@ Every screen, button and copy is tied to a permission on a kind of record. The p
 ### Approval and maker-checker — Getting started concepts
 Approving is a permission of its own, separate from raising a document and from posting it. How strictly "the person who raised it may not approve it" is applied depends on the document:
 - Many documents (for example sales invoices, customer receipts, customer credit and debit notes) go Draft → Approve → Post, and each step simply needs its permission. The Approve button shows to whoever holds the approval permission.
-- Some documents are sent for approval and arrive in **My Approvals** of the people who can decide them: new accounts in the chart of accounts, journal entries sent for approval, and a supplier's bank account sent for verification. The step is decided by a named role (or by the manager of the document's department).
+- Some documents are sent along an approval route and are decided from their row in **My Approvals** by the people who can decide them: new accounts in the chart of accounts, journal entries sent for approval, and a supplier's bank account sent for verification. The step is decided by a named role (or by the manager of the document's department). My Approvals also lists the other documents that wait for you (purchase orders, payment applications, purchase invoices, HR requests…) and opens each on its own page, where its own button decides it.
 - Where a second person is required, the system refuses the maker with "You cannot approve a document you raised. This step requires a different approver (Appendix B)." A supplier's bank account, for example, must be verified by somebody other than the person who entered it (only a Super User may verify alone).
 - "This step is approved by '<role>'. You do not hold that role." means the request is waiting for a different role.
 - Rejecting always needs a reason: "A 'rejected' decision requires a reason, and the reason is kept with it (§5.4)."
@@ -163,41 +163,27 @@ What it is for: Saying which branch you are working in right now.
 
 ## Search (بحث)
 Path: the magnifier in the top bar, or Ctrl K (⌘ K on a Mac) from any screen
-Address: —
+Address: /search
 Needs: to be signed in.
-What it is for: Jumping to a screen by name. It searches screens, not records.
-
-### How to find a screen — Search
-1. Press Ctrl K or the magnifier. A box opens: "Search screens… (type a page or module name)" (ابحث في الشاشات…).
-2. Type part of a screen's name or of its menu heading — in the language your screen is in. Up to twelve matches are listed, each with its heading underneath.
-3. Move with ↑ and ↓ and press Enter, or click a result. The screen opens.
-4. Esc, the ✕ or a click outside closes the box. Ctrl K again also closes it.
-
-### What Search finds and does not find — Search
-- It finds only screens you are allowed to open — the same list as the menu.
-- It does not find customers, invoices, items or any other record. To find a record, open its list and use that list's own search box.
-- "No screen matches." (لا توجد شاشة مطابقة.) — nothing in your menu has that name; try a shorter word, or the screen may not be granted to you.
+What it is for: Finding a record, a document number, an attached file or a screen from anywhere. It searches records as well as screens, and shows only what you are allowed to open. The full description — how to search with Ctrl K, what to type, the results page, and what Search does not find — is in the Workspace guide under "Global Search" (البحث الشامل).
 
 ## Notifications (الإشعارات)
 Path: the bell in the top bar (on a phone: Notifications at the bottom of the drawer)
-Address: —
-Needs: to be signed in.
-What it is for: Reading what the system has told you — for example that money arrived, that an invoice was paid late, or that your account must enrol an authenticator.
-
-### How to read your notifications — Notifications
-1. Press the bell. A panel lists your ten latest notifications, newest first: a subject, a sentence and the date and time. Ones you have not read are highlighted.
-2. Press the bell again, press outside, or press Esc to close the panel.
-3. With nothing to show it says "You are all caught up. No new notifications." (لا توجد إشعارات جديدة.)
-The panel only shows; it has no buttons. The Dashboard's "Waiting on me" band shows the number of unread notifications.
+Address: /notifications
+Needs: to be signed in; `view` on `notification`, which every role has.
+What it is for: Reading what the system has told you and opening the record each notification is about. The bell shows the number of unread notifications; its panel lists the latest ones, marks them read or unread, and leads to the full Notifications page. The full description is in the Workspace guide under "Notifications" — for example "How to read notifications from the bell — Notifications" and "How to open what a notification is about — Notifications".
 
 ## Messages (الرسائل)
 Path: the envelope in the top bar (on a phone: Messages at the bottom of the drawer)
 Address: —
 Needs: to be signed in.
-What it is for: A place for messages. At present the panel always says "No new messages." (لا توجد رسائل جديدة.) — nothing can be written or read there.
+What it is for: The way into the internal chat. While chat messages are unread the envelope is replaced by their number; its panel lists your conversations and leads to the chat screen. Chat itself is described under "Chat".
 
 ### How to use it — Messages
-Press the envelope to open the panel and again to close it. There is nothing to do in it yet; to leave word about a record, use the record's Notes icon instead.
+1. Press the envelope. The panel lists up to six of your conversations, those with unread messages first.
+2. Press a conversation to open it in Chat, or press **Open Chat** (فتح المحادثات) to open the chat screen.
+3. Press the envelope again, press outside, or press Esc to close the panel.
+For an account without access to Chat the panel only says "No new messages." (لا توجد رسائل جديدة.)
 
 ## Language (اللغة)
 Path: the button showing ع or EN in the top bar; also Language in your own menu and in the phone drawer
@@ -236,62 +222,14 @@ The look is saved on your account and follows you to any device you sign in on. 
 ## My Dashboard (لوحة معلوماتي)
 Path: Dashboard → Home → My Dashboard   |   Arabic: الرئيسية ← الرئيسية ← لوحة معلوماتي
 Address: /
-Needs: to be signed in (the menu entry needs `view` on `dashboard`). Each part needs its own permission: `view` on `workflow_instance` for approvals waiting, `financial_statement` for the result and the monthly chart, `bank_account` for cash and bank, `ar_invoice` for Owed to us and Biggest customers, `ap_invoice` for Owed by us, `inventory_movement` for stock figures, `audit_event` for Recent activity.
-What it is for: The first screen after signing in, titled **Dashboard** (لوحة المتابعة). It answers three questions in order — what is waiting for me, where does the money stand, what is wrong — and every figure links to the screen that proves it. It is read-only.
-
-### How to read the Dashboard — My Dashboard
-1. The line under the title says which branch and day the figures are for: "<branch> · as at <date>". Change the Active branch to see another branch.
-2. **Waiting on me** (بانتظاري) — what needs your action, with a count and the link **All approvals** (كل الاعتمادات). Depending on your work it can list: approvals waiting for you (Document type, Raised by, **Waiting since** — بالانتظار منذ), stopped payables that need a reason or that you follow, **Service receipts awaiting confirmation** (استلامات خدمات بانتظار التأكيد), **Leave waiting for my decision** (إجازات بانتظار قراري), **Payroll waiting for me** (رواتب بانتظاري), **Advances and loans waiting for me** (سلف وقروض بانتظاري), **Reviews waiting for me** (تقييمات بانتظاري), **Offers waiting for a hire** (عروض بانتظار التعيين), **Employee requests waiting for me** (طلبات موظفين بانتظاري), **Payables due this week** (ذمم تستحق هذا الأسبوع) and the number of **Unread notifications** (إشعارات غير مقروءة). Press a number or an "Open …" link on a row to go to that document.
-3. **Result · <from> to <to>** (النتيجة) — **Income** (الإيرادات), **Expenses** (المصروفات) and **Result** (النتيجة) for the year so far; link **Income Statement** (قائمة الدخل).
-4. **Cash and bank** (النقد والبنوك) — the balance of each bank and cash account; press one to open the account; link **Accounts** (الحسابات).
-5. **Owed to us** (مستحق لنا) and **Owed by us** (مستحق علينا) — **Total outstanding** (إجمالي المتبقي) and the amounts **Not yet due** (لم تستحق بعد), **1–30 days late**, **31–60 days late**, **61–90 days late**, **Over 90 days late**; link **Invoices** (الفواتير) to the sales or purchase invoices.
-6. **Needs attention** (تحتاج إلى معالجة) — **What is wrong** (ما هو الخطأ) and **Where it is fixed** (أين يُعالَج): stock ledger problems (link Stock Ledger), receipts with no payer (link Receipts), a bank or cash account with no ledger account behind it (link Bank/Cash Accounts).
-7. **How the business is doing** (كيف يسير العمل) — charts: **Income and expenses, month by month** (الإيرادات والمصروفات، شهراً بشهر), **Owed to us / Owed by us, by how late it is**, **Cash and bank balances** (أرصدة النقد والبنوك), **Biggest customers** (أكبر العملاء — year to date), **Stock held, by warehouse** (المخزون المحتفظ به، بحسب المستودع — at cost). Under each chart, open **Table** to read the same figures as numbers.
-8. **Recent activity** (آخر النشاطات) — the latest events: Date, **Event** (الحدث), who, and the outcome Done (تم), Refused (مرفوض) or Failed (فشل); link **Audit log** (سجل التدقيق).
-
-### Why your Dashboard differs from a colleague's — My Dashboard
-A part is shown only when you hold the permission for the screen its figures come from, and only when it has something to show. A part you may not see is simply absent — the Dashboard never says "you cannot see this". An empty Dashboard therefore means nothing is waiting for you and you hold none of the money permissions.
-
-### Refusals — My Dashboard
-- "The Waiting on me section could not be read. Everything else on this page is unaffected." — that one part failed to load; refresh the page, and report it if it stays.
-- A figure that looks wrong: press it (or the link in the band's title) and check it on the screen it comes from; the Dashboard only repeats that screen's figure.
+Needs: to be signed in (the menu entry needs `view` on `dashboard`). Each part needs the permission of the screen its figures come from.
+What it is for: Home — the first screen after signing in, titled **Dashboard** (لوحة المتابعة). It shows the shortcut buttons, figure tiles, charts and lists that your permissions earn, each linking to the screen that proves it; it is read-only. The full description — every tile, chart and list, the import journey, and why your Home differs from a colleague's — is in the Workspace guide under "My Dashboard", for example "How to read Home — My Dashboard".
 
 ## My Approvals (موافقاتي)
 Path: Dashboard → Home → My Approvals   |   Arabic: الرئيسية ← الرئيسية ← موافقاتي
 Address: /approvals
-Needs: `view` on `workflow_instance` to open. To decide a request you must also hold the role the step asks for and the permission to approve that kind of record.
-What it is for: Your approval inbox: the requests waiting for your decision, then what you sent for approval and what you decided. Subtitle: "Documents waiting for your decision, then what you submitted and what you decided."
-
-### How to see what is waiting for you — My Approvals
-1. Open Dashboard → Home → My Approvals (or press **All approvals** on the Dashboard).
-2. Three counters at the top: **Waiting for you** (بانتظارك), **Pending** (معلّق — what you sent that is not decided yet) and **My decisions** (قراراتي).
-3. The **Waiting for you** list shows one card per request: the kind of document, the document itself, the tag **Waiting on you** (بانتظارك), **Submitted by** (قدّمه), **Submitted** (تاريخ التقديم) and **Department** (القسم) with the role the step is waiting for. The oldest request is first.
-4. With nothing waiting it says "Nothing is waiting for your approval." (لا شيء ينتظر موافقتك.)
-
-### How to approve or reject a request — My Approvals
-1. Read the document first: when its name is a link (a new account in the chart of accounts shows as "code — name"), press it to open the record.
-2. To approve, press **Approve** (اعتماد) on the card.
-3. To reject, type the **Reason for rejection** (سبب الرفض) and press **Reject** (رفض). The reason is required and is kept with the decision; the request goes back to the person who raised it for correction.
-4. "Saved." confirms; the card leaves the list and the decision appears under **My decisions**.
-For requests whose card shows only a long identifier with no link (journal entries, a supplier's bank account), open the document on its own screen — the journal entry itself, or the supplier's profile and its bank account — and use the Approve / Verify button there. From the inbox these are answered with "No record source is registered for '…'." and nothing is decided.
-
-### How to follow what you sent for approval — My Approvals
-1. **My submissions** (ما قدّمته) lists your last 20 requests: Document, Submitted, and Status — **Pending** (معلّق) until decided, then the decision (Approved — معتمد — or Rejected — مرفوض).
-2. **My decisions** (قراراتي) lists your last 20 decisions: Document, **Decision** (القرار) with the reason you gave, and when (**Decided** — تم البت).
-
-### Who can approve what — My Approvals
-- A request appears in your inbox when its current step is assigned to you by name or to a role you hold.
-- Which documents arrive here: requests for a new account in the chart of accounts, journal entries sent for approval, and suppliers' bank accounts sent for verification. Other documents (sales and purchase invoices, receipts, payments, notes, HR requests…) are approved on their own record with their own Approve button; what waits for you there is listed on the Dashboard.
-- Maker-checker: whether the person who raised a request may also decide it is set per kind of request — see "Approval and maker-checker — Getting started concepts".
-
-### Refusals — My Approvals
-- "You cannot approve a document you raised. This step requires a different approver (Appendix B)." — somebody else must decide it.
-- "This step is approved by '<role>'. You do not hold that role." — it is waiting for another role.
-- "A 'rejected' decision requires a reason, and the reason is kept with it (§5.4)." — type the reason for rejection.
-- "This <document> has already completed its approval route." / "This <document> is not awaiting approval. It may have been rejected or recalled." — it was decided or withdrawn while your page was open; refresh.
-- "'approve' is not available while this document is '<status>'. …" — the document is no longer in a status that can be approved.
-- "No record source is registered for 'journal_entry'." (or another kind) — this kind cannot be decided from the inbox; open the document and decide there.
-- "Not available to you" — you do not hold the permission to open My Approvals.
+Needs: `view` on `workflow_instance` to open. Deciding a document also needs the permission to approve that kind of record and, where the step names one, its role.
+What it is for: One list of the documents waiting for your decision, then what you sent for approval and what you decided. Chart accounts, journal entries and bank details (and a purchase invoice held for review) are approved or rejected on their row; every other document opens on its own page to be decided there. The full description is in the Workspace guide under "My Approvals" — for example "How to approve or reject from the list — My Approvals" and "Refusals — My Approvals". For who may approve what, see "Approval and maker-checker — Getting started concepts".
 
 ## My profile (ملفي الشخصي)
 Path: your own menu (your picture in the top bar) → Profile settings (إعدادات الملف الشخصي)
@@ -367,7 +305,7 @@ What it is for: Setting up the second step of signing in — an authenticator ap
 ## Concepts — Lists
 
 ### What every list looks like — Lists concepts
-A list screen has, from top to bottom: a back button to the Dashboard, the tabs of its menu heading, the title with a short description, the **New …** button (only if you may create), the outcome message of your last action, a title bar with the number of rows, the toolbar (search and filters), and the table. The first column is usually the record's number or code and is the link that opens the record. Statuses are shown as coloured chips.
+A list screen has, from top to bottom: a back button to the Dashboard, the tabs of its menu heading, the title with a short description, the **New …** button (only if you may create), the outcome message of your last action, a title bar with the number of rows, the toolbar (search, filters and, on some lists, the Views button), and the table. The first column is usually the record's number or code and is the link that opens the record. Statuses are shown as coloured chips.
 
 ### How to search a list — Lists concepts
 1. Type in the box **Search this list** (ابحث في هذه القائمة) and press Enter or the magnifier.
@@ -383,7 +321,8 @@ The search word is put in the page's address, so a searched list can be bookmark
 Filters, too, go into the address.
 
 ### Saved views — Lists concepts
-Some lists have a **Views** (العروض) drop-down among the filters — the Payables workbench, for example, offers All open, Stopped — reason required, Stopped, Imports, Rent & contracts. A view is a ready-made set of filters: choose it and press **Filter**. Views are provided with the system; the list screens have no button to save a view of your own. To keep your own combination of filters, bookmark the page after filtering.
+A number of lists and reports have a **Views** (العروض) button with a bookmark icon, beside the search box or at the top of the page. It keeps the search and filters now on screen under a name of your own, opens them again with one press, and can make one view the default of its screen or pin it to Home. A view holds filters, never records, and only you see it. The full description — including which screens have the button — is in the Workspace guide under "Saved views" (العروض المحفوظة).
+A few lists also carry an older **Views** (العروض) drop-down among their filters — Import Applications, for example, offers All open, Stopped — reason required, Stopped, Imports, Rent & contracts. Those are ready-made filters supplied with the system: choose one and press **Filter**. On a list with neither, bookmark the page after filtering to keep your own combination.
 
 ### Paging — Lists concepts
 Long lists are shown a page at a time with a row of page numbers at the bottom: the arrows are **Previous page** (الصفحة السابقة) and **Next page** (الصفحة التالية), the current page is highlighted, and "…" stands for skipped pages. Search and filters apply to the whole list, not only the page on screen. Shorter registers show every row on one page and have no page numbers.
