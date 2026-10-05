@@ -17,7 +17,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Principal } from '@domain/permissions';
 import { ACTION_NAMES, DRAFT_KINDS, actionLabel } from '@domain/whatsapp-do';
 import { AGENT_TOOLS, MAX_IMAGES, runAgent, systemPrompt, type AgentClient } from '@domain/whatsapp-agent';
-import { screenPictures } from '@/server/services/system-guide';
+import { screenFor, screenPictures } from '@/server/services/system-guide';
 
 const principal = (over: Partial<Principal> = {}): Principal =>
   ({
@@ -300,6 +300,38 @@ describe('which pictures a person is shown', () => {
     // A screen with none says so; and nobody is shown one of a screen they cannot open.
     expect(screenPictures(principal(), 'en', 'sign in', 'dialog').text).toMatch(/has no picture of a dialog/);
     expect(screenPictures(principal({ isSuperUser: false }), 'en', '/payables/invoices', 'dialog', 'attachments').images).toEqual([]);
+  });
+
+  it('a live picture taken as the asker takes the place of the ready-made one — and fills in where there is none', () => {
+    // 2026-10-05, option B: the screen and an opened record from the real system; menus, forms and windows stay as they are.
+    const live = { file: join(dir, 'live-screen.jpg'), marks: [{ n: 1, label: 'New invoice', kind: 'button', pointed: true }, { n: 2, label: 'Invoice · Supplier', kind: 'table', value: '5 rows' }] };
+    const howTo = screenPictures(principal(), 'en', '/payables/invoices', 'all', null, { screen: live });
+    expect(howTo.images.map((image) => tail(image.file))).toEqual(['en/payables_invoices-menu.jpg', tail(live.file), 'en/payables_invoices-form.jpg']);
+    expect(howTo.text).toContain('[picture: live-screen] — LIVE — the screen — your real one, as it is now (real data).');
+    expect(howTo.text).toContain('1 = New invoice (a button; THE ARROW POINTS HERE) · 2 = Invoice · Supplier (a table, its columns; it holds now: 5 rows)');
+    expect(howTo.text).toMatch(/The pictures marked LIVE are the real system as this person sees it now[^\n]*the others are the training copy/);
+    expect(howTo.images[1]!.caption).toMatch(/your real one, as it is now/);
+    // The menu and the form are the ready-made ones, untouched.
+    expect(howTo.text).toContain('[picture: payables_invoices-menu] — where it is in the menu');
+
+    // A screen with no ready-made record picture still gets a live one.
+    const record = screenPictures(principal(), 'ar', '/payables/suppliers', 'record', null, { record: { file: join(dir, 'live-record.jpg'), marks: [] } });
+    expect(record.images.map((image) => tail(image.file))).toEqual([tail(join(dir, 'live-record.jpg'))]);
+    expect(record.images[0]!.caption).toMatch(/أحد سجلاتك الحقيقية/);
+    expect(record.text).toMatch(/These are LIVE pictures: the real system as this person sees it now, with real figures/);
+
+    // Signing in is never live: there is nothing of anybody's in it.
+    const signIn = screenPictures(principal(), 'en', 'sign in', 'all', null, { screen: live });
+    expect(signIn.images.map((image) => tail(image.file))).toEqual(['en/sign_in-form.jpg']);
+    // And nobody is shown a live picture of a screen their role cannot open.
+    expect(screenPictures(principal({ isSuperUser: false }), 'en', '/payables/invoices', 'screen', null, { screen: live }).images).toEqual([]);
+  });
+
+  it('says which screen was meant, and what its New button is called, before any picture is taken', () => {
+    expect(screenFor(principal(), 'en', 'purchase invoices')).toEqual({ route: '/payables/invoices', allowed: true, menuScreen: true, newButton: null });
+    expect(screenFor(principal({ isSuperUser: false }), 'en', '/payables/invoices')).toMatchObject({ allowed: false });
+    expect(screenFor(principal(), 'en', 'sign in')).toEqual({ route: '/sign-in', allowed: true, menuScreen: false, newButton: null });
+    expect(screenFor(principal(), 'en', 'zzzz-no-such-screen')).toBeNull();
   });
 
   it('has the way in for everybody: signing in and the top bar, whatever their role', () => {

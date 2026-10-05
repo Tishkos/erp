@@ -120,7 +120,10 @@ async function main(): Promise<number> {
   if (cases.length === 0) throw new Error(`no case matches ${asked.only.join(', ')} — --list shows them`);
 
   // Whatever he writes down while being tested is not an issue anybody reported.
-  process.env.ERP_ISSUES_FILE = join(mkdtempSync(join(tmpdir(), 'noah-eval-')), 'issues.md');
+  const scratch = mkdtempSync(join(tmpdir(), 'noah-eval-'));
+  process.env.ERP_ISSUES_FILE = join(scratch, 'issues.md');
+  // The same for what he keeps — requests, feedback, memory, walkthroughs: a test run must not teach him anything or file anything.
+  process.env.NOAH_NOTES_DIR = join(scratch, 'notes');
 
   const client = await readerFor();
   if (!client) throw new Error('no brain is usable here: the claude CLI is not signed in and there is no ANTHROPIC_API_KEY');

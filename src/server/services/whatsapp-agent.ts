@@ -19,7 +19,10 @@ import * as itemsService from './items';
 import * as openingStockService from './opening-stock';
 import * as doService from './whatsapp-do';
 import * as insight from './whatsapp-insight';
+import * as notes from './whatsapp-notes';
+import { correctionFor, isClean, unsupportedIn } from '../domain/whatsapp-selfcheck';
 import * as liveShots from './live-screenshot';
+import * as howTo from './howto-live';
 import * as review from './whatsapp-review';
 import * as sqlService from './whatsapp-sql';
 import * as systemGuide from './system-guide';
@@ -83,6 +86,8 @@ export interface AskerMeta {
   readonly userName: string;
   /** The group or the number the question came from. */
   readonly chat?: string | null;
+  /** The exchange before this one — what an "that was wrong" is about. */
+  readonly lastExchange?: { readonly question: string; readonly answer: string } | null;
 }
 
 export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?: ActionHooks, meta?: AskerMeta) {
@@ -101,6 +106,20 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         };
   /** The free query reads any table: it is for the roles that read everything. */
   const readsEverything = ctx.principal.isSuperUser || ctx.principal.roleCodes.includes(QUERY_ROLE);
+
+  /** Who is asking, as a name a person reading a file will know — read as them, and optional: a note is written even when the database is the problem. */
+  const whoIs = async (): Promise<string> => {
+    const row = await sqlService
+      .inSavepoint(ctx.tx, async () => {
+        const me = await ctx.tx.execute(sql`select display_name, email from app_user where id = ${ctx.principal.userId}`);
+        return me.rows[0] as { display_name?: string; email?: string } | undefined;
+      })
+      .catch(() => undefined);
+    return `${row?.display_name ?? meta?.userName ?? ctx.principal.userId}${row?.email ? ` <${row.email}>` : ''} · branch ${ctx.branchCode}`;
+  };
+  /** Where it was said, for the files a tool writes. */
+  const chatLabel = !meta?.chat ? 'WhatsApp' : meta.chat === 'terminal' ? 'terminal (ask-noah)' : `WhatsApp ${meta.chat.includes('@g.us') ? 'group' : 'chat'}`;
+  const words = (value: unknown): string | null => (typeof value === 'string' && value.trim() !== '' ? value.trim() : null);
 
   const run = async (name: string, args: Record<string, unknown>): Promise<ToolOutcome> => {
     switch (name) {
@@ -342,6 +361,12 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
           ].join(chr10()),
         };
       }
+      case 'preview_step': {
+        if (!actions) {
+          return { text: 'A preview runs the step and undoes it, so it is for people who may take steps from chat: this contact is not allowed actions. Explain what the step does in words (document_story, review_document).' };
+        }
+        return { text: await doService.preview({ ctx, userId: ctx.principal.userId, chat: actions.chat, action: String(args.action ?? ''), args }) };
+      }
       case 'propose_action': {
         if (!actions) {
           return {
@@ -469,8 +494,38 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         return { text: await doService.describeDocument(ctx.tx, ctx.principal, String(args.no ?? ''), systemGuide.appUrl()) };
       case 'show_screen': {
         const view = ['menu', 'screen', 'form', 'record', 'dialog', 'all'].includes(String(args.view)) ? (args.view as systemGuide.ShotView | 'all') : 'all';
-        const shown = systemGuide.screenPictures(ctx.principal, ctx.locale, String(args.screen ?? ''), view, typeof args.dialog === 'string' ? args.dialog : null);
-        return { text: shown.text, ...(shown.images.length > 0 ? { images: shown.images } : {}) };
+        const asked = String(args.screen ?? '');
+        /*
+         * Whose data (2026-10-05, option B): with live data on — the server's
+         * default once the owner switched it on, or because the person asked
+         * for it — the screen and an opened record are pictured from the real
+         * system as the asker. Everything else, and whatever a live picture
+         * could not be taken of, is the ready-made picture.
+         */
+        const wantsLive = args.data === 'live' ? liveShots.liveShotsReady().ok : args.data === 'training' ? false : howTo.howToLiveReady().ok;
+        const live: Partial<Record<'screen' | 'record', systemGuide.LivePicture>> = {};
+        const notTaken: string[] = [];
+        if (wantsLive && (view === 'all' || view === 'screen' || view === 'record')) {
+          const which = systemGuide.screenFor(ctx.principal, ctx.locale, asked);
+          if (which && which.menuScreen && which.allowed) {
+            for (const one of view === 'record' ? (['record'] as const) : (['screen'] as const)) {
+              const taken = await howTo.liveHowToPicture({
+                userId: ctx.principal.userId,
+                locale: ctx.locale,
+                route: which.route,
+                view: one,
+                ...(one === 'screen' && which.newButton ? { pointAt: [which.newButton] } : {}),
+              });
+              if (taken.ok) live[one] = { file: taken.file, marks: taken.marks };
+              else notTaken.push(taken.reason);
+            }
+          }
+        } else if (args.data === 'live' && !wantsLive) {
+          notTaken.push(liveShots.liveShotsReady().reason ?? 'live pictures are not available on this server');
+        }
+        const shown = systemGuide.screenPictures(ctx.principal, ctx.locale, asked, view, typeof args.dialog === 'string' ? args.dialog : null, live);
+        const note = notTaken.length > 0 && args.data === 'live' ? `${chr10()}A live picture could not be taken (${notTaken[0]}), so this is the training picture: say so.` : '';
+        return { text: `${shown.text}${note}`, ...(shown.images.length > 0 ? { images: shown.images } : {}) };
       }
       case 'screenshot': {
         const ready = liveShots.liveShotsReady();
@@ -506,6 +561,134 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         return { text: systemGuide.screens(ctx.principal, typeof args.search === 'string' ? args.search : null) };
       case 'guide':
         return { text: systemGuide.guide(typeof args.search === 'string' ? args.search : null) };
+      case 'change_request': {
+        const kind = (notes.REQUEST_KINDS as readonly string[]).includes(String(args.kind)) ? (args.kind as (typeof notes.REQUEST_KINDS)[number]) : 'other';
+        try {
+          const filed = notes.recordRequest({
+            who: await whoIs(),
+            chat: chatLabel,
+            request: {
+              title: String(args.title ?? ''),
+              kind,
+              area: String(args.area ?? ''),
+              screen: words(args.screen),
+              today: words(args.today),
+              wanted: String(args.wanted ?? ''),
+              why: String(args.why ?? ''),
+              rightWay: words(args.rightWay),
+              example: words(args.example),
+              impact: words(args.impact),
+              openQuestions: Array.isArray(args.openQuestions) ? args.openQuestions.filter((one): one is string => typeof one === 'string' && one.trim() !== '') : [],
+              noahNote: words(args.noahNote),
+            },
+          });
+          return {
+            text: `Filed as ${filed.id}. Tell them the number, that it is written down for the people who build the system, and that nobody has promised it will be built or when. If questions are still open, ask the next one or two now; add the answers with change_request_followup.`,
+          };
+        } catch (error) {
+          return { text: `Not filed: ${error instanceof Error ? error.message : String(error)}` };
+        }
+      }
+      case 'change_request_followup': {
+        const status = (notes.REQUEST_STATUSES as readonly string[]).includes(String(args.status)) ? (args.status as (typeof notes.REQUEST_STATUSES)[number]) : undefined;
+        const answers = Array.isArray(args.answers)
+          ? (args.answers as unknown[]).flatMap((one) => {
+              const pair = one as { question?: unknown; answer?: unknown };
+              return typeof pair?.question === 'string' && typeof pair?.answer === 'string' ? [{ question: pair.question, answer: pair.answer }] : [];
+            })
+          : [];
+        try {
+          const added = notes.addToRequest({ id: String(args.id ?? '').trim().toUpperCase(), who: await whoIs(), note: words(args.note), answers, ...(status ? { status } : {}) });
+          return { text: added.ok ? `Added to ${added.id}; its status is ${added.status}.` : `Not added: ${added.reason}` };
+        } catch (error) {
+          return { text: `Not added: ${error instanceof Error ? error.message : String(error)}` };
+        }
+      }
+      case 'change_requests': {
+        const id = words(args.id);
+        if (id) return { text: notes.readRequest(id.toUpperCase()) ?? `There is no request ${id}. The list: ${notes.listRequests({ limit: 10 })}` };
+        return {
+          text: notes.listRequests({
+            ...(typeof args.limit === 'number' ? { limit: args.limit } : {}),
+            ...(words(args.status) ? { status: words(args.status)! } : {}),
+            ...(words(args.search) ? { search: words(args.search)! } : {}),
+          }),
+        };
+      }
+      case 'answer_feedback': {
+        const verdict = args.verdict === 'good' ? 'good' : 'wrong';
+        const last = meta?.lastExchange ?? null;
+        if (!last) return { text: 'There is no earlier answer of yours in this conversation for it to be about. Ask them which answer they mean, or what was wrong.' };
+        try {
+          const filed = notes.recordFeedback({
+            who: await whoIs(),
+            chat: chatLabel,
+            verdict,
+            question: last.question,
+            answer: last.answer,
+            whatWasWrong: words(args.whatWasWrong),
+            rightAnswer: words(args.rightAnswer),
+          });
+          return {
+            text:
+              verdict === 'wrong'
+                ? `Written down as ${filed.id}, and kept as a question you will be tested on. Now look again with the tools and give the corrected answer — or, if they have not said what was wrong, ask in one line.`
+                : `Noted (${filed.id}).`,
+          };
+        } catch (error) {
+          return { text: `Not written down: ${error instanceof Error ? error.message : String(error)}` };
+        }
+      }
+      case 'remember': {
+        const scope = args.about === 'company' ? 'company' : 'me';
+        // A fact about the company is the company's to state: whoever administers the system, or a super user.
+        if (scope === 'company' && !(ctx.principal.isSuperUser || can(ctx.principal, 'configure', 'whatsapp'))) {
+          return { text: 'A fact about the company is kept when an administrator states it. Keep it as a note about this person instead (about me), or tell them an administrator can teach it to you.' };
+        }
+        try {
+          const kept = notes.remember({ userId: ctx.principal.userId, who: await whoIs(), scope, fact: String(args.fact ?? '') });
+          return { text: kept.ok ? `Kept. ${kept.said}` : `Not kept: ${kept.reason}` };
+        } catch (error) {
+          return { text: `Not kept: ${error instanceof Error ? error.message : String(error)}` };
+        }
+      }
+      case 'forget': {
+        const scope = args.about === 'company' ? 'company' : 'me';
+        if (scope === 'company' && !(ctx.principal.isSuperUser || can(ctx.principal, 'configure', 'whatsapp'))) {
+          return { text: 'What the company taught you is an administrator\'s to take back.' };
+        }
+        const dropped = notes.forget({ userId: ctx.principal.userId, scope, match: String(args.match ?? '') });
+        return { text: dropped.removed > 0 ? `Dropped ${dropped.removed} line(s).` : 'Nothing you keep contains those words.' };
+      }
+      case 'walkthrough': {
+        const op = String(args.op ?? '');
+        if (op === 'clear') {
+          notes.clearWalkthrough(ctx.principal.userId);
+          return { text: 'The walkthrough is cleared.' };
+        }
+        const before = notes.readWalkthrough(ctx.principal.userId);
+        const steps = Array.isArray(args.steps) ? args.steps.filter((one): one is string => typeof one === 'string' && one.trim() !== '') : (before?.steps ?? []);
+        if (op === 'start' && steps.length < 2) return { text: 'A walkthrough needs its steps: give every step in order (at least two).' };
+        if (op === 'advance' && !before) return { text: 'There is no walkthrough in progress for this person. Start one (op start) with its steps.' };
+        // Counted from 1; one past the last step means every step is done.
+        const current = Math.max(1, Math.min(steps.length + 1, typeof args.current === 'number' ? Math.round(args.current) : op === 'advance' ? (before?.current ?? 1) + 1 : 1));
+        try {
+          const saved = notes.saveWalkthrough({
+            userId: ctx.principal.userId,
+            title: words(args.title) ?? before?.title ?? 'A task',
+            steps,
+            current,
+            document: words(args.document) ?? before?.document ?? null,
+            check: words(args.check) ?? before?.check ?? null,
+          });
+          if (saved.current > saved.steps.length) {
+            return { text: `Every step of "${saved.title}" is done. Say what the result is in the books (read it), then clear the walkthrough (op clear).` };
+          }
+          return { text: `Kept: "${saved.title}", step ${saved.current} of ${saved.steps.length} — ${saved.steps[saved.current - 1] ?? ''}. Give them this step only, with its picture, and ask them to reply !ai done when it is done.` };
+        } catch (error) {
+          return { text: `Not kept: ${error instanceof Error ? error.message : String(error)}` };
+        }
+      }
       case 'report_issue': {
         const summary = String(args.summary ?? '').trim();
         if (summary.length < 4) return { text: 'Not written down: say in one line what is wrong (summary).' };
@@ -573,7 +756,20 @@ export async function runAgentFor(input: {
   /** Who is in the group, as the instructions say it (`rosterForPrompt`). */
   readonly people?: string;
 }): Promise<AgentResult> {
-  return runAgent({
+  // What he has been told to keep about the company and this person, the walkthrough they are in, the last exchange.
+  const memory = (() => {
+    try {
+      return notes.memoryForPrompt({ userId: input.ctx.principal.userId });
+    } catch {
+      return '';
+    }
+  })();
+  // The exchange before this one, for "that was wrong": their last words and his.
+  const turns = input.history ?? [];
+  const answeredAt = turns.map((turn) => turn.role).lastIndexOf('assistant');
+  const askedAt = answeredAt > 0 ? turns.slice(0, answeredAt).map((turn) => turn.role).lastIndexOf('user') : -1;
+  const lastExchange = answeredAt >= 0 && askedAt >= 0 ? { question: turns[askedAt]!.text, answer: turns[answeredAt]!.text } : null;
+  const result = await runAgent({
     client: input.client,
     model: input.model,
     question: input.question,
@@ -584,6 +780,15 @@ export async function runAgentFor(input: {
     today: input.ctx.today,
     ...(input.pictures && input.pictures.length > 0 ? { pictures: input.pictures } : {}),
     ...(input.people ? { people: input.people } : {}),
-    runTool: toolRunnerFor(input.ctx, input.files ?? [], input.actions, { userName: input.userName, chat: input.chat ?? input.actions?.chat ?? null }),
+    ...(memory ? { memory } : {}),
+    // Before an answer is sent: every document number and figure in it is something he read, or he is asked once to put it right.
+    check: (answer, sources) => {
+      const found = unsupportedIn(answer, sources);
+      return isClean(found) ? null : correctionFor(found);
+    },
+    runTool: toolRunnerFor(input.ctx, input.files ?? [], input.actions, { userName: input.userName, chat: input.chat ?? input.actions?.chat ?? null, lastExchange }),
   });
+  // What they asked and how he began to answer, for "continue" another day. Never a reason to lose the answer.
+  notes.noteExchange({ userId: input.ctx.principal.userId, question: input.question, answer: result.text, tools: result.used });
+  return result;
 }

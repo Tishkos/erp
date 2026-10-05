@@ -192,6 +192,38 @@ const tagOf = (file: string) =>
     .replace(/\.[a-z0-9]+$/i, '')
     .toLowerCase();
 
+/** A picture taken of the live system for a how-to, in place of the ready-made one of that view. */
+export interface LivePicture {
+  readonly file: string;
+  readonly marks: readonly Mark[];
+}
+
+const LIVE_WORDS = {
+  screen: { en: 'the screen — your real one, as it is now', ar: 'الشاشة — شاشتك الحقيقية كما هي الآن' },
+  record: { en: 'one of your real records, opened', ar: 'أحد سجلاتك الحقيقية مفتوحاً' },
+} as const;
+
+/**
+ * Which screen was meant, before any picture is chosen: so a live picture can
+ * be taken of it first (`show_screen` with live data). Null when no built
+ * screen matches; `newButton` is what the ready-made picture's arrow is at.
+ */
+export function screenFor(
+  principal: Principal,
+  locale: 'en' | 'ar',
+  asked: string,
+): { readonly route: string; readonly allowed: boolean; readonly menuScreen: boolean; readonly newButton: string | null } | null {
+  const wanted = asked.trim();
+  const extra = extraFor(wanted);
+  if (extra) return { route: extra.route, allowed: true, menuScreen: false, newButton: null };
+  const catalogue = screenCatalogue({ principal, en: EN, ar: AR });
+  const entry = catalogue.find((candidate) => candidate.route === wanted) ?? findScreens(catalogue, wanted).find((candidate) => candidate.built) ?? null;
+  if (!entry) return null;
+  const shot = shots().find((candidate) => candidate.route === entry.route && candidate.locale === locale && candidate.view === 'screen');
+  const pointed = shot?.marks?.find((mark) => mark.pointed) ?? null;
+  return { route: entry.route, allowed: entry.allowed, menuScreen: true, newButton: pointed?.label ?? null };
+}
+
 /**
  * The `show_screen` tool: the pictures of one screen, in the asker's language,
  * each with its tag and the meaning of every number drawn on it.
@@ -206,9 +238,12 @@ export function screenPictures(
   asked: string,
   view: ShotView | 'all' = 'all',
   dialog: string | null = null,
+  /** Live pictures already taken of this screen (as the asker): each takes the place of the ready-made one of its view. */
+  live: Readonly<Partial<Record<'screen' | 'record', LivePicture>>> = {},
 ): { readonly text: string; readonly images: ReadonlyArray<{ readonly file: string; readonly caption: string }> } {
   const all = shots();
-  if (all.length === 0) return { text: 'No pictures are installed on this server. Describe the path in words (the screens tool).', images: [] };
+  const anyLive = Boolean(live.screen || live.record);
+  if (all.length === 0 && !anyLive) return { text: 'No pictures are installed on this server. Describe the path in words (the screens tool).', images: [] };
 
   const catalogue = screenCatalogue({ principal, en: EN, ar: AR });
   const wanted = asked.trim();
@@ -262,14 +297,20 @@ export function screenPictures(
   // "all" is a how-to: where it is, the screen, the form. A record is asked for by name.
   // Signing in, the top bar, the account menu, the password: each is one picture, whichever view it was asked for by.
   const views: Exclude<ShotView, 'dialog'>[] = extra ? [...SHOT_VIEWS] : view === 'all' ? ['menu', 'screen', 'form'] : [view];
-  const found = views.flatMap((one) => {
+  const found = views.flatMap((one): { shot: Pick<Shot, 'view' | 'marks' | 'ringed'>; file: string; caption: string; live: boolean }[] => {
+    // A live picture of this view, taken as the asker, comes before the ready-made one — and fills in where there is none.
+    const taken = !extra && (one === 'screen' || one === 'record') ? live[one] : undefined;
+    if (taken) {
+      const numbered = taken.marks.length > 0 ? ` — ${NUMBERED_WORDS[locale]}` : '';
+      return [{ shot: { view: one, marks: taken.marks, ringed: taken.marks.some((mark) => mark.pointed) }, file: taken.file, caption: `${heading}: ${LIVE_WORDS[one === 'record' ? 'record' : 'screen'][locale]}${numbered}`, live: true }];
+    }
     const shot = all.find((candidate) => candidate.route === route && candidate.locale === locale && candidate.view === one);
     if (!shot) return [];
     const file = join(shotsDir(), shot.file);
     if (!existsSync(file)) return [];
     const words = one === 'screen' && shot.ringed && !extra ? RINGED_WORDS[locale] : VIEW_WORDS[one][locale];
     const numbered = shot.marks && shot.marks.length > 0 ? ` — ${NUMBERED_WORDS[locale]}` : '';
-    return [{ shot, file, caption: extra ? `${heading}${numbered}` : `${heading}: ${words}${numbered}` }];
+    return [{ shot, file, caption: extra ? `${heading}${numbered}` : `${heading}: ${words}${numbered}`, live: false }];
   });
   if (found.length === 0) {
     const others = SHOT_VIEWS.filter((one) => all.some((candidate) => candidate.route === route && candidate.locale === locale && candidate.view === one));
@@ -283,15 +324,23 @@ export function screenPictures(
   return {
     text: [
       `${found.length} picture(s) of ${title} (${route}) are attached to your answer. Place each one at its step: write its tag on a line of its own, and what you write under the tag (up to the next tag) is sent as that picture's caption.`,
-      ...found.map(({ shot, file }) => {
-        const what = shot.view === 'screen' && shot.ringed && !extra ? RINGED_WORDS.en : VIEW_WORDS[shot.view].en;
+      ...found.map(({ shot, file, live: isLive }) => {
+        const what = isLive
+          ? `LIVE — ${LIVE_WORDS[shot.view as 'screen' | 'record'].en} (real data)`
+          : shot.view === 'screen' && shot.ringed && !extra
+            ? RINGED_WORDS.en
+            : VIEW_WORDS[shot.view].en;
         const numbers = marksLine(shot.marks);
         return `[picture: ${tagOf(file)}] — ${what}.${numbers ? ` The red numbers on it: ${numbers}.` : ' Nothing is numbered on this one.'}`;
       }),
       'For every numbered thing the person has to use, say its number and its name as the picture shows it, then: what it is for, why the system needs it, what to put there (with an example), whether it may be left empty, and what it changes elsewhere — the guide tool has this for each screen. Skip a number that does not matter to what they asked.',
       also.length > 0 ? `This screen also has: ${also.map((one) => `"${one}"`).join(', ')} — ask for it by that view when the task goes there (a "record" is one saved document opened: its status, its action buttons, and the printer / paperclip / notes / history icons).` : '',
       dialogs.length > 0 ? `It also has pictures of the windows that open from it (view "dialog", dialog = the name): ${dialogList}. Use one when the step is "attach the file", "add a note", "see its history", "print it" or an action that asks for something.` : '',
-      "They are pictures of a training copy with sample data: the layout is real, the names and figures in them are not the company's.",
+      found.some((one) => one.live)
+        ? found.every((one) => one.live)
+          ? 'These are LIVE pictures: the real system as this person sees it now, with real figures. Say so.'
+          : "The pictures marked LIVE are the real system as this person sees it now, with real figures; the others are the training copy, whose layout is real and whose names and figures are not the company's. Say which is which."
+        : "They are pictures of a training copy with sample data: the layout is real, the names and figures in them are not the company's.",
     ]
       .filter((line) => line !== '')
       .join('\n'),

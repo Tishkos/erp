@@ -36,7 +36,7 @@ import * as ap from '@/server/services/ap-invoice';
 import * as authz from '@/server/services/authorization';
 import type { ActorContext } from '@/server/services/chart-of-accounts';
 import * as wa from '@/server/services/whatsapp';
-import { toolRunnerFor } from '@/server/services/whatsapp-agent';
+import { runAgentFor, toolRunnerFor } from '@/server/services/whatsapp-agent';
 import * as doService from '@/server/services/whatsapp-do';
 import { BAGHDAD, PANEL, WAREHOUSE, buildTradingWorld, scope, type TradingWorld } from './trading-fixture';
 
@@ -48,7 +48,8 @@ const CHAT = '120363000000000001@g.us';
 const dir = mkdtempSync(join(tmpdir(), 'noah-'));
 const issuesFile = join(dir, 'var', 'issues.md');
 const shotsDir = join(dir, 'shots');
-const previous = { guide: process.env.ERP_GUIDE_DIR, issues: process.env.ERP_ISSUES_FILE, shots: process.env.ERP_GUIDE_SHOTS_DIR };
+const notesDir = join(dir, 'notes');
+const previous = { guide: process.env.ERP_GUIDE_DIR, issues: process.env.ERP_ISSUES_FILE, shots: process.env.ERP_GUIDE_SHOTS_DIR, notes: process.env.NOAH_NOTES_DIR };
 
 beforeAll(() => {
   mkdirSync(join(dir, 'docs', 'guide'), { recursive: true });
@@ -80,6 +81,7 @@ beforeAll(() => {
   });
   writeFileSync(join(shotsDir, 'index.json'), JSON.stringify(shots));
   process.env.ERP_GUIDE_SHOTS_DIR = shotsDir;
+  process.env.NOAH_NOTES_DIR = notesDir;
 });
 
 afterAll(() => {
@@ -89,6 +91,8 @@ afterAll(() => {
   else process.env.ERP_ISSUES_FILE = previous.issues;
   if (previous.shots === undefined) delete process.env.ERP_GUIDE_SHOTS_DIR;
   else process.env.ERP_GUIDE_SHOTS_DIR = previous.shots;
+  if (previous.notes === undefined) delete process.env.NOAH_NOTES_DIR;
+  else process.env.NOAH_NOTES_DIR = previous.notes;
 });
 
 async function createUser(roles: string, name: string): Promise<ActorContext> {
@@ -840,5 +844,127 @@ describe('what they sent is entered as it is written', () => {
     const people = await withScope(scope(admin), (tx) => wa.contactPeople(tx));
     expect(people.get('+9647701112233')).toMatchObject({ email: expect.stringContaining('@') });
     expect(people.get('+9647700000000')).toBeUndefined();
+  });
+});
+
+describe('what he writes down beside the issues, and what he keeps', () => {
+  // 2026-10-05, by direction: "we need another field in bank loans … it should understand, ask
+  // questions, and save in a folder one by one"; "reply 👎 to a wrong answer"; "he remembers";
+  // "a walkthrough that checks your work".
+  const runner = (ctx: ActorContext, meta: Record<string, unknown> = {}) => (name: string, args: Record<string, unknown> = {}) =>
+    asking(ctx, (read) => toolRunnerFor(read, [], undefined, { userName: 'Tester', chat: CHAT, ...meta })(name, args)).then((outcome) => outcome.text);
+
+  it('a request is one file, read back, added to, and never filed without what and why', async () => {
+    const run = runner(world.clerk);
+    expect(await run('change_request', { title: 'A guarantor on bank loans', kind: 'new_field', area: 'Bank Loans', wanted: '', why: '' })).toMatch(/^Not filed: /);
+
+    const filed = await run('change_request', {
+      title: 'A guarantor on bank loans',
+      kind: 'new_field',
+      area: 'Bank Loans',
+      screen: '/treasury/loans',
+      today: 'The loan form has no guarantor.',
+      wanted: 'A Guarantor field on the loan: a name, optional.',
+      why: 'The bank asks who guaranteed each loan at every renewal; today it is on paper.',
+      openQuestions: ['Can one loan have more than one guarantor?'],
+      noahNote: 'A new column on the loan and its form.',
+    });
+    const id = /REQ-\d{8}-\d{3}/.exec(filed)![0];
+    expect(filed).toMatch(/nobody has promised it will be built or when/);
+    const file = readFileSync(join(notesDir, 'requests', `${id}.md`), 'utf8');
+    expect(file).toContain(`# ${id} — A guarantor on bank loans`);
+    expect(file).toMatch(/- Status: needs answers/);
+    expect(file).toMatch(/- Asked by: .* · branch BGW · WhatsApp group/);
+    expect(file).toContain('- [ ] Can one loan have more than one guarantor?');
+
+    // A second wish is a second file.
+    const second = await run('change_request', { title: 'Leave approved by the wrong person', kind: 'workflow_change', area: 'HR leave', wanted: 'The department head approves.', why: 'The manager on the record is not the one who knows.' });
+    expect(/REQ-\d{8}-\d{3}/.exec(second)![0]).not.toBe(id);
+
+    expect(await run('change_requests')).toMatch(/2 request\(s\) on file/);
+    expect(await run('change_requests', { search: 'guarantor' })).toContain(id);
+    expect(await run('change_requests', { id })).toContain('## What is wanted');
+    expect(await run('change_requests', { id: 'REQ-20200101-999' })).toMatch(/There is no request REQ-20200101-999/);
+
+    const added = await run('change_request_followup', { id: id.toLowerCase(), note: 'They confirmed it.', answers: [{ question: 'Can one loan have more than one guarantor?', answer: 'Yes, up to three.' }] });
+    expect(added).toMatch(new RegExp(`Added to ${id}; its status is open`));
+    expect(readFileSync(join(notesDir, 'requests', `${id}.md`), 'utf8')).toContain('- [x] Can one loan have more than one guarantor?');
+    expect(await run('change_request_followup', { id: 'REQ-20200101-999', note: 'x' })).toMatch(/^Not added: /);
+  });
+
+  it('a wrong answer is written down with the exchange it is about, and kept as a question to be tested on', async () => {
+    expect(await runner(world.clerk)('answer_feedback', { verdict: 'wrong', whatWasWrong: 'x' })).toMatch(/no earlier answer of yours/);
+    const said = await runner(world.clerk, { lastExchange: { question: 'why is the customer account empty?', answer: 'The four drafts have no lines.' } })('answer_feedback', {
+      verdict: 'wrong',
+      whatWasWrong: 'The drafts do have lines; their totals are only written at posting.',
+      rightAnswer: 'They are drafts: nothing has posted.',
+    });
+    const id = /FB-\d{8}-\d{3}/.exec(said)![0];
+    expect(said).toMatch(/kept as a question you will be tested on/);
+    const file = readFileSync(join(notesDir, 'feedback', `${id}.md`), 'utf8');
+    expect(file).toContain('why is the customer account empty?');
+    expect(file).toContain('The four drafts have no lines.');
+    const candidates = readFileSync(join(notesDir, 'feedback', 'eval-candidates.jsonl'), 'utf8').trim().split('\n');
+    expect(JSON.parse(candidates[candidates.length - 1]!)).toMatchObject({ id, question: 'why is the customer account empty?', rightAnswer: 'They are drafts: nothing has posted.' });
+  });
+
+  it('remembers a person, takes a company fact only from an administrator, never a secret — and what is kept reaches his instructions', async () => {
+    const mine = runner(world.clerk);
+    expect(await mine('remember', { about: 'me', fact: 'Always answer me in Arabic.' })).toMatch(/^Kept\./);
+    expect(await mine('remember', { about: 'me', fact: 'My password is hunter2hunter2' })).toMatch(/^Not kept: /);
+    // A fact about the company is the company's to state.
+    expect(await mine('remember', { about: 'company', fact: 'Our Najaf warehouse is WH-NJF.' })).toMatch(/kept when an administrator states it/);
+    const root = await createUser('', 'The Owner');
+    await ownerPool.query(`update app_user set is_super_user = true where id = $1`, [root.principal.userId]);
+    const owner: ActorContext = { principal: await withScope({ userId: root.principal.userId, branchCode: BAGHDAD }, (tx) => authz.loadPrincipal(tx, root.principal.userId)), branchCode: BAGHDAD };
+    expect(await runner(owner)('remember', { about: 'company', fact: 'Our Najaf warehouse is WH-NJF.' })).toMatch(/^Kept\./);
+
+    // The loop is told, for that person; and after it answers, the exchange is noted for "continue".
+    let system = '';
+    const result = await asking(world.clerk, (read) =>
+      runAgentFor({
+        client: {
+          create: async (input) => {
+            system = input.system;
+            return { content: [{ type: 'text', text: 'It is approved, not posted.' }] };
+          },
+        },
+        model: 'fake',
+        ctx: read,
+        question: 'why is the customer account empty?',
+        userName: 'Tester',
+        chat: CHAT,
+      }),
+    );
+    expect(result.text).toBe('It is approved, not posted.');
+    expect(system).toContain('WHAT THE COMPANY HAS TAUGHT YOU');
+    expect(system).toContain('Our Najaf warehouse is WH-NJF.');
+    expect(system).toContain('WHAT YOU KNOW ABOUT THIS PERSON');
+    expect(system).toContain('Always answer me in Arabic.');
+    const last = JSON.parse(readFileSync(join(notesDir, 'memory', 'last', `${world.clerk.principal.userId}.json`), 'utf8')) as { question: string };
+    expect(last.question).toBe('why is the customer account empty?');
+
+    expect(await mine('forget', { about: 'me', match: 'arabic' })).toMatch(/Dropped 1 line/);
+    expect(await mine('forget', { about: 'company', match: 'najaf' })).toMatch(/administrator's to take back/);
+  });
+
+  it('keeps the place in a walkthrough: started, moved on only by a step counted from one, finished, cleared', async () => {
+    const run = runner(world.clerk);
+    expect(await run('walkthrough', { op: 'advance' })).toMatch(/no walkthrough in progress/);
+    expect(await run('walkthrough', { op: 'start', title: 'Post a sales invoice', steps: ['Only one step'] })).toMatch(/needs its steps/);
+    const started = await run('walkthrough', {
+      op: 'start',
+      title: 'Post sales invoice INV-1',
+      steps: ['Approve the opening stock', 'Open the invoice and press Post', 'Check the customer statement'],
+      document: 'INV-1',
+      check: 'the opening stock reads approved',
+    });
+    expect(started).toMatch(/step 1 of 3 — Approve the opening stock/);
+    expect(started).toMatch(/reply !ai done/);
+    expect(await run('walkthrough', { op: 'advance' })).toMatch(/step 2 of 3 — Open the invoice and press Post/);
+    expect(await run('walkthrough', { op: 'advance', current: 3 })).toMatch(/step 3 of 3/);
+    expect(await run('walkthrough', { op: 'advance' })).toMatch(/Every step of "Post sales invoice INV-1" is done/);
+    expect(await run('walkthrough', { op: 'clear' })).toMatch(/cleared/);
+    expect(await run('walkthrough', { op: 'advance' })).toMatch(/no walkthrough in progress/);
   });
 });

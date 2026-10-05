@@ -39,6 +39,13 @@
  *                       there is a file, and an export is audited as one), not
  *                       the sign-in form.
  *
+ * `firstRecord` (2026-10-05, for a how-to's "an opened record"): the address is
+ * a list, and what is pictured is the first record that list shows the asker.
+ * It is found by READING the first row's link — an `href`, nothing pressed —
+ * which must pass the same address rules, and is opened with the same plain
+ * GET under the same guards and the same one session. Still one address
+ * pictured, one audit row, nothing changed.
+ *
  * Every picture, and every refusal, is an `audit_event` (`whatsapp.screenshot`)
  * under the person it was taken as.
  *
@@ -330,6 +337,35 @@ const READ_PAGE = `(function () {
   return { title: title, state: state, said: said, record: !!document.querySelector('main [class*="sapDoc"]') };
 })()`;
 
+/**
+ * The first record a list shows, found the way a person finds it: the first
+ * link, in a row of a table on the page, that leads to a page UNDER the list's
+ * own address (`/payables/suppliers` → `/payables/suppliers/SUP-00001`).
+ *
+ * It reads an `href` and returns it — looking, not pressing. A link to "new",
+ * to an export, or to anywhere that is not under the list is passed over, so a
+ * row that names its import or its supplier does not send the picture there.
+ * Plain ES5, handed to the page as text (see `guide/markers.ts` for why).
+ */
+const firstRecordCall = (listPath: string): string => `(function (route) {
+  var under = String(route).replace(/\\/+$/, '') + '/';
+  var links = document.querySelectorAll('main table tbody tr a[href]');
+  for (var i = 0; i < links.length; i += 1) {
+    var url;
+    try {
+      url = new URL(links[i].getAttribute('href'), location.href);
+    } catch (e) {
+      continue;
+    }
+    if (url.origin !== location.origin) continue;
+    if (url.pathname.indexOf(under) !== 0) continue;
+    var rest = url.pathname.slice(under.length).replace(/\\/+$/, '');
+    if (!rest || /(^|\\/)(new|export|edit)$/i.test(rest)) continue;
+    return url.pathname + url.search;
+  }
+  return null;
+})(${JSON.stringify(listPath)})`;
+
 /** The page a person sees: its heading there, the top bar measured, the fonts in. */
 async function settle(page: Page, budget: number): Promise<void> {
   await page.locator('h1').first().waitFor({ timeout: budget });
@@ -345,10 +381,25 @@ async function settle(page: Page, budget: number): Promise<void> {
   await page.waitForTimeout(250);
 }
 
-async function take(input: { readonly userId: string; readonly path: string; readonly locale: 'en' | 'ar'; readonly pointAt?: readonly string[]; readonly fullPage?: boolean }): Promise<LiveShotResult> {
+interface Seen {
+  readonly title: string;
+  readonly state: 'error' | 'missing' | 'denied' | null;
+  readonly said: string;
+  readonly record: boolean;
+}
+
+async function take(input: {
+  readonly userId: string;
+  readonly path: string;
+  readonly locale: 'en' | 'ar';
+  readonly pointAt?: readonly string[];
+  readonly fullPage?: boolean;
+  readonly firstRecord?: boolean;
+}): Promise<LiveShotResult> {
   const base = baseUrl();
   const origin = new URL(base).origin;
-  const timeout = shotTimeout();
+  // A record found on a list is two pages opened, not one.
+  const timeout = shotTimeout() * (input.firstRecord ? 2 : 1);
   const started = Date.now();
   const left = () => Math.max(1_000, timeout - (Date.now() - started));
 
@@ -362,6 +413,8 @@ async function take(input: { readonly userId: string; readonly path: string; rea
   let outcome: 'success' | 'denied' | 'failure' = 'failure';
   let why = '';
   let count: number | undefined;
+  /** What was pictured, once it is not the address that was asked for: the record a list led to. */
+  let pictured = '';
   const refuse = (kind: 'denied' | 'failure', reason: string): LiveShotResult => {
     outcome = kind;
     why = reason;
@@ -400,47 +453,65 @@ async function take(input: { readonly userId: string; readonly path: string; rea
         /* not an address */
       }
     });
-    let status = 0;
-    try {
-      const response = await page.goto(`${base}${input.path}`, { waitUntil: 'domcontentloaded', timeout: left() });
-      status = response?.status() ?? 0;
-    } catch (error) {
-      const said = error instanceof Error ? error.message : String(error);
-      if (/Timeout|timed out/i.test(said)) return refuse('failure', `The page did not open within ${Math.round(timeout / 1000)} seconds. Try once more; if it happens again the system is slow or that screen is failing (system_status).`);
-      if (/ERR_BLOCKED_BY_CLIENT|ERR_ABORTED|Download is starting/i.test(said)) {
-        if (sentTo.startsWith('/sign-in')) {
-          return refuse('failure', 'The application did not accept the sign-in for this picture and sent the browser back to the sign-in page, so nothing was pictured. That is a fault on the server, not theirs: report it.');
+    /** Opens one address and reads what it turned out to be — or says why it is not a screen to picture. */
+    const visit = async (path: string): Promise<{ readonly landed: URL; readonly seen: Seen | null } | LiveShotResult> => {
+      let status = 0;
+      try {
+        const response = await page.goto(`${base}${path}`, { waitUntil: 'domcontentloaded', timeout: left() });
+        status = response?.status() ?? 0;
+      } catch (error) {
+        const said = error instanceof Error ? error.message : String(error);
+        if (/Timeout|timed out/i.test(said)) return refuse('failure', `The page did not open within ${Math.round(timeout / 1000)} seconds. Try once more; if it happens again the system is slow or that screen is failing (system_status).`);
+        if (/ERR_BLOCKED_BY_CLIENT|ERR_ABORTED|Download is starting/i.test(said)) {
+          if (sentTo.startsWith('/sign-in')) {
+            return refuse('failure', 'The application did not accept the sign-in for this picture and sent the browser back to the sign-in page, so nothing was pictured. That is a fault on the server, not theirs: report it.');
+          }
+          return refuse('denied', 'That address does not lead to a screen: it sent the browser somewhere that is not a page of the ERP.');
         }
-        return refuse('denied', 'That address does not lead to a screen: it sent the browser somewhere that is not a page of the ERP.');
+        return refuse('failure', `The page could not be opened (${(said.split('\n')[0] ?? '').slice(0, 140)}).`);
       }
-      return refuse('failure', `The page could not be opened (${(said.split('\n')[0] ?? '').slice(0, 140)}).`);
-    }
 
-    const landed = new URL(page.url());
+      const landed = new URL(page.url());
+      const asked = path.split('?')[0] ?? path;
+      if (landed.pathname.startsWith('/sign-in')) return refuse('failure', 'The application did not accept the sign-in for this picture, so nothing was pictured. That is a fault on the server, not theirs: report it.');
+      if (landed.pathname.startsWith('/password') && !asked.startsWith('/password')) {
+        return refuse('denied', 'This person is still on a temporary password: until they change it (the Change password screen opens by itself when they sign in) the system opens no other screen for them, so there is nothing to picture.');
+      }
+      if (landed.pathname.startsWith('/profile/security') && !asked.startsWith('/profile/security')) {
+        return refuse('denied', 'This person has not set up their authenticator app, and the time allowed for it has passed: until they do (their initials → Profile settings → Security) the system opens no other screen for them, so there is nothing to picture.');
+      }
+      if (status === 404) return refuse('denied', `There is no such page or record at ${asked} — or none that this person may see. Check the address (screens) or the document number (document_story).`);
+      if (status >= 500) return refuse('failure', `The application failed to draw ${asked} (it answered ${status}). That is a defect: system_status shows the error it logged; report it.`);
+
+      try {
+        await settle(page, left());
+      } catch {
+        return refuse('failure', `The page at ${asked} did not finish opening within ${Math.round(timeout / 1000)} seconds.`);
+      }
+      const seen = (await page.evaluate(READ_PAGE).catch(() => null)) as Seen | null;
+      if (seen?.state === 'missing') return refuse('denied', `There is no such page or record at ${asked} — or none that this person may see. Check the address (screens) or the document number (document_story).`);
+      if (seen?.state === 'denied') return refuse('denied', `This person's role may not open ${asked}: the system showed them its refusal instead of the screen (${seen.said}).`);
+      if (seen?.state === 'error') return refuse('failure', `The application failed to draw ${asked} and showed its error page (${seen.said}). That is a defect: system_status shows the error it logged; report it.`);
+      return { landed, seen };
+    };
+
+    let opened = await visit(input.path);
+    if ('ok' in opened) return opened;
+
+    if (input.firstRecord) {
+      // The list is open as the asker sees it: the first record it shows them is read off it, and opened the same way.
+      const found = (await page.evaluate(firstRecordCall(opened.landed.pathname)).catch(() => null)) as string | null;
+      const checked = typeof found === 'string' && found ? checkPath(found) : null;
+      if (!checked || !checked.ok) return refuse('denied', 'There is no record on that screen yet to open.');
+      pictured = checked.path;
+      opened = await visit(checked.path);
+      if ('ok' in opened) return opened;
+    }
+    const { landed, seen } = opened;
     const where = `${landed.pathname}${landed.search}`;
-    const asked = input.path.split('?')[0] ?? input.path;
-    if (landed.pathname.startsWith('/sign-in')) return refuse('failure', 'The application did not accept the sign-in for this picture, so nothing was pictured. That is a fault on the server, not theirs: report it.');
-    if (landed.pathname.startsWith('/password') && !asked.startsWith('/password')) {
-      return refuse('denied', 'This person is still on a temporary password: until they change it (the Change password screen opens by itself when they sign in) the system opens no other screen for them, so there is nothing to picture.');
-    }
-    if (landed.pathname.startsWith('/profile/security') && !asked.startsWith('/profile/security')) {
-      return refuse('denied', 'This person has not set up their authenticator app, and the time allowed for it has passed: until they do (their initials → Profile settings → Security) the system opens no other screen for them, so there is nothing to picture.');
-    }
-    if (status === 404) return refuse('denied', `There is no such page or record at ${asked} — or none that this person may see. Check the address (screens) or the document number (document_story).`);
-    if (status >= 500) return refuse('failure', `The application failed to draw ${asked} (it answered ${status}). That is a defect: system_status shows the error it logged; report it.`);
-
-    try {
-      await settle(page, left());
-    } catch {
-      return refuse('failure', `The page at ${asked} did not finish opening within ${Math.round(timeout / 1000)} seconds.`);
-    }
-    const seen = (await page.evaluate(READ_PAGE).catch(() => null)) as { title: string; state: 'error' | 'missing' | 'denied' | null; said: string; record: boolean } | null;
-    if (seen?.state === 'missing') return refuse('denied', `There is no such page or record at ${asked} — or none that this person may see. Check the address (screens) or the document number (document_story).`);
-    if (seen?.state === 'denied') return refuse('denied', `This person's role may not open ${asked}: the system showed them its refusal instead of the screen (${seen.said}).`);
-    if (seen?.state === 'error') return refuse('failure', `The application failed to draw ${asked} and showed its error page (${seen.said}). That is a defect: system_status shows the error it logged; report it.`);
 
     const lastSegment = (landed.pathname.split('/').filter(Boolean).pop() ?? '').toLowerCase();
-    const record = Boolean(seen?.record) || /\d/.test(lastSegment);
+    const record = Boolean(input.firstRecord) || Boolean(seen?.record) || /\d/.test(lastSegment);
     const drawnMarks = await drawMarks(page, {
       scope: record ? 'record' : 'screen',
       withValues: true,
@@ -466,7 +537,7 @@ async function take(input: { readonly userId: string; readonly path: string; rea
     if (context) await context.close().catch(() => {});
     // Whatever happened above, the session ends here.
     await endSession(input.userId, minted.sessionId).catch(() => {});
-    await auditShot(input.userId, { path: input.path, outcome, ...(why ? { reason: why } : {}), sessionId: minted.sessionId, ...(count === undefined ? {} : { marks: count }) });
+    await auditShot(input.userId, { path: pictured || input.path, outcome, ...(why ? { reason: why } : {}), sessionId: minted.sessionId, ...(count === undefined ? {} : { marks: count }) });
     restLater();
   }
 }
@@ -487,6 +558,8 @@ export async function liveScreenshot(input: {
   readonly pointAt?: readonly string[];
   /** Default false: the first screenful. */
   readonly fullPage?: boolean;
+  /** The path is a list: open the first record it shows, and picture that. */
+  readonly firstRecord?: boolean;
 }): Promise<LiveShotResult> {
   const ready = liveShotsReady();
   if (!ready.ok) return { ok: false, reason: ready.reason ?? 'Live pictures cannot be taken on this server.' };

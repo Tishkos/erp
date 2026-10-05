@@ -130,6 +130,8 @@ the e-mail rows are marked `suppressed` and the log says so once per run.
   `Status: fixed` when one is dealt with.
 * **Without a phone:** `npx tsx scripts/ops/ask-noah.ts <email> "<question>"`
   on the server answers exactly as the group would be answered, as that user.
+  Add `--propose` to try a preview or a plan: what he would ask a yes for is
+  printed and never run, and a preview undoes itself.
 * After a deploy: `systemctl restart whatsapp-bridge`, so the bridge runs the
   new instructions and tools.
 
@@ -173,6 +175,40 @@ Everything starts with `!ai` at the beginning of the message.
   keys a draft purchase invoice and reads it back; nothing posts.
 * **Have him do a step** — `!ai post INV-…`: he shows what it will do and waits
   for `!ai yes`.
+
+## Requests, feedback and what he remembers
+
+Everything Noah writes down besides answers is a file on the server under
+`/opt/qs-erp-next/var/noah/` (it outlives a deploy):
+
+| Folder | What | Who reads it |
+|---|---|---|
+| `requests/REQ-YYYYMMDD-NNN.md` (+ `INDEX.md`) | One file per thing people want changed: a new field, a new screen or report, a workflow the company does differently. Each has what is wanted, why, how it works today, the real steps, an example, the questions still open, and his own reading. | Whoever builds the system. Set `- Status:` by hand as it moves: `in progress`, `done`, `declined`. |
+| `feedback/FB-….md`, `feedback/eval-candidates.jsonl` | Each 👎 / 👍 with the exchange it was about. | Turn each candidate into a case in `tests/noah/questions.ts`. |
+| `memory/company.md`, `memory/people/<user>.md` | What he was told to keep. | Edit or delete a line by hand to correct him. |
+| `memory/walk/`, `memory/last/` | The walkthrough each person is in; their last exchange. | Nobody needs to. |
+
+```
+ssh root@31.97.123.206 'cat /opt/qs-erp-next/var/noah/requests/INDEX.md'
+ssh root@31.97.123.206 'cat /opt/qs-erp-next/var/noah/requests/REQ-20261005-001.md'
+```
+
+What people say in the group:
+
+* `!ai we need another field on bank loans: who guaranteed it` — he checks how it
+  works today, asks a question or two, files it and gives its number.
+* `!ai 👎` (or "that was wrong") after an answer — written down; he looks again.
+* `!ai remember that I always want Arabic` / `!ai remember: our Najaf store is WH-NJF`
+  (a company fact only from an administrator) / `!ai forget …`.
+* `!ai walk me through posting INV-…` — one step at a time; `!ai done` after each,
+  and he checks the system before giving the next.
+* `!ai what will posting INV-… do?` — the exact journal and stock lines, nothing changed.
+* `!ai approve the opening stock and then post the invoice` — one plan, one `!ai yes`.
+* `!ai show me the suppliers screen live` / `… the sample one` — whose data the picture shows.
+
+**Live data in how-to pictures** is `NOAH_HOWTO_LIVE=on` in `/opt/qs-erp-next/.env`
+(restart the bridge). Off, every how-to picture is the training copy; a person
+can still ask for a live one in words.
 
 ## Trying him without the group watching
 

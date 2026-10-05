@@ -854,6 +854,115 @@ export const CASES: readonly EvalCase[] = [
     },
     why: 'the arrow is at the button the screen really has, named as the screen names it — and showing is not doing',
   },
+
+  // ── what he writes down, keeps and walks through (2026-10-05) ─────────────
+  {
+    id: 'request-new-field-en',
+    area: 'action',
+    ask: 'we need another field in bank loans please: who guaranteed the loan. the bank asks us at every renewal and today we keep it on paper',
+    expect: {
+      tools: ['change_request'],
+      says: ['REQ-\\d{8}-\\d{3}', '!ai', '\\?'],
+      neverSays: ['will be (built|added|done) (by|on|in|next|this)', 'I(.ve| have) added (the|a) field'],
+      noProposal: true,
+      script: 'latin',
+    },
+    why: 'a wish for the system itself is filed as a request with its number, questions are asked, and nothing is promised',
+  },
+  {
+    id: 'request-workflow-ar',
+    area: 'action',
+    ask: 'طريقة موافقة الإجازات بالنظام غلط، عدنا رئيس القسم هو اللي يوافق مو المدير المباشر',
+    expect: {
+      toolsAny: ['change_request', 'guide', 'screens'],
+      says: ['؟|REQ-\\d{8}'],
+      neverSays: [NOT_DOWN],
+      script: 'arabic',
+    },
+    why: 'told the system does a workflow wrongly, he looks at how it works and asks why and how — in their language — rather than defending the system',
+  },
+  {
+    id: 'memory-remember-me-en',
+    area: 'action',
+    ask: 'remember that I am the Head Office storekeeper and I only care about WH-HQ',
+    expect: {
+      tools: ['remember'],
+      says: ['kept|remember|noted|saved|will'],
+      noProposal: true,
+      script: 'latin',
+    },
+    why: 'a stable fact about the person is kept, and said to be kept',
+  },
+  {
+    id: 'walkthrough-start-en',
+    area: 'howto',
+    ask: 'walk me through sending API-HQ-2026-000005 for approval, one step at a time with me',
+    expect: {
+      tools: ['walkthrough'],
+      says: ['!ai done', 'step 1|\\*Step 1'],
+      noProposal: true,
+      script: 'latin',
+      maxSeconds: 180,
+    },
+    why: 'a walkthrough is kept and given one step at a time, waiting for the person',
+  },
+  {
+    id: 'howto-live-en',
+    area: 'howto',
+    ask: 'show me the suppliers screen live, with my real data',
+    expect: {
+      toolsAny: ['show_screen', 'screenshot'],
+      says: ['real|live'],
+      pictures: 1,
+      script: 'latin',
+      maxSeconds: 180,
+    },
+    why: 'asked for live data in plain words, the picture is of the real screen and he says so',
+  },
+
+  // ── what a step would do, and several steps on one yes (2026-10-05) ───────
+  {
+    id: 'preview-reverse-en',
+    area: 'action',
+    ask: 'what would reversing API-HQ-2026-000001 do exactly? the reason would be: entered twice. show me the lines first, do not do it',
+    expect: {
+      tools: ['preview_step'],
+      noProposal: true,
+      says: ['API-HQ-2026-000001', '\\bDr\\b|debit', '\\bCr\\b|credit', 'nothing (has been|was|is) (changed|done|posted|reversed)|only a preview|not (been )?(changed|reversed)'],
+      neverSays: ['\\b(I(.ve| have)|it has been|has been|is now) reversed\\b'],
+      script: 'latin',
+      maxSeconds: 180,
+    },
+    why: 'asked what a step would do, he runs it and undoes it: the journal line by line, and said plainly that nothing was changed',
+  },
+  {
+    id: 'preview-refused-en',
+    area: 'action',
+    ask: 'what exactly would posting API-HQ-2026-000005 do? show me the journal before anything is done',
+    expect: {
+      tools: ['preview_step'],
+      noProposal: true,
+      says: ['API-HQ-2026-000005', 'submit'],
+      neverSays: [NOT_DONE, '\\bDr\\s+[0-9]'],
+      script: 'latin',
+      maxSeconds: 180,
+    },
+    why: 'a step the system would refuse is reported as refused, in its own words — and no journal is made up for it',
+  },
+  {
+    id: 'plan-two-steps-en',
+    area: 'action',
+    ask: 'submit API-HQ-2026-000005 and then post it, both in one go',
+    expect: {
+      tools: ['propose_action'],
+      proposes: 'run_plan',
+      says: [TRIGGER_YES, 'API-HQ-2026-000005', 'submit', 'post'],
+      neverSays: [NOT_DONE],
+      script: 'latin',
+      maxSeconds: 180,
+    },
+    why: 'several steps asked for at once are ONE plan, read back in order, run on one yes — and nothing has run yet',
+  },
 ];
 
 // ---------------------------------------------------------------------------

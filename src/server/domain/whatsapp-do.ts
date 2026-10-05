@@ -52,6 +52,17 @@
  *
  * What stays on the screens: every other document with lines to type. Noah
  * says where the screen is and what each field wants (`domain/system-guide.ts`).
+ *
+ * ── Plans, 2026-10-05 ──────────────────────────────────────────────────────
+ * By direction ("bring in the stock and post the invoice — he lays out the
+ * steps in order, you approve, and he runs them one at a time"): `run_plan` is
+ * two to five of the steps above put to the person as ONE numbered proposal.
+ * One yes confirms the plan; each step then runs exactly as it would alone —
+ * prepared again at its own moment, its own transaction, its own audit row —
+ * and the plan stops at the first step the system refuses. A step that ran
+ * stays done: a plan is a list of ordinary actions, not one big transaction.
+ * No plan inside a plan, and no draft in one (a draft's lines are a proposal
+ * of their own to read).
  */
 
 /** What Noah may propose. Every one of these runs through its own service. */
@@ -62,7 +73,8 @@ export type ActionName =
   | 'document_step'
   | 'create_partner'
   | 'approve_partner'
-  | 'create_draft';
+  | 'create_draft'
+  | 'run_plan';
 
 export const ACTION_NAMES: readonly ActionName[] = [
   'approve_document',
@@ -72,7 +84,37 @@ export const ACTION_NAMES: readonly ActionName[] = [
   'create_partner',
   'approve_partner',
   'create_draft',
+  'run_plan',
 ];
+
+/** What a plan may be made of: steps on what already exists, and a new partner. */
+export const PLAN_STEP_ACTIONS = [
+  'document_step',
+  'approve_opening_stock',
+  'approve_document',
+  'reject_document',
+  'approve_partner',
+  'create_partner',
+] as const satisfies readonly ActionName[];
+
+/** A plan is worth the name from two steps, and still readable in one message at five. */
+export const PLAN_MIN_STEPS = 2;
+export const PLAN_MAX_STEPS = 5;
+
+/**
+ * One step of a plan, as it was put to the person.
+ *
+ * It keeps what was ASKED (`args`), not what was resolved: a step is prepared
+ * again when its turn comes, because the step before it has changed the books
+ * by then — an opening stock that was submitted is approved, an invoice that
+ * was approved is posted.
+ */
+export interface PlanStep {
+  readonly action: ActionName;
+  readonly args: Readonly<Record<string, unknown>>;
+  /** The step's own facts, as they stood when the plan was proposed. */
+  readonly sentence: string;
+}
 
 /**
  * The documents Noah will key as a draft from what he was told ("draft
@@ -206,6 +248,8 @@ export interface PendingAction {
   readonly payload?: Readonly<Record<string, string>> | null;
   /** `create_draft` — the document, line by line, as it was put to the person. */
   readonly draft?: DraftPayload | null;
+  /** `run_plan` — the steps, in the order they run. `target` is the first step's. */
+  readonly plan?: readonly PlanStep[] | null;
   /** The facts Noah must put to them before he asks. */
   readonly sentence: string;
   readonly proposedAt: string;
@@ -331,5 +375,6 @@ export function actionLabel(action: ActionName, step?: DocumentStep | null): str
   if (action === 'document_step') return `${step ?? 'move'} the document`;
   if (action === 'create_partner') return 'create the partner';
   if (action === 'create_draft') return 'save the draft';
+  if (action === 'run_plan') return 'run the plan';
   return 'approve the partner';
 }
