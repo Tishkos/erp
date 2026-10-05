@@ -18,6 +18,7 @@
  *        is unchanged by every run of every person, and the transaction itself is held read-only
  *   CC6  faults that stay (a late container, a bank statement nobody matched) — last, because they cannot be undone
  */
+import { randomUUID } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -108,7 +109,7 @@ const dec = (value: string | null | undefined): bigint => parseDecimal(value ?? 
 const figure = (r: CheckResult, key: string) => r.figures.find((f) => f.key === key);
 
 /** Checks that are off in a world nobody set them up in. */
-const NOT_SET_UP = new Set(['platform.whatsapp', 'platform.cloud']);
+const NOT_SET_UP = new Set(['platform.whatsapp', 'platform.automation', 'platform.cloud']);
 
 /**
  * What a healthy world makes of one check, for a person who may run it. The machine the suite runs on is real:
@@ -630,6 +631,56 @@ describe('CC2 · one fault at a time', () => {
     expect(stateMap(after)).toEqual(stateMap(base));
   });
 
+  it('automation: a rule the system paused, a rule whose runs failed, and events the runner has not taken', async () => {
+    const { base, during, after } = await withFault(admin, async () => {
+      const made = { rules: [] as string[], events: [] as string[], runs: [] as string[] };
+      await maintenance(async (client) => {
+        const rule = async (no: string, paused: boolean) => {
+          const { rows } = await client.query<{ id: string }>(
+            `insert into automation_rule (rule_no, event_key, template_code, name, owner_user_id, created_by, paused_at, paused_reason, consecutive_failures)
+             values ($1, 'ap_invoice.posted', 'invoice_posted_notice', $2, $3, $3, ${paused ? 'now()' : 'null'}, ${paused ? "'Stopped after 3 failures in a row.'" : 'null'}, ${paused ? 3 : 0}) returning id`,
+            [no, `Fault ${no}`, admin.id],
+          );
+          made.rules.push(rows[0]!.id);
+          return rows[0]!.id;
+        };
+        await rule('AUT-FAULT-1', true);
+        const failing = await rule('AUT-FAULT-2', false);
+        const subject = randomUUID();
+        const { rows: event } = await client.query<{ id: string }>(
+          `insert into automation_event (event_key, subject_type, subject_id, subject_key, window_key, episode_key, payload, occurred_at, status, next_attempt_at)
+           values ('ap_invoice.posted', 'ap_invoice', $1, 'ap_invoice:' || $1, 'fault', 'fault', '{}'::jsonb, now() - interval '3 hours', 'pending', now() - interval '3 hours') returning id`,
+          [subject],
+        );
+        made.events.push(event[0]!.id);
+        const { rows: run } = await client.query<{ id: string }>(
+          `insert into automation_run (rule_id, rule_version, event_id, event_key, subject_key, window_key, episode_key, run_key, owner_user_id, outcome, reason)
+           values ($1, 1, $2, 'ap_invoice.posted', 'ap_invoice:' || $3, 'fault', 'fault', 'fault-run', $4, 'failed', 'A step failed.') returning id`,
+          [failing, event[0]!.id, subject, admin.id],
+        );
+        made.runs.push(run[0]!.id);
+      });
+      return async () => {
+        await maintenance(async (client) => {
+          await client.query(`delete from automation_run where id = any($1::bigint[])`, [made.runs]);
+          await client.query(`delete from automation_event where id = any($1::bigint[])`, [made.events]);
+          await client.query(`delete from automation_rule where id = any($1::uuid[])`, [made.rules]);
+        });
+      };
+    });
+    expect(resultOf(base, 'platform.automation').state).toBe('not_checked');
+    expect(changed(stateMap(base), stateMap(during))).toEqual(['platform.automation']);
+    const result = resultOf(during, 'platform.automation');
+    expect(result.state).toBe('attention');
+    expect(result.items.map((i) => i.code).sort()).toEqual(['automation_behind', 'automation_failing', 'automation_paused']);
+    expect(figure(result, 'automation_rules')!.count).toBe(2);
+    expect(figure(result, 'automation_rules_on')!.count).toBe(0);
+    expect(figure(result, 'automation_failed_runs')!.count).toBe(1);
+    expect(figure(result, 'automation_waiting')!.count).toBeGreaterThanOrEqual(1);
+    for (const found of result.items) expectOpenable(admin, found.href);
+    expect(stateMap(after)).toEqual(stateMap(base));
+  });
+
   it('stock below nothing, left by a maintenance script: the position, found by the ledger checks', async () => {
     const { base, during, after } = await withFault(world.manager, () => negativeStock(world));
     const flipped = changed(stateMap(base), stateMap(during));
@@ -678,7 +729,7 @@ describe('CC3 · who may open it, and what each check shows them', () => {
         }
       }
     }
-    // The probe holds the Control Center and nothing it summarises: 31 checks, none run, and no Exception Center counts.
+    // The probe holds the Control Center and nothing it summarises: 32 checks, none run, and no Exception Center counts.
     const nothing = await report(probe);
     expect(nothing.summary.byState).toEqual({ ok: 0, attention: 0, not_checked: CHECKS.length, unavailable: 0 });
     expect(nothing.exceptions).toBeNull();

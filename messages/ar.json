@@ -7250,7 +7250,8 @@
         "supplier_credit_memo": "أرصدة الموردين الدائنة",
         "system_health": "النسخ الاحتياطي وسلامة النظام",
         "trial_balance": "ميزان المراجعة",
-        "whatsapp": "واتساب"
+        "whatsapp": "واتساب",
+        "automation": "الأتمتة"
       },
       "word": {
         "connected": "متصل",
@@ -7310,7 +7311,11 @@
         "super_users": "المستخدمون الرئيسيون النشطون",
         "super_user": "المستخدم الرئيسي {user}",
         "users_without_employee": "مستخدمون بلا سجل موظف",
-        "ended_with_active_user": "موظفون انتهت خدمتهم ومستخدمهم نشط"
+        "ended_with_active_user": "موظفون انتهت خدمتهم ومستخدمهم نشط",
+        "automation_rules": "قواعد الأتمتة",
+        "automation_rules_on": "قواعد الأتمتة قيد التشغيل",
+        "automation_failed_runs": "تشغيلات أتمتة فاشلة خلال 7 أيام",
+        "automation_waiting": "أحداث أتمتة بالانتظار"
       },
       "item": {
         "trial_balance_difference": "إجمالي المدين {debitIqd} لا يساوي إجمالي الدائن {creditIqd}: الفرق {differenceIqd}.",
@@ -7343,7 +7348,11 @@
         "unknown_grant": "كائن الصلاحيات {object} ممنوح لـ {roles} لكن لا شيء في قمة يستخدمه.",
         "super_user": "{user} ({email}) مستخدم رئيسي.",
         "user_without_employee": "{user} ({email}) مستخدم نشط بلا سجل موظف.",
-        "employee_ended_user_active": "{employee} غادر لكن المستخدم {email} ما زال نشطًا."
+        "employee_ended_user_active": "{employee} غادر لكن المستخدم {email} ما زال نشطًا.",
+        "automation_off": "الأتمتة متوقفة: لا تعمل أي قاعدة ولا تُسجَّل أي أحداث.",
+        "automation_paused": "أُوقفت القاعدة «{name}» مؤقتًا بتاريخ {pausedDate}: {reason}",
+        "automation_failing": "فشل {failed, plural, one {تشغيل واحد} two {تشغيلان} few {# تشغيلات} many {# تشغيلًا} other {# تشغيل}} للقاعدة «{name}» خلال آخر 7 أيام؛ وآخرها بتاريخ {lastDate}.",
+        "automation_behind": "{count, plural, one {حدث واحد ينتظر} two {حدثان ينتظران} few {# أحداث تنتظر} many {# حدثًا ينتظر} other {# حدث ينتظر}} المشغّل أكثر من نصف ساعة، منذ {sinceDate}."
       },
       "check": {
         "accounting_trial_balance": {
@@ -7469,6 +7478,10 @@
         "platform_employee_links": {
           "title": "المستخدمون والموظفون",
           "what": "لكل مستخدم نشط سجل موظف، ولا موظف انتهت خدمته له مستخدم نشط."
+        },
+        "platform_automation": {
+          "title": "الأتمتة",
+          "what": "لا توجد قاعدة أتمتة موقوفة مؤقتًا أو متعثّرة، والمشغّل يواكب الأحداث، والأتمتة قيد التشغيل."
         }
       }
     },

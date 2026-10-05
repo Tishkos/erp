@@ -125,6 +125,8 @@ export const CHECKS: readonly CheckDefinition[] = Object.freeze([
   { code: 'platform.outbox', domain: 'platform', requires: [view('job')], route: '/administration/jobs' },
   { code: 'platform.deliveries', domain: 'platform', requires: [view('job')], route: '/administration/jobs' },
   { code: 'platform.whatsapp', domain: 'platform', requires: [view('whatsapp')], route: '/administration/whatsapp' },
+  // Automation (platform phase, Agent 10): rules paused or failing, the runner behind, the kill switch left off.
+  { code: 'platform.automation', domain: 'platform', requires: [view('automation')], route: '/administration/automation' },
   { code: 'platform.cloud', domain: 'platform', requires: [view('cloud_setting')], route: '/administration/cloud-files' },
   { code: 'platform.system_health', domain: 'platform', requires: [view('system_health')], route: '/administration/backup-health', host: true },
   { code: 'platform.users_without_role', domain: 'platform', requires: [view('app_user')], route: '/administration/users' },

@@ -7250,7 +7250,8 @@
         "supplier_credit_memo": "Supplier Credits",
         "system_health": "Backup and Health",
         "trial_balance": "the Trial Balance",
-        "whatsapp": "WhatsApp"
+        "whatsapp": "WhatsApp",
+        "automation": "Automation"
       },
       "word": {
         "connected": "connected",
@@ -7310,7 +7311,11 @@
         "super_users": "Active Super Users",
         "super_user": "Super User {user}",
         "users_without_employee": "Users with no employee record",
-        "ended_with_active_user": "Ended employees whose user is active"
+        "ended_with_active_user": "Ended employees whose user is active",
+        "automation_rules": "Automation rules",
+        "automation_rules_on": "Automation rules switched on",
+        "automation_failed_runs": "Failed automation runs in 7 days",
+        "automation_waiting": "Automation events waiting"
       },
       "item": {
         "trial_balance_difference": "Total debit {debitIqd} does not equal total credit {creditIqd}: a difference of {differenceIqd}.",
@@ -7343,7 +7348,11 @@
         "unknown_grant": "Permission object {object} is granted to {roles}, but nothing in Qimah uses it.",
         "super_user": "{user} ({email}) is a Super User.",
         "user_without_employee": "{user} ({email}) is an active user with no employee record.",
-        "employee_ended_user_active": "{employee} has left, but the user {email} is still active."
+        "employee_ended_user_active": "{employee} has left, but the user {email} is still active.",
+        "automation_off": "Automation is switched off: no rule acts and no event is recorded.",
+        "automation_paused": "Rule “{name}” was paused on {pausedDate}: {reason}",
+        "automation_failing": "Rule “{name}” failed {failed, plural, one {# run} other {# runs}} in the last 7 days; the latest was on {lastDate}.",
+        "automation_behind": "{count, plural, one {# event has} other {# events have}} waited more than half an hour for the runner, since {sinceDate}."
       },
       "check": {
         "accounting_trial_balance": {
@@ -7469,6 +7478,10 @@
         "platform_employee_links": {
           "title": "Users and employees",
           "what": "Every active user has an employee record, and no ended employee has an active user."
+        },
+        "platform_automation": {
+          "title": "Automation",
+          "what": "No automation rule is paused or failing, the runner is keeping up, and automation is switched on."
         }
       }
     },
