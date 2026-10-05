@@ -1085,7 +1085,7 @@
     "preset_studio_description": "Spacious and refined",
     "preview_action": "Details",
     "appearance_save_idle": "Changes save to your account automatically.",
-    "appearance_save_saving": "Saving appearance?",
+    "appearance_save_saving": "Saving appearance…",
     "appearance_save_saved": "Appearance saved to your account.",
     "appearance_save_error": "Could not save. Check your connection and try again."
   },
@@ -1615,7 +1615,11 @@
       "request_action_decide": "Decide",
       "request_action_pay": "Reimburse",
       "request_action_issue": "Issue the letter",
-      "open_request": "Open the request"
+      "open_request": "Open the request",
+      "holds_need_reason": "Stopped — reason required in my lane",
+      "holds_i_own": "Holds I own",
+      "next_action": "Next action",
+      "open_payables": "Open the workbench"
     },
     "close": "Close",
     "search": "Search",
@@ -4959,7 +4963,7 @@
       "activate": "Activate",
       "new_contact": "Add or update a contact",
       "number_hint": "International format with the plus: +9647xxxxxxxxx. A local 07xx number is read as Iraq.",
-      "queries_note": "Questions are answered only for a user who holds the CEO role and whose contact allows them; everybody else gets no reply. Every question runs read-only under that user’s own permissions and is written to the audit trail.",
+      "queries_note": "Questions are answered for any active user whose contact allows them; a number that is not listed gets no reply. Every question runs read-only under that user’s own permissions — each person is told what their own screens show — and is written to the audit trail. Actions (approving, posting, creating) are a separate switch per person and always ask for a yes first.",
       "save": "Save",
       "rules": "Notifications that reach a phone",
       "event": "Event",
@@ -5001,9 +5005,9 @@
       "setting_group_jid": "Group id",
       "setting_group_subject": "Group name",
       "setting_group_queries": "Answer questions in the group (on / off)",
-      "setting_group_notifications": "Post notifications to the group (on / off)",
-      "setting_group_digest": "Post the morning digest to the group (on / off)",
-      "setting_group_only": "Answer questions in the group only — a private message is read, logged and left unanswered (on / off)",
+      "setting_group_notifications": "Post notifications to the group — only when group-only is off; with it on the bot speaks only when called with !ai (on / off)",
+      "setting_group_digest": "Post the morning digest to the group — only when group-only is off; with it on the bot speaks only when called with !ai (on / off)",
+      "setting_group_only": "Answer only in the group — a private message to the bot is not answered (on / off)",
       "group_hint": "One group, by its id. Add the bot to the group, run \"npm run whatsapp-bridge -- --list-groups\", and paste the id here. Any other group is ignored."
     },
     "projects": {
@@ -8102,6 +8106,8 @@
   },
   "posting_map": {
     "event": {
+      "treasury_bank_transfer": "Internal Transfer",
+      "treasury_loan_revaluation": "Loan Revaluation",
       "purchasing_ap_invoice": "Purchase Invoice",
       "sales_ar_invoice": "Sales Invoice",
       "sales_customer_receipt": "Customer Receipt",
@@ -8134,6 +8140,7 @@
       "sales_customer_debit_note": "Customer Debit Note"
     },
     "role": {
+      "inventory": "The stock issued to the project, or returned from it",
       "supplier_payable": "What the company owes the supplier",
       "grni": "Goods received, not yet invoiced",
       "expense": "The cost of a service billed",

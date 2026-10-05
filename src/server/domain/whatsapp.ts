@@ -293,7 +293,7 @@ export function route(input: string): Intent {
 const WORDS = {
   en: {
     help: [
-      'I answer from the ERP, read-only. Ask me:',
+      'I answer from the ERP, read-only. Start your message with !ai, then ask — for example:',
       '• stock in warehouse <name or code>',
       '• status of <payable or PAYAPP number>',
       '• swift pending more than <N> days',
@@ -318,7 +318,7 @@ const WORDS = {
   },
   ar: {
     help: [
-      'أجيب من النظام، للقراءة فقط. اسألني:',
+      'أجيب من النظام، للقراءة فقط. ابدأ رسالتك بـ ‎!ai ثم اسأل — مثلاً:',
       '• مخزون مخزن <الاسم أو الرمز>',
       '• حالة <رقم المستحق أو PAYAPP>',
       '• سويفت معلق أكثر من <N> أيام',
@@ -391,40 +391,6 @@ export function checkingLine(locale: BotLocale): string {
   const list = CHECKING[locale];
   const line = list[checkingAt % list.length]!;
   checkingAt += 1;
-  return line;
-}
-
-/*
- * What he says when he comes back on.
- *
- * The first version of this recited the phrases the bot understood, and the
- * sponsor's objection to it is the reason the agent exists at all: a list of
- * commands teaches people to type commands. It is one line now, in his own
- * voice, and a different line each time — a bridge that reconnects twice in
- * an evening should not post the same sentence twice.
- *
- * He names himself, because a room needs to know who has just arrived.
- */
-const GREETINGS = {
-  en: [
-    "Noah here — I'm back on. Ask me anything about the system.",
-    "Noah, back online. What do you need?",
-    "I'm here. Anything you want to know about the books or the stock, just ask.",
-    "Back up and listening — Noah.",
-  ],
-  ar: [
-    'نوح هنا، رجعت أشتغل. اسألوني عن أي شيء بالنظام.',
-    'نوح، رجعت. شتحتاجون؟',
-    'آني موجود. أي شيء عن الحسابات أو المخازن، اسألوني.',
-    'رجعت أشتغل وأسمعكم — نوح.',
-  ],
-} as const;
-
-let greetingAt = 0;
-export function greetingLine(locale: BotLocale): string {
-  const list = GREETINGS[locale];
-  const line = list[greetingAt % list.length]!;
-  greetingAt += 1;
   return line;
 }
 
@@ -535,8 +501,11 @@ export const DEFAULT_SETTINGS: BotSettings = {
   groupJid: '',
   groupSubject: '',
   groupQueries: true,
-  groupNotifications: true,
-  groupDigest: true,
+  // Off (2026-10-04): the group is the company's own conversation, and the bot
+  // says nothing in it that was not asked for with the trigger. An
+  // administrator may switch either on.
+  groupNotifications: false,
+  groupDigest: false,
   groupOnly: true,
 };
 
@@ -553,6 +522,109 @@ const bounded = (key: string, raw: string, min: number, max: number): number => 
   if (!Number.isInteger(n) || n < min || n > max) throw new WhatsappValidationError(key, `must be a whole number from ${min} to ${max}`);
   return n;
 };
+
+/**
+ * Does the bot hear this message at all? — by direction, 2026-10-04: "only one
+ * group, also never reply to personal messages … it's private, just for one
+ * group".
+ *
+ * The bridge is linked to a person's own WhatsApp account, so everything that
+ * account receives passes through it: their private chats, their family
+ * groups. With `group_only` on — the default — the bot hears the one
+ * registered group and nothing else: a private message and any other group
+ * are dropped before anything is read, logged or remembered about them, and
+ * until a group is registered it hears nothing at all.
+ *
+ * With `group_only` off it is the older arrangement: the registered group,
+ * and a listed number's own chat.
+ */
+export function listensTo(settings: BotSettings, groupJid: string | null | undefined): boolean {
+  const inItsGroup = Boolean(groupJid) && settings.groupJid !== '' && groupJid === settings.groupJid;
+  if (settings.groupOnly) return inItsGroup && settings.groupQueries;
+  if (groupJid) return inItsGroup && settings.groupQueries;
+  return true;
+}
+
+/**
+ * May the bot write there? The same rule from the other side, held at the one
+ * place every outgoing message passes: with `group_only` on, the only address
+ * it will write to is its group — whatever part of the code asked.
+ */
+export function maySendTo(settings: BotSettings, to: { readonly groupJid?: string | null }): boolean {
+  if (!settings.groupOnly) return true;
+  return Boolean(to.groupJid) && settings.groupJid !== '' && to.groupJid === settings.groupJid;
+}
+
+/**
+ * The owner's own chat with himself — by direction, 2026-10-05: "can I try on
+ * my own chat, when writing !ai, so he answers me myself".
+ *
+ * The bridge is linked to a person's own WhatsApp, and that person has one
+ * chat that is nobody else's: "Message yourself". With the switch on
+ * (`WA_SELF_CHAT=on` in the bridge's environment) a message there that begins
+ * with the trigger is answered there — a place to try him without the group
+ * watching. It is the only private chat he will ever hear:
+ *
+ *   * `fromMe` — typed by the account's owner, on their own phone;
+ *   * and addressed to the account ITSELF — not a message the owner sent to
+ *     somebody else, which is also `fromMe` and is nobody's business here.
+ *
+ * Everything else about the one-group rule stands, and so does the trigger:
+ * a note to self that does not begin with it is not read.
+ */
+export function isSelfChat(input: {
+  readonly enabled: boolean;
+  readonly fromMe: boolean | null | undefined;
+  readonly remoteJid: string | null | undefined;
+  /** The account's own addresses, without the device part: its number's and its LID's. */
+  readonly ownJids: readonly string[];
+}): boolean {
+  if (!input.enabled || input.fromMe !== true || !input.remoteJid) return false;
+  const chat = input.remoteJid.replace(/:\d+@/, '@');
+  if (chat.endsWith('@g.us') || chat === 'status@broadcast') return false;
+  return input.ownJids.some((own) => own !== '' && own.replace(/:\d+@/, '@') === chat);
+}
+
+// ---------------------------------------------------------------------------
+// The trigger
+// ---------------------------------------------------------------------------
+
+/**
+ * The word that calls him — by direction, 2026-10-04: "the AI must ONLY
+ * respond when a WhatsApp message explicitly starts with `!ai`".
+ *
+ * The group is where the company talks, and he is not one of the people
+ * talking. A message is his only when it BEGINS with the trigger; the word
+ * anywhere else in a sentence is a sentence about him, not to him. Nothing is
+ * inferred: a question he could answer, a figure he knows to be wrong, a
+ * thanks — without the trigger at its start it is not read, not logged and
+ * not answered.
+ *
+ * And two ways to say "not this one" after it — `!dontwrite` and `!ignore`.
+ * With either, the message is left alone exactly as if it had no trigger:
+ * nothing runs and nothing is sent ("don't run it internally either").
+ */
+export const AI_TRIGGER = '!ai';
+export const AI_SILENCERS = ['!dontwrite', '!ignore'] as const;
+
+export type Trigger =
+  /** Not for him: no trigger at the start. */
+  | { readonly kind: 'none' }
+  /** For him, and told to do nothing: `!ai … !dontwrite` / `!ai … !ignore`. */
+  | { readonly kind: 'silent' }
+  /** For him: `text` is the request, the trigger taken off. */
+  | { readonly kind: 'ask'; readonly text: string };
+
+/** What a message is, by its first word and nothing else. */
+export function triggerOf(raw: string | null | undefined): Trigger {
+  // Spaces, and the direction marks a phone puts in front of mixed Arabic and Latin text.
+  const text = (raw ?? '').replace(/^[\s\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]+/, '');
+  const start = /^!ai(?=$|[\s:,،])/i.exec(text);
+  if (!start) return { kind: 'none' };
+  const rest = text.slice(start[0].length).replace(/^[\s:,،]+/, '');
+  if (/(^|\s)!(dontwrite|ignore)(?=$|[\s.,:;!?،؛])/i.test(rest)) return { kind: 'silent' };
+  return { kind: 'ask', text: rest.trim() };
+}
 
 /** The rows of `whatsapp_setting` as typed settings; a missing key is its seed. */
 export function settingsFrom(rows: ReadonlyArray<{ readonly key: string; readonly value: string }>): BotSettings {

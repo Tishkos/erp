@@ -394,8 +394,8 @@ export async function swiftPendingApplications(
            pa.currency              as "currency",
            b.code                   as "accountCode",
            b.bank_code              as "bankCode",
-           coalesce(pa.sent_at::date, pa.application_date)::text as "sentOn",
-           (${asOf}::date - coalesce(pa.sent_at::date, pa.application_date))::int as "days",
+           coalesce((pa.sent_at at time zone 'Asia/Baghdad')::date, pa.application_date)::text as "sentOn",
+           (${asOf}::date - coalesce((pa.sent_at at time zone 'Asia/Baghdad')::date, pa.application_date))::int as "days",
            u.display_name           as "sentByName"
       from payment_application pa
       join payment_method m on m.code = pa.payment_method_code
@@ -406,7 +406,7 @@ export async function swiftPendingApplications(
      where pa.status = 'sent'
        and p.cancelled_at is null and p.closed_at is null
        and m.confirmation_kind = 'swift'
-       and (${asOf}::date - coalesce(pa.sent_at::date, pa.application_date)) >= ${options.minDays ?? 0}
+       and (${asOf}::date - coalesce((pa.sent_at at time zone 'Asia/Baghdad')::date, pa.application_date)) >= ${options.minDays ?? 0}
      order by pa.application_date, pa.application_no`);
   return result.rows as never;
 }

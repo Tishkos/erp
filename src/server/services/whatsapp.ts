@@ -11,13 +11,23 @@
  * log and the audit trail (W-R4), written by the bridge in its own
  * transaction after the read — by code, never by the text of the message.
  *
- * Who may ask is two facts, both checked on every message: the user holds the
- * `ceo` role (D-WA-3 as ratified: "only ceo role"), and their contact row says
- * `allow_queries`. Anybody else gets silence (W-R3).
+ * Who may ask is two facts, both checked on every message: the number belongs
+ * to an active user, and their contact row says `allow_queries`. Anybody else
+ * gets silence (W-R3).
+ *
+ * Until 2026-10-04 there was a third — the `ceo` role (D-WA-3, "only ceo
+ * role"). The owner lifted it: "make it available for all users … everyone can
+ * use it and ask anything about the system". What keeps that safe is what was
+ * always underneath: an answer is read as the asker, so a storekeeper is told
+ * what a storekeeper's screens show. The tools check the asker's own grants
+ * (`whatsapp-agent.ts` › `toolRunnerFor`), and the free query is left to the
+ * people whose role reads everything.
  */
+import { readFileSync } from 'node:fs';
+import { CAPTION_MAX, layOutAnswer, type AnswerPart } from '../domain/whatsapp-pictures';
 import { and, asc, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import { applyScope, db, withScope, type RequestScope, type Tx } from '../db/client';
-import { appUser, businessPartner, notificationRule, payableHold, userRole, warehouse, whatsappContact, whatsappMessage, whatsappSession, whatsappSetting } from '../db/schema';
+import { appUser, businessPartner, notificationRule, payableHold, warehouse, whatsappContact, whatsappMessage, whatsappSession, whatsappSetting } from '../db/schema';
 import { businessToday } from '../domain/business-date';
 import { can, type Principal } from '../domain/permissions';
 import {
@@ -62,7 +72,11 @@ import * as reports from '../print/reports';
 import { registerAllLists } from '../lists';
 
 export const PERMISSION_OBJECT = 'whatsapp';
-/** The role that may ask (D-WA-3, ratified 2026-10-02). */
+/**
+ * The role that reads everything. Until 2026-10-04 it was also the only role
+ * that might ask (D-WA-3); now anybody may, and this marks who is given the
+ * free query as well as the named tools.
+ */
 export const QUERY_ROLE = 'ceo';
 
 // ---------------------------------------------------------------------------
@@ -82,15 +96,6 @@ export interface ContactInput {
   readonly allowActions?: boolean;
 }
 
-async function holdsRole(tx: Tx, userId: string, roleCode: string): Promise<boolean> {
-  const [row] = await tx
-    .select({ userId: userRole.userId })
-    .from(userRole)
-    .where(and(eq(userRole.userId, userId), eq(userRole.roleCode, roleCode)))
-    .limit(1);
-  return Boolean(row);
-}
-
 /** Creates or updates a user's contact row — one per user, one number per row. */
 export async function saveContact(tx: Tx, ctx: ActorContext, input: ContactInput): Promise<{ id: string; created: boolean }> {
   await permit(ctx, 'configure', PERMISSION_OBJECT);
@@ -98,8 +103,8 @@ export async function saveContact(tx: Tx, ctx: ActorContext, input: ContactInput
   if (!e164) throw new WhatsappValidationError('e164', 'is not a phone number (+9647xxxxxxxxx)');
   const [user] = await tx.select({ id: appUser.id, isActive: appUser.isActive }).from(appUser).where(eq(appUser.id, input.userId)).limit(1);
   if (!user) throw new AdminNotFoundError('user', input.userId);
-  if (input.allowQueries && !(await holdsRole(tx, input.userId, QUERY_ROLE))) {
-    throw new WhatsappValidationError('allow_queries', `only a user holding the ${QUERY_ROLE} role may ask questions (D-WA-3)`);
+  if (!user.isActive && input.allowQueries) {
+    throw new WhatsappValidationError('allow_queries', 'the user is deactivated; a deactivated user cannot ask questions');
   }
   const [taken] = await tx.select({ id: whatsappContact.id, userId: whatsappContact.userId }).from(whatsappContact).where(eq(whatsappContact.e164, e164)).limit(1);
   if (taken && taken.userId !== input.userId) throw new WhatsappValidationError('e164', 'is already another user\'s number');
@@ -234,12 +239,16 @@ export async function resolveNumber(tx: Tx, e164: string): Promise<ResolvedSende
   return row ?? null;
 }
 
-/** W-R3 + D-WA-3: may this number ask? Every condition, so the log can say which failed. */
+/**
+ * W-R3: may this number ask? Every condition, so the log can say which failed.
+ *
+ * Any active user whose contact allows questions (2026-10-04 — the `ceo` role
+ * is no longer one of the conditions; see the note at the top of this file).
+ */
 export function mayAsk(sender: ResolvedSender | null): { ok: true } | { ok: false; reason: string } {
   if (!sender) return { ok: false, reason: 'unlisted number' };
   if (!sender.active) return { ok: false, reason: 'contact deactivated' };
   if (!sender.userActive) return { ok: false, reason: 'user deactivated' };
-  if (!sender.isCeo) return { ok: false, reason: `user does not hold the ${QUERY_ROLE} role` };
   if (!sender.allowQueries) return { ok: false, reason: 'queries not allowed for this contact' };
   return { ok: true };
 }
@@ -585,10 +594,13 @@ export async function recentTurns(
     .from(whatsappMessage)
     .where(
       and(
-        input.groupJid ? eq(whatsappMessage.groupJid, input.groupJid) : eq(whatsappMessage.e164, input.e164),
+        // A direct chat's turns are that chat's own: what the same person asked in the group is not part of it.
+        input.groupJid ? eq(whatsappMessage.groupJid, input.groupJid) : and(eq(whatsappMessage.e164, input.e164), sql`${whatsappMessage.groupJid} is null`),
         sql`${whatsappMessage.createdAt} >= ${since.toISOString()}`,
         sql`${whatsappMessage.body} is not null`,
         sql`${whatsappMessage.redactedAt} is null`,
+        // A picture's row repeats a step of the answer it belongs to.
+        sql`${whatsappMessage.intent} is distinct from 'picture'`,
       ),
     )
     .orderBy(desc(whatsappMessage.createdAt))
@@ -675,8 +687,26 @@ export async function sentInLastMinute(tx: Tx, now = new Date()): Promise<number
  */
 export type Transport = (
   to: { readonly e164: string; readonly groupJid?: string | null },
-  message: { readonly text: string; readonly attachment?: Attachment | null },
+  message: {
+    readonly text: string;
+    readonly attachment?: Attachment | null;
+    /** False for a courtesy line ("let me check"): the answer itself is what replies to the question. */
+    readonly quote?: boolean;
+  },
 ) => Promise<{ waMessageId: string | null }>;
+
+/**
+ * The ERP user behind each active contact's number — so a member of the group
+ * can be called by their own name, and tagged (`domain/whatsapp-people.ts`).
+ */
+export async function contactPeople(tx: Tx): Promise<Map<string, { displayName: string; email: string }>> {
+  const rows = await tx
+    .select({ e164: whatsappContact.e164, displayName: appUser.displayName, email: appUser.email })
+    .from(whatsappContact)
+    .innerJoin(appUser, eq(appUser.id, whatsappContact.userId))
+    .where(and(eq(whatsappContact.active, true), eq(appUser.isActive, true)));
+  return new Map(rows.map((row) => [row.e164, { displayName: row.displayName, email: row.email }]));
+}
 
 /**
  * Registers the bridge's socket as the channel's sender. A recipient without
@@ -691,20 +721,43 @@ export function registerWhatsappSender(transport: Transport): void {
     if (!contact.userActive) throw new notifications.DeliverySuppressed('user deactivated');
     if (!contact.allowNotifications) throw new notifications.DeliverySuppressed('WhatsApp notifications switched off for this contact');
     const text = `*${message.subject}*\n${message.body}`;
-    const outId = await recordOutbound(tx, { e164: contact.e164, body: text, sender: contact, deliveryId: message.deliveryId, intent: 'notification', detail: { eventType: message.eventType, objectType: message.objectType, objectId: message.objectId } });
-    try {
-      const { waMessageId } = await transport({ e164: contact.e164 }, { text });
-      await markOutbound(tx, outId, { status: 'sent', waMessageId });
-    } catch (error) {
-      await markOutbound(tx, outId, { status: 'failed', errorMessage: error instanceof Error ? error.message : String(error) });
-      throw error;
+    const settings = await settingsOf(tx);
+    /*
+     * Group only (by direction, 2026-10-04: "it should only send it to the
+     * group and also it should only answer in the group"). With `group_only`
+     * on — the default — nothing is ever sent to anybody's own chat: the
+     * notification is the group's copy, once, and that copy is this person's
+     * delivery; with no group registered yet there is nowhere to say it, and
+     * it is suppressed. With `group_only` off the person gets theirs as
+     * before, and the group its one copy beside it.
+     */
+    const groupOnly = settings.groupOnly;
+    /*
+     * And in its group it never speaks first (the same day: "shouldn't send
+     * any messages until called — never ever unless !ai"). A notification is
+     * the system speaking unasked, so in group-only mode there is nowhere it
+     * may be said: not a private chat, and not the group. The person still
+     * has it in the application and by e-mail; whatever `group_notifications`
+     * says, this delivery is suppressed.
+     */
+    if (groupOnly) {
+      throw new notifications.DeliverySuppressed('the bot speaks only in its group, and there only when it is called with !ai');
+    }
+    if (!groupOnly) {
+      const outId = await recordOutbound(tx, { e164: contact.e164, body: text, sender: contact, deliveryId: message.deliveryId, intent: 'notification', detail: { eventType: message.eventType, objectType: message.objectType, objectId: message.objectId } });
+      try {
+        const { waMessageId } = await transport({ e164: contact.e164 }, { text });
+        await markOutbound(tx, outId, { status: 'sent', waMessageId });
+      } catch (error) {
+        await markOutbound(tx, outId, { status: 'failed', errorMessage: error instanceof Error ? error.message : String(error) });
+        throw error;
+      }
     }
 
     // WA-5 — and into the group, once per notification rather than once per
     // recipient, so ten managers do not make ten copies. It carries the
     // subject and body the rule already wrote: a notification says what
     // happened and names its document, never a figure nobody asked for.
-    const settings = await settingsOf(tx);
     if (settings.groupJid && settings.groupNotifications && (await firstGroupDelivery(tx, message.eventKey))) {
       const groupOut = await recordOutbound(tx, {
         e164: contact.e164,
@@ -726,9 +779,11 @@ export function registerWhatsappSender(transport: Transport): void {
         const { waMessageId } = await transport({ e164: contact.e164, groupJid: settings.groupJid }, { text });
         await markOutbound(tx, groupOut, { status: 'sent', waMessageId });
       } catch (error) {
-        // The person already has it; the group copy failing is not a reason
-        // to retry the whole delivery.
         await markOutbound(tx, groupOut, { status: 'failed', errorMessage: error instanceof Error ? error.message : String(error) });
+        // With their own copy sent, the group's failing is not a reason to
+        // retry the whole delivery. In group-only mode the group's copy is
+        // the delivery, so its failure is the delivery's and is retried.
+        if (groupOnly) throw error;
       }
     }
   });
@@ -773,7 +828,10 @@ export interface Attachment {
   readonly fileName: string;
   readonly contentType: string;
   readonly body: Buffer;
-  readonly format: 'pdf' | 'xlsx';
+  /** A report as a file — or a picture, which is sent as a picture. */
+  readonly format: 'pdf' | 'xlsx' | 'image';
+  /** For a picture: the line under it. */
+  readonly caption?: string;
 }
 
 export interface Reply {
@@ -785,6 +843,15 @@ export interface Reply {
   readonly detail: Record<string, unknown>;
   /** The export the ERP's own path would have audited, if a file was made. */
   readonly exported: { readonly object: string; readonly key: string; readonly title: string; readonly rows: number } | null;
+  /** Every picture of a screen that goes with the answer (`show_screen`). */
+  readonly images: readonly Attachment[];
+  /**
+   * The answer as the messages it is sent as, in order: words, and each
+   * picture where it belongs with its step as the caption
+   * (`domain/whatsapp-pictures.ts`). One part, with no picture, when the
+   * answer has none.
+   */
+  readonly parts: ReadonlyArray<{ readonly text: string; readonly image: Attachment | null }>;
   readonly readAs: { readonly userId: string; readonly userName: string; readonly branchCode: string; readonly at: Date };
 }
 
@@ -804,7 +871,11 @@ export interface AgentOutcome {
   readonly format?: 'pdf' | 'xlsx';
   readonly exportObject?: string;
   readonly exportKey?: string;
+  /** Pictures a tool attached: files on this host, each with its caption. */
+  readonly images?: ReadonlyArray<{ readonly file: string; readonly caption: string; readonly kind?: 'training' | 'live' }>;
   readonly used: readonly string[];
+  /** Each tool call: what it was asked, how long it took, what it said when it failed. */
+  readonly trace?: ReadonlyArray<{ readonly tool: string; readonly args: string; readonly ms: number; readonly ok: boolean; readonly said?: string }>;
 }
 
 export interface ReadContext {
@@ -873,7 +944,6 @@ export async function answer(input: {
   const settings = input.settings ?? DEFAULT_SETTINGS;
   const principal = await principalOf(input.userId);
   if (!principal.isActive) throw new NotAllowedToAsk('user deactivated');
-  if (!principal.roleCodes.includes(QUERY_ROLE)) throw new NotAllowedToAsk(`user does not hold the ${QUERY_ROLE} role`);
   const branchCode = principal.defaultBranchCode ?? '';
   if (!branchCode) throw new NotAllowedToAsk('user has no branch');
 
@@ -882,6 +952,7 @@ export async function answer(input: {
   if (!input.agent && intent.kind === 'none' && input.router) intent = await input.router(input.text, locale);
 
   const scope = scopeFor(principal, branchCode);
+  let pictures: ReadonlyArray<{ readonly file: string; readonly caption: string }> = [];
   const { drafted, head, userName, usedTools } = await withReadOnlyScope(scope, async (tx) => {
     const ctx: ReadContext = { tx, principal, branchCode, locale, settings, today: businessToday(at) };
     const [me0] = await tx.select({ name: appUser.displayName }).from(appUser).where(eq(appUser.id, principal.userId)).limit(1);
@@ -891,13 +962,20 @@ export async function answer(input: {
     if (input.agent) {
       const outcome = await input.agent(ctx, input.text, askerName);
       usedTools = outcome.used;
+      pictures = outcome.images ?? [];
       drafted = {
         text: outcome.text,
         model: (outcome.model ?? null) as PrintModel | null,
         ...(outcome.format ? { format: outcome.format } : {}),
         ...(outcome.exportObject ? { exportObject: outcome.exportObject } : {}),
         ...(outcome.exportKey ? { exportKey: outcome.exportKey } : {}),
-        detail: { tools: outcome.used },
+        detail: {
+          tools: outcome.used,
+          // What he did to get there, kept with the answer (and blanked with
+          // it by the retention sweep): how long each look-up took and what a
+          // refused one said — the record of where he struggles.
+          ...(outcome.trace && outcome.trace.length > 0 ? { trace: outcome.trace, seconds: Math.round((Date.now() - at.getTime()) / 100) / 10, failed: outcome.trace.filter((step) => !step.ok).length } : {}),
+        },
       };
     } else {
       drafted = await draft(ctx, intent);
@@ -935,7 +1013,10 @@ export async function answer(input: {
    * an inference is not a judgement call to make quietly. It stays until
    * somebody asks for it to go.
    */
-  text = `${text}\n\n${footer(locale, { at, branchCode, userName })}`;
+  const laid = layOutAnswer(text, pictures);
+  const stamp = footer(locale, { at, branchCode, userName });
+  text = `${laid.text}\n\n${stamp}`;
+  const parts = partsOf(laid.parts, stamp);
 
   return {
     intent,
@@ -948,10 +1029,56 @@ export async function answer(input: {
       ...(usedTools.length > 0 ? { tools: usedTools } : {}),
       rows: drafted.model ? rowsIn(drafted.model) : null,
       attachment: attachment ? { fileName: attachment.fileName, bytes: attachment.body.length } : null,
+      ...(pictures.length > 0 ? { pictures: pictures.map((picture) => picture.file.replace(/^.*[\\/]/, '')) } : {}),
     },
     exported,
+    images: parts.flatMap((part) => (part.image ? [part.image] : [])),
+    parts,
     readAs: { userId: principal.userId, userName, branchCode, at },
   };
+}
+
+/**
+ * The laid-out answer as things to send, the stamp under the last of them.
+ *
+ * A picture that cannot be read is left out and its words still go — unless
+ * its words were only its own caption, which without the picture say nothing.
+ */
+function partsOf(laid: ReadonlyArray<AnswerPart>, stamp: string): Array<{ text: string; image: Attachment | null }> {
+  const out: Array<{ text: string; image: Attachment | null }> = [];
+  for (const part of laid) {
+    if (!part.picture) {
+      out.push({ text: part.text, image: null });
+      continue;
+    }
+    try {
+      const file = part.picture.file;
+      out.push({
+        text: part.text,
+        image: {
+          fileName: file.replace(/^.*[\\/]/, ''),
+          contentType: file.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg',
+          body: readFileSync(file),
+          format: 'image',
+          caption: part.text,
+        },
+      });
+    } catch {
+      if (part.text !== part.picture.caption) out.push({ text: part.text, image: null });
+    }
+  }
+  const last = out[out.length - 1];
+  if (!last) return [{ text: stamp, image: null }];
+  // Under a picture the stamp would crowd the step; it goes under the last words instead.
+  const lastWords = [...out].reverse().find((part) => !part.image);
+  if (last.image && last.text.length + stamp.length + 2 > CAPTION_MAX) {
+    if (lastWords) lastWords.text = `${lastWords.text}\n\n${stamp}`;
+    else out.push({ text: stamp, image: null });
+  } else {
+    last.text = `${last.text}\n\n${stamp}`;
+    if (last.image) last.image = { ...last.image, caption: last.text };
+  }
+  return out;
 }
 
 /** The bridge's record of an answer: the audit rows the ERP's own screens would have written. */

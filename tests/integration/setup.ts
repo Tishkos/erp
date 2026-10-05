@@ -564,8 +564,8 @@ export async function resetTestData(): Promise<void> {
         when 'group_jid' then ''
         when 'group_subject' then ''
         when 'group_queries' then 'on'
-        when 'group_notifications' then 'on'
-        when 'group_digest' then 'on'
+        when 'group_notifications' then 'off'
+        when 'group_digest' then 'off'
         when 'group_only' then 'on'
         else value end`);
     await client.query(`delete from whatsapp_setting where key = 'digest_last_sent_day'`);

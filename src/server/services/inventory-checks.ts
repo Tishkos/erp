@@ -152,7 +152,7 @@ export async function run(tx: Tx, principal: Principal): Promise<InventoryChecks
   const transit = rowsOf<{ transferNo: string; itemCode: string; outstanding: string; issuedOn: string }>(
     await tx.execute(sql`
       select t.transfer_no as "transferNo", l.item_code as "itemCode", (l.issued_quantity - l.received_quantity)::text as outstanding,
-             coalesce(t.issued_on, t.created_at::date)::text as "issuedOn"
+             coalesce(t.issued_on, (t.created_at at time zone 'Asia/Baghdad')::date)::text as "issuedOn"
         from warehouse_transfer t join warehouse_transfer_line l on l.transfer_id = t.id
        where t.status::text in ('in_transit', 'partially_received', 'investigating') and l.issued_quantity > l.received_quantity
        order by t.transfer_no limit ${CAP + 1}`),

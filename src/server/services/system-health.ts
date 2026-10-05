@@ -209,6 +209,11 @@ export async function check(tx: Tx, options: CheckOptions = {}): Promise<HealthR
     for (const file of readdirSync(jobs).filter((f) => f.endsWith('.last'))) {
       const [at, code] = readFileSync(join(jobs, file), 'utf8').trim().split(/\s+/);
       const name = file.replace(/\.last$/, '');
+      // Not itself: this check ends 1 whenever it finds anything, so its own
+      // last run "failed" the day before a finding — and reporting that made
+      // it fail again the next day, and the next, for as long as it ran
+      // (seen on the live server, 2026-10-03 onward).
+      if (name === 'health-check') continue;
       if (code && code !== '0' && at && now.getTime() - Date.parse(at) < 36 * HOURS) {
         findings.push({ code: 'job_failed', severity: name === 'backup' || name === 'restore-drill' ? 'stop' : 'warn', message: `The scheduled job "${name}" last exited with ${code} at ${at}; read /var/log/qs-erp/${name}.log.` });
       }

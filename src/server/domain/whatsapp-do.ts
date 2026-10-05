@@ -30,12 +30,192 @@
  * The typed form (`approve PAYAPP-…` and a six-digit code, WA-6) is still
  * there and unchanged. That one is for a person who knows exactly what they
  * want; this one is for a conversation.
+ *
+ * ── Widened, 2026-10-04 ────────────────────────────────────────────────────
+ * By direction, for the testing phase: "help them doing actions … everything
+ * related in the system they can do". Three more kinds of proposal, all on the
+ * same three-party rule and all through the document's own service:
+ *
+ *   * `document_step` — move a document one step along its own life by its
+ *     number: submit, approve, reject, post, reverse or cancel, for the
+ *     families in `DOCUMENT_FAMILIES`. Which steps a family has is the list of
+ *     verbs its service exports; whether *this* person may take one is the
+ *     service's answer when it runs.
+ *   * `create_partner` — a new customer or supplier, by name.
+ *   * `approve_partner` — a prospect made usable (§6).
+ *
+ * And, the same day ("draft maker"): `create_draft` — a journal entry, a
+ * purchase invoice or a sales invoice keyed from what the person said and
+ * saved as a DRAFT (`services/whatsapp-drafts.ts`). A draft posts nothing and
+ * moves no stock; the steps after it — submit, approve, post — stay separate
+ * proposals, each with its own yes.
+ *
+ * What stays on the screens: every other document with lines to type. Noah
+ * says where the screen is and what each field wants (`domain/system-guide.ts`).
+ *
+ * ── Plans, 2026-10-05 ──────────────────────────────────────────────────────
+ * By direction ("bring in the stock and post the invoice — he lays out the
+ * steps in order, you approve, and he runs them one at a time"): `run_plan` is
+ * two to five of the steps above put to the person as ONE numbered proposal.
+ * One yes confirms the plan; each step then runs exactly as it would alone —
+ * prepared again at its own moment, its own transaction, its own audit row —
+ * and the plan stops at the first step the system refuses. A step that ran
+ * stays done: a plan is a list of ordinary actions, not one big transaction.
+ * No plan inside a plan, and no draft in one (a draft's lines are a proposal
+ * of their own to read).
  */
 
 /** What Noah may propose. Every one of these runs through its own service. */
-export type ActionName = 'approve_document' | 'reject_document' | 'approve_opening_stock';
+export type ActionName =
+  | 'approve_document'
+  | 'reject_document'
+  | 'approve_opening_stock'
+  | 'document_step'
+  | 'create_partner'
+  | 'approve_partner'
+  | 'create_draft'
+  | 'run_plan';
 
-export const ACTION_NAMES: readonly ActionName[] = ['approve_document', 'reject_document', 'approve_opening_stock'];
+export const ACTION_NAMES: readonly ActionName[] = [
+  'approve_document',
+  'reject_document',
+  'approve_opening_stock',
+  'document_step',
+  'create_partner',
+  'approve_partner',
+  'create_draft',
+  'run_plan',
+];
+
+/** What a plan may be made of: steps on what already exists, and a new partner. */
+export const PLAN_STEP_ACTIONS = [
+  'document_step',
+  'approve_opening_stock',
+  'approve_document',
+  'reject_document',
+  'approve_partner',
+  'create_partner',
+] as const satisfies readonly ActionName[];
+
+/** A plan is worth the name from two steps, and still readable in one message at five. */
+export const PLAN_MIN_STEPS = 2;
+export const PLAN_MAX_STEPS = 5;
+
+/**
+ * One step of a plan, as it was put to the person.
+ *
+ * It keeps what was ASKED (`args`), not what was resolved: a step is prepared
+ * again when its turn comes, because the step before it has changed the books
+ * by then — an opening stock that was submitted is approved, an invoice that
+ * was approved is posted.
+ */
+export interface PlanStep {
+  readonly action: ActionName;
+  readonly args: Readonly<Record<string, unknown>>;
+  /** The step's own facts, as they stood when the plan was proposed. */
+  readonly sentence: string;
+}
+
+/**
+ * The documents Noah will key as a draft from what he was told ("draft
+ * maker", 2026-10-04). A draft posts nothing and moves no stock: it is the
+ * form filled in, waiting on its own page to be read and changed.
+ */
+export const DRAFT_KINDS = ['journal_entry', 'purchase_invoice', 'sales_invoice'] as const;
+export type DraftKind = (typeof DRAFT_KINDS)[number];
+
+/** One line of a draft, resolved while proposing: every code is a real record. */
+export interface DraftLine {
+  readonly item?: string;
+  readonly itemName?: string;
+  readonly quantity?: string;
+  readonly unitPrice?: string;
+  readonly discount?: string;
+  readonly warehouse?: string;
+  readonly account?: string;
+  readonly accountId?: string;
+  readonly accountName?: string;
+  readonly debit?: string;
+  readonly credit?: string;
+  readonly department?: string;
+  readonly description?: string;
+}
+
+/** A draft as it will be saved: what the person was shown, and nothing else. */
+export interface DraftPayload {
+  readonly kind: DraftKind;
+  readonly date: string;
+  readonly dueDate?: string | null;
+  readonly currency: string;
+  readonly isImport?: boolean;
+  readonly description?: string | null;
+  readonly party?: { readonly id: string; readonly code: string; readonly name: string } | null;
+  /** A purchase invoice: the number the supplier printed on their own invoice. */
+  readonly supplierInvoiceNo?: string | null;
+  readonly lines: readonly DraftLine[];
+}
+
+/** One step along a document's life. */
+export const DOCUMENT_STEPS = ['submit', 'approve', 'reject', 'post', 'reverse', 'cancel'] as const;
+export type DocumentStep = (typeof DOCUMENT_STEPS)[number];
+
+/** The steps that are refused without a reason, as on the screens. */
+export const STEPS_NEEDING_REASON: readonly DocumentStep[] = ['reject', 'reverse', 'cancel'];
+
+/**
+ * The documents a step may be proposed for, by the prefix of their number,
+ * and the steps each one's service has.
+ *
+ * `approve` is listed only where the service approves directly. A family
+ * without it (a purchase invoice) is approved through the approval inbox —
+ * `approve_document` — which is where the approval engine routed it.
+ */
+export const DOCUMENT_FAMILIES = [
+  { prefix: 'API', key: 'ap_invoice', label: 'purchase invoice', steps: ['submit', 'post', 'reverse'] },
+  { prefix: 'INV', key: 'ar_invoice', label: 'sales invoice', steps: ['approve', 'post', 'reverse'] },
+  { prefix: 'PO', key: 'purchase_order', label: 'purchase order', steps: ['submit', 'approve', 'cancel'] },
+  { prefix: 'GRN', key: 'goods_receipt', label: 'goods receipt', steps: ['submit', 'post'] },
+  { prefix: 'GRT', key: 'goods_return', label: 'purchase return', steps: ['approve', 'post'] },
+  { prefix: 'PAY', key: 'supplier_payment', label: 'supplier payment', steps: ['post', 'reverse'] },
+  { prefix: 'RCT', key: 'customer_receipt', label: 'customer receipt', steps: ['approve', 'post'] },
+  { prefix: 'JE', key: 'journal_entry', label: 'journal entry', steps: ['submit', 'approve', 'reject', 'reverse'] },
+  { prefix: 'BTR', key: 'bank_transfer', label: 'internal transfer', steps: ['approve', 'post'] },
+  { prefix: 'OPN', key: 'opening_stock', label: 'opening stock', steps: ['submit', 'approve'] },
+] as const satisfies readonly { readonly prefix: string; readonly key: string; readonly label: string; readonly steps: readonly DocumentStep[] }[];
+
+export type DocumentFamily = (typeof DOCUMENT_FAMILIES)[number];
+
+/** A number as people type it, tidied: upper case, no spaces. */
+export function tidyNumber(raw: unknown): string {
+  return String(raw ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '');
+}
+
+/** Which family a number belongs to, by its prefix — `API-HQ-2026-000004` is a purchase invoice. */
+export function familyOf(documentNo: string): DocumentFamily | null {
+  const prefix = tidyNumber(documentNo).split('-')[0] ?? '';
+  return DOCUMENT_FAMILIES.find((family) => family.prefix === prefix) ?? null;
+}
+
+/** What a step does that the person should hear before saying yes. */
+export function stepConsequence(step: DocumentStep): string {
+  switch (step) {
+    case 'submit':
+      return 'Submitting sends it for approval; from then on it is no longer a draft to edit.';
+    case 'approve':
+      return 'Approving lets it take effect or go on to posting. Whoever raised it cannot be the one who approves it.';
+    case 'reject':
+      return 'Rejecting sends it back to whoever raised it, with the reason.';
+    case 'post':
+      return 'Posting writes its journal — and moves the stock, where it carries goods. A posted document is never edited afterwards, only reversed.';
+    case 'reverse':
+      return 'Reversing mirrors its journal and puts back any stock it moved, dated today. It cannot be undone; the document would have to be raised again.';
+    case 'cancel':
+      return 'Cancelling closes it for good.';
+  }
+}
 
 /** What the action will be done to, resolved while proposing. */
 export interface ActionTarget {
@@ -62,6 +242,14 @@ export interface PendingAction {
   readonly chat: string;
   readonly target: ActionTarget;
   readonly reason: string | null;
+  /** `document_step` — which step. */
+  readonly step?: DocumentStep | null;
+  /** `create_partner` — what to create: `role`, `name`, and the optional contact details. */
+  readonly payload?: Readonly<Record<string, string>> | null;
+  /** `create_draft` — the document, line by line, as it was put to the person. */
+  readonly draft?: DraftPayload | null;
+  /** `run_plan` — the steps, in the order they run. `target` is the first step's. */
+  readonly plan?: readonly PlanStep[] | null;
   /** The facts Noah must put to them before he asks. */
   readonly sentence: string;
   readonly proposedAt: string;
@@ -180,8 +368,13 @@ export function expired(pending: PendingAction, now: Date = new Date()): boolean
 }
 
 /** What a proposal is called in the log and the audit trail. */
-export function actionLabel(action: ActionName): string {
+export function actionLabel(action: ActionName, step?: DocumentStep | null): string {
   if (action === 'approve_document') return 'approve the document';
   if (action === 'reject_document') return 'reject the document';
-  return 'approve the opening stock';
+  if (action === 'approve_opening_stock') return 'approve the opening stock';
+  if (action === 'document_step') return `${step ?? 'move'} the document`;
+  if (action === 'create_partner') return 'create the partner';
+  if (action === 'create_draft') return 'save the draft';
+  if (action === 'run_plan') return 'run the plan';
+  return 'approve the partner';
 }

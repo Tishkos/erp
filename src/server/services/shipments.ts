@@ -161,6 +161,13 @@ export interface ContainerRowInput {
   readonly quantities?: Readonly<Record<string, bigint | null>>;
 }
 
+/** A size/type as the B/L writes it: from the standard's list, in capitals, or nothing. */
+function readSizeType(value: string | null | undefined): string | null {
+  const sizeType = value?.trim().toUpperCase() || null;
+  if (sizeType && !isSizeType(sizeType)) throw new ShipmentValidationError(`'${sizeType}' is not a container size/type.`);
+  return sizeType;
+}
+
 /** The rows of a B/L's table, read and checked: numbers by ISO 6346, size/type from the standard's list. */
 function readRows(rows: readonly ContainerRowInput[]) {
   const seen = new Set<string>();
@@ -168,9 +175,7 @@ function readRows(rows: readonly ContainerRowInput[]) {
     const containerNo = assertContainerNumber(row.containerNo);
     if (seen.has(containerNo)) throw new ShipmentValidationError(`${containerNo} is listed twice.`);
     seen.add(containerNo);
-    const sizeType = row.sizeType?.trim().toUpperCase() || null;
-    if (sizeType && !isSizeType(sizeType)) throw new ShipmentValidationError(`'${sizeType}' is not a container size/type.`);
-    return { containerNo, sizeType, sealNo: row.sealNo?.trim() || null, quantities: row.quantities ?? {} };
+    return { containerNo, sizeType: readSizeType(row.sizeType), sealNo: row.sealNo?.trim() || null, quantities: row.quantities ?? {} };
   });
 }
 
@@ -186,6 +191,8 @@ export async function createBl(tx: Tx, ctx: ActorContext, input: CreateBlInput) 
   if (input.containerRows && !input.eta) {
     throw new ShipmentValidationError('Give the ETA: without it nobody is told when the containers are late.');
   }
+  // One size/type for every pasted number: checked before anything is written, as a row's is.
+  const pastedSizeType = input.containerRows ? null : readSizeType(input.sizeType);
   if (input.eta && input.eta < input.blDate) {
     throw new ShipmentValidationError(`An ETA of ${input.eta} is before the B/L was issued on ${input.blDate}.`);
   }
@@ -253,7 +260,7 @@ export async function createBl(tx: Tx, ctx: ActorContext, input: CreateBlInput) 
       bl: { id: created!.id, blNo, eta: input.eta || null },
       owner,
       numbers: parsed.numbers,
-      sizeType: input.sizeType ?? null,
+      sizeType: pastedSizeType,
       spreadLines: input.spreadLines ?? false,
     });
   }
@@ -328,7 +335,7 @@ export async function addContainers(
     bl: { id: bl.id, blNo: bl.blNo, eta: bl.eta },
     owner,
     numbers: parsed.numbers,
-    sizeType: input.sizeType ?? null,
+    sizeType: readSizeType(input.sizeType),
     spreadLines: false,
   });
   await payables.recomputeStage(tx, owner.id, ctx.principal.userId);

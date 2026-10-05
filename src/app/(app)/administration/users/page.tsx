@@ -83,16 +83,19 @@ export default async function UsersPage({ searchParams }: { searchParams: Search
                   />
                 </Grid>
                 <Grid>
-                  <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
-                    <legend className="muted" style={{ fontSize: '0.78rem', fontWeight: 600 }}>
-                      {t('users.roles')}
-                    </legend>
-                    {data.roles.map((r) => (
-                      <div key={r.code}>
-                        <Checkbox label={`${r.name} (${r.code})`} name="roleCodes" value={r.code} />
-                      </div>
-                    ))}
-                  </fieldset>
+                  {/* Roles are the CEO's to give: nobody else is shown a heading with nothing under it. */}
+                  {data.roles.length > 0 ? (
+                    <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
+                      <legend className="muted" style={{ fontSize: '0.78rem', fontWeight: 600 }}>
+                        {t('users.roles')}
+                      </legend>
+                      {data.roles.map((r) => (
+                        <div key={r.code}>
+                          <Checkbox label={`${r.name} (${r.code})`} name="roleCodes" value={r.code} />
+                        </div>
+                      ))}
+                    </fieldset>
+                  ) : null}
                   <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
                     <legend className="muted" style={{ fontSize: '0.78rem', fontWeight: 600 }}>
                       {t('users.branches')}

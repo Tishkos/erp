@@ -7,14 +7,27 @@
  * caller's transaction, which PostgreSQL itself holds read-only, under the
  * asker's own user and grants (W-R1).
  */
+import { sql } from 'drizzle-orm';
+import { can } from '../domain/permissions';
+import { ISSUE_KINDS, ISSUE_SEVERITIES, type IssueKind, type IssueSeverity } from '../domain/system-guide';
 import { helpText, money, quantity } from '../domain/whatsapp';
 import { describeSentFile, type SentFile } from '../domain/whatsapp-files';
 import type { PendingAction } from '../domain/whatsapp-do';
+import { RATE_SCALE, toDecimalString } from '../domain/money';
+import * as ratesService from './exchange-rates';
 import * as itemsService from './items';
 import * as openingStockService from './opening-stock';
 import * as doService from './whatsapp-do';
+import * as insight from './whatsapp-insight';
+import * as notes from './whatsapp-notes';
+import { correctionFor, isClean, unsupportedIn } from '../domain/whatsapp-selfcheck';
+import * as liveShots from './live-screenshot';
+import * as howTo from './howto-live';
+import { asksForTrainingPicture, pictureLanguage } from '../domain/whatsapp-pictures';
+import * as review from './whatsapp-review';
 import * as sqlService from './whatsapp-sql';
-import { runAgent, type AgentClient, type AgentResult, type PriorTurn, type ToolOutcome } from '../domain/whatsapp-agent';
+import * as systemGuide from './system-guide';
+import { runAgent, type AgentClient, type AgentResult, type AskedPicture, type PriorTurn, type ToolOutcome } from '../domain/whatsapp-agent';
 import * as apInvoices from './ap-invoice';
 import * as arInvoices from './ar-invoice';
 import * as bankAccounts from './bank-cash-accounts';
@@ -24,7 +37,7 @@ import * as openItemsService from './open-items';
 import * as partnersService from './partners';
 import * as trialBalanceService from './trial-balance';
 import * as waActions from './whatsapp-actions';
-import { draft, warehousesFor, type Drafted, type ReadContext } from './whatsapp';
+import { QUERY_ROLE, draft, warehousesFor, type Drafted, type ReadContext } from './whatsapp';
 
 export { AGENT_TOOLS, systemPrompt, runAgent } from '../domain/whatsapp-agent';
 export type { AgentClient, AgentMessage, AgentResult, PriorTurn, ToolOutcome } from '../domain/whatsapp-agent';
@@ -69,12 +82,55 @@ export interface ActionHooks {
   readonly propose: (pending: PendingAction) => void;
 }
 
-export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?: ActionHooks) {
-  return async function runTool(name: string, args: Record<string, unknown>): Promise<ToolOutcome> {
+/** Who is asking and where, for what a tool writes down about them. */
+export interface AskerMeta {
+  readonly userName: string;
+  /** The group or the number the question came from. */
+  readonly chat?: string | null;
+  /** The exchange before this one — what an "that was wrong" is about. */
+  readonly lastExchange?: { readonly question: string; readonly answer: string } | null;
+  /** The person's own words this time: what they asked for decides some things the model may not decide for them. */
+  readonly question?: string | null;
+}
+
+export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?: ActionHooks, meta?: AskerMeta) {
+  /*
+   * Everybody may ask (2026-10-04), so each tool answers for the asker's own
+   * role, as the screen behind it does. Most already did — `draft` and the
+   * services that take a principal check the grant themselves. These are the
+   * ones that read a table directly: the grant their screen asks for is asked
+   * for here, and the refusal names it so Noah can say who gives it.
+   */
+  const lacks = (object: string): ToolOutcome | null =>
+    can(ctx.principal, 'view', object)
+      ? null
+      : {
+          text: `This person's role does not include "${object.replaceAll('_', ' ')}" (the permission view on ${object}), so its figures are not theirs to see. Tell them that plainly, and that an administrator gives the permission on Settings → Administration → Roles. Do not look for the same figures another way.`,
+        };
+  /** The free query reads any table: it is for the roles that read everything. */
+  const readsEverything = ctx.principal.isSuperUser || ctx.principal.roleCodes.includes(QUERY_ROLE);
+
+  /** Who is asking, as a name a person reading a file will know — read as them, and optional: a note is written even when the database is the problem. */
+  const whoIs = async (): Promise<string> => {
+    const row = await sqlService
+      .inSavepoint(ctx.tx, async () => {
+        const me = await ctx.tx.execute(sql`select display_name, email from app_user where id = ${ctx.principal.userId}`);
+        return me.rows[0] as { display_name?: string; email?: string } | undefined;
+      })
+      .catch(() => undefined);
+    return `${row?.display_name ?? meta?.userName ?? ctx.principal.userId}${row?.email ? ` <${row.email}>` : ''} · branch ${ctx.branchCode}`;
+  };
+  /** Where it was said, for the files a tool writes. */
+  const chatLabel = !meta?.chat ? 'WhatsApp' : meta.chat === 'terminal' ? 'terminal (ask-noah)' : `WhatsApp ${meta.chat.includes('@g.us') ? 'group' : 'chat'}`;
+  const words = (value: unknown): string | null => (typeof value === 'string' && value.trim() !== '' ? value.trim() : null);
+
+  const run = async (name: string, args: Record<string, unknown>): Promise<ToolOutcome> => {
     switch (name) {
       case 'company_summary':
         return fromDrafted(await draft(ctx, { kind: 'summary' }));
       case 'list_warehouses': {
+        const no = lacks('warehouse');
+        if (no && !can(ctx.principal, 'view', 'inventory_movement')) return no;
         const { all } = await warehousesFor(ctx, '');
         if (all.length === 0) return { text: 'There are no warehouses on the system.' };
         return { text: all.map((house: { code: string; name: string }) => `${house.code} · ${house.name}`).join('\n') };
@@ -99,6 +155,8 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
           } as never),
         );
       case 'trial_balance': {
+        const no = lacks('trial_balance');
+        if (no) return no;
         const to = typeof args.to === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(args.to) ? args.to : ctx.today;
         const currency = args.currency === 'USD' ? 'USD' : 'IQD';
         const rows = await trialBalanceService.trialBalance(ctx.tx, {
@@ -144,6 +202,8 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         return { text: [`${list.length} stock line(s):`, ...lines].join('\n') };
       }
       case 'list_partners': {
+        const no = lacks('business_partner');
+        if (no) return no;
         const side = args.side === 'supplier' ? 'supplier' : 'customer';
         const rows = await partnersService.listActiveInRole(ctx.tx, side);
         if (rows.length === 0) return { text: `There are no ${side}s on the system.` };
@@ -162,6 +222,8 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         };
       }
       case 'invoice': {
+        const refused = lacks(args.side === 'sales' ? 'ar_invoice' : 'ap_invoice');
+        if (refused) return refused;
         const no = String(args.no ?? '').trim();
         if (!no) return { text: 'Which invoice number?' };
         const found =
@@ -180,6 +242,8 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         };
       }
       case 'bank_and_cash': {
+        const no = lacks('bank_account');
+        if (no) return no;
         const code = String(args.code ?? '').trim();
         if (code) {
           const one = await bankAccounts.detail(ctx.tx, code.toUpperCase());
@@ -204,6 +268,8 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         };
       }
       case 'employees': {
+        const no = lacks('employee');
+        if (no) return no;
         const rows = (await employeesService.list(ctx.tx)) as unknown as Record<string, unknown>[];
         const asked = String(args.search ?? '').trim().toLowerCase();
         const shown = asked
@@ -223,8 +289,15 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         };
       }
       case 'schema':
-        return { text: await sqlService.describeSchema(ctx.tx, typeof args.table === 'string' ? args.table : undefined) };
       case 'query': {
+        if (!readsEverything) {
+          return {
+            text: 'The free query is for the roles that read the whole company (the CEO role, a super user). For this person use the named tools — each one shows what their own role may see — and the guide and screens for how the system works.',
+          };
+        }
+        if (name === 'schema') {
+          return { text: await sqlService.describeSchema(ctx.tx, typeof args.table === 'string' ? args.table : undefined) };
+        }
         const asked = String(args.sql ?? '').trim();
         if (!asked) return { text: 'No query given.' };
         const result = await sqlService.runQuery(ctx.tx, asked, typeof args.limit === 'number' ? args.limit : undefined);
@@ -234,6 +307,8 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         return { text: result.text };
       }
       case 'items': {
+        const no = lacks('item');
+        if (no) return no;
         const rows = (await itemsService.listAll(ctx.tx)) as unknown as Record<string, unknown>[];
         const asked = String(args.search ?? '').trim().toLowerCase();
         const shown = asked ? rows.filter((row) => JSON.stringify(Object.values(row)).toLowerCase().includes(asked)) : rows;
@@ -253,6 +328,8 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         };
       }
       case 'opening_stock': {
+        const refused = lacks('opening_stock');
+        if (refused) return refused;
         const no = String(args.no ?? '').trim().toUpperCase();
         if (no) {
           const found = await openingStockService.viewByNo(ctx.tx, no);
@@ -287,10 +364,16 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
           ].join(chr10()),
         };
       }
+      case 'preview_step': {
+        if (!actions) {
+          return { text: 'A preview runs the step and undoes it, so it is for people who may take steps from chat: this contact is not allowed actions. Explain what the step does in words (document_story, review_document).' };
+        }
+        return { text: await doService.preview({ ctx, userId: ctx.principal.userId, chat: actions.chat, action: String(args.action ?? ''), args }) };
+      }
       case 'propose_action': {
         if (!actions) {
           return {
-            text: 'You cannot act in this chat. The contact is not allowed to take actions — an administrator turns that on per person on the WhatsApp screen. Explain that, and that reading is unaffected.',
+            text: 'You cannot act for this person: their contact is not allowed to take actions. An administrator turns that on per person on Settings → Administration → WhatsApp (the Actions switch on their contact). Explain that, show them how to do it on the screen themselves (guide + screens), and say that reading is unaffected.',
           };
         }
         const prepared = await doService.prepare({
@@ -330,13 +413,336 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
             .join(chr10()),
         };
       }
+      case 'document_story':
+        return { text: await insight.documentStory(ctx.tx, ctx.principal, String(args.no ?? ''), systemGuide.appUrl()) };
+      case 'stuck_documents':
+        return {
+          text: await review.stuckDocuments(
+            ctx.tx,
+            ctx.principal,
+            {
+              ...(typeof args.olderThanDays === 'number' ? { olderThanDays: args.olderThanDays } : {}),
+              ...(args.mine === true ? { mine: true } : {}),
+              ...(typeof args.kind === 'string' && args.kind.trim() ? { kind: args.kind } : {}),
+            },
+            systemGuide.appUrl(),
+          ),
+        };
+      case 'review_document':
+        return { text: await review.reviewDocument(ctx.tx, ctx.principal, String(args.no ?? ''), systemGuide.appUrl()) };
+      case 'activity_log':
+        return {
+          text: await insight.activityLog(ctx.tx, ctx.principal, {
+            ...(typeof args.user === 'string' ? { user: args.user } : {}),
+            ...(typeof args.document === 'string' ? { document: args.document } : {}),
+            ...(typeof args.action === 'string' ? { action: args.action } : {}),
+            ...(typeof args.object === 'string' ? { object: args.object } : {}),
+            ...(typeof args.outcome === 'string' ? { outcome: args.outcome } : {}),
+            ...(typeof args.from === 'string' ? { from: args.from } : {}),
+            ...(typeof args.to === 'string' ? { to: args.to } : {}),
+            ...(typeof args.limit === 'number' ? { limit: args.limit } : {}),
+          }),
+        };
+      case 'system_status':
+        return { text: await insight.systemStatus(ctx.tx, ctx.principal) };
+      case 'accounts': {
+        const no = lacks('chart_of_account');
+        if (no) return no;
+        const asked = String(args.search ?? '').trim();
+        const like = `%${asked.replace(/[%_\\]/g, (ch) => `\\${ch}`)}%`;
+        const result = await ctx.tx.execute(sql`
+          select code, name, account_type::text as type, is_group, is_active, control_account::text as control
+            from chart_of_account
+           where ${asked === ''} or code ilike ${like} or name ilike ${like}
+           order by code
+           limit 81`);
+        const rows = result.rows as { code: string; name: string; type: string; is_group: boolean; is_active: boolean; control: string | null }[];
+        if (rows.length === 0) return { text: asked ? `No account matches "${asked}". Try part of the name in the other language, or leave the search out for the whole chart.` : 'The chart of accounts is empty.' };
+        return {
+          text: [
+            `${rows.length > 80 ? 'More than 80' : rows.length} account(s)${asked ? ` matching "${asked}"` : ''}${rows.length > 80 ? ', the first 80 — narrow the search:' : ':'}`,
+            ...rows
+              .slice(0, 80)
+              .map(
+                (row) =>
+                  `${row.code} · ${row.name} · ${row.type}${row.is_group ? ' · HEADING (nothing posts to it)' : ''}${row.is_active ? '' : ' · inactive'}${row.control ? ` · ${row.control} control account (posted through its own documents, not by hand)` : ''}`,
+              ),
+          ].join(chr10()),
+        };
+      }
+      case 'exchange_rate': {
+        const no = lacks('exchange_rate');
+        if (no) return no;
+        const date = /^\d{4}-\d{2}-\d{2}$/.test(String(args.date ?? '')) ? String(args.date) : ctx.today;
+        const wanted = String(args.currency ?? '').trim().toUpperCase();
+        const kept = (await ratesService.currencies(ctx.tx)) as unknown as { code: string; isLedger?: boolean; isActive?: boolean; active?: boolean }[];
+        const codes = wanted ? [wanted] : kept.filter((row) => !row.isLedger && row.isActive !== false && row.active !== false).map((row) => row.code);
+        if (codes.length === 0) return { text: 'The company keeps no foreign currency yet: everything is in IQD. A currency and its rate are added on Accounting → Master Data — Financial → Currencies and Rates.' };
+        const lines: string[] = [];
+        for (const code of codes) {
+          if (code === 'IQD') {
+            lines.push('IQD is the currency the books are kept in: 1 IQD = 1 IQD.');
+            continue;
+          }
+          try {
+            const rate = await ratesService.rateOn(ctx.tx, code, date);
+            lines.push(`1 ${code} = ${money(toDecimalString(rate.iqdPerUnit, RATE_SCALE))} IQD on ${date} (the accounting rate in force since ${rate.effectiveFrom}).`);
+          } catch (error) {
+            lines.push(`${code}: no accounting rate — ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+        return { text: [...lines, 'Rates are entered on Accounting → Master Data — Financial → Currencies and Rates; a document takes the rate of its own date.'].join(chr10()) };
+      }
+      case 'document_status':
+        return { text: await doService.describeDocument(ctx.tx, ctx.principal, String(args.no ?? ''), systemGuide.appUrl()) };
+      case 'show_screen': {
+        const view = ['menu', 'screen', 'form', 'record', 'dialog', 'all'].includes(String(args.view)) ? (args.view as systemGuide.ShotView | 'all') : 'all';
+        const asked = String(args.screen ?? '');
+        // The language asked for, not the language the asking was written in: "show me in arabic" is an English sentence.
+        const shownIn = pictureLanguage(args.language, meta?.question, ctx.locale);
+        /*
+         * Whose data (2026-10-05, option B): with live data on — the server's
+         * default once the owner switched it on, or because the person asked
+         * for it — the screen and an opened record are pictured from the real
+         * system as the asker. Everything else, and whatever a live picture
+         * could not be taken of, is the ready-made picture.
+         */
+        // "training" is the person's to ask for, not the model's to choose: with their words in hand it counts only when they said so.
+        const trainingAsked = args.data === 'training' && (meta?.question == null || asksForTrainingPicture(meta.question));
+        const wantsLive = args.data === 'live' ? liveShots.liveShotsReady().ok : trainingAsked ? false : howTo.howToLiveReady().ok;
+        const live: Partial<Record<'screen' | 'record', systemGuide.LivePicture>> = {};
+        const notTaken: string[] = [];
+        if (wantsLive && (view === 'all' || view === 'screen' || view === 'record')) {
+          const which = systemGuide.screenFor(ctx.principal, shownIn, asked);
+          if (which && which.menuScreen && which.allowed) {
+            for (const one of view === 'record' ? (['record'] as const) : (['screen'] as const)) {
+              const taken = await howTo.liveHowToPicture({
+                userId: ctx.principal.userId,
+                locale: shownIn,
+                route: which.route,
+                view: one,
+                ...(one === 'screen' && which.newButton ? { pointAt: [which.newButton] } : {}),
+              });
+              if (taken.ok) live[one] = { file: taken.file, marks: taken.marks };
+              else notTaken.push(taken.reason);
+            }
+          }
+        } else if (args.data === 'live' && !wantsLive) {
+          notTaken.push(liveShots.liveShotsReady().reason ?? 'live pictures are not available on this server');
+        }
+        const shown = systemGuide.screenPictures(ctx.principal, shownIn, asked, view, typeof args.dialog === 'string' ? args.dialog : null, live);
+        const note = notTaken.length > 0 && args.data === 'live' ? `${chr10()}A live picture could not be taken (${notTaken[0]}), so this is the training picture: say so.` : '';
+        return { text: `${shown.text}${note}`, ...(shown.images.length > 0 ? { images: shown.images } : {}) };
+      }
+      case 'screenshot': {
+        const ready = liveShots.liveShotsReady();
+        if (!ready.ok) return { text: `No live picture: ${ready.reason ?? 'it is not available here.'} The training pictures (show_screen) still work.` };
+        // The address as a tool gave it, or as a path: only the path is used.
+        const base = systemGuide.appUrl();
+        const given = String(args.address ?? '').trim();
+        const path = given.toLowerCase().startsWith(base.toLowerCase()) ? given.slice(base.length) || '/' : given;
+        const pointAt = Array.isArray(args.pointAt) ? args.pointAt.filter((one): one is string => typeof one === 'string' && one.trim() !== '').slice(0, 4) : [];
+        const shownIn = pictureLanguage(args.language, meta?.question, ctx.locale);
+        const taken = await liveShots.liveScreenshot({ userId: ctx.principal.userId, path, locale: shownIn, ...(pointAt.length > 0 ? { pointAt } : {}) });
+        if (!taken.ok) return { text: `No live picture: ${taken.reason} Say in words what you would have pointed at.` };
+        const { shot } = taken;
+        const numbers = systemGuide.marksLine(shot.marks);
+        const tag = shot.file.replace(/^.*[\\/]/, '').replace(/\.[a-z0-9]+$/i, '').toLowerCase();
+        const caption =
+          shownIn === 'ar' ? `${shot.title || shot.path} — الشاشة كما هي الآن${numbers ? '، والأرقام الحمراء مشروحة في الرسالة' : ''}` : `${shot.title || shot.path} — the screen as it is now${numbers ? '; the red numbers are explained in the message' : ''}`;
+        return {
+          text: [
+            `1 LIVE picture of ${shot.title || shot.path} (${shot.path}) is attached to your answer — the real screen as this person sees it now. Place it at its step: write its tag on a line of its own, and what you write under it is sent as its caption.`,
+            `[picture: ${tag}] — the live screen.${numbers ? ` The red numbers on it: ${numbers}.` : ' Nothing is numbered on this one.'}`,
+            shot.notFound.length > 0
+              ? `Not in the picture, so no arrow was drawn for: ${shot.notFound.join(', ')}. Do not say an arrow points at them. If the thing you meant is among the numbers above under another name, take the picture once more with pointAt set to that exact name — the new picture replaces this one.`
+              : '',
+            'Say where the arrow is and what to do there; refer to anything else by its number and its name. The figures in this picture are real.',
+          ]
+            .filter((line) => line !== '')
+            .join(chr10()),
+          // One live picture per page: a retake replaces the first.
+          images: [{ file: shot.file, caption, group: `live:${shot.path}`, kind: 'live' }],
+        };
+      }
+      case 'screens':
+        return { text: systemGuide.screens(ctx.principal, typeof args.search === 'string' ? args.search : null) };
+      case 'guide':
+        return { text: systemGuide.guide(typeof args.search === 'string' ? args.search : null) };
+      case 'change_request': {
+        const kind = (notes.REQUEST_KINDS as readonly string[]).includes(String(args.kind)) ? (args.kind as (typeof notes.REQUEST_KINDS)[number]) : 'other';
+        try {
+          const filed = notes.recordRequest({
+            who: await whoIs(),
+            chat: chatLabel,
+            request: {
+              title: String(args.title ?? ''),
+              kind,
+              area: String(args.area ?? ''),
+              screen: words(args.screen),
+              today: words(args.today),
+              wanted: String(args.wanted ?? ''),
+              why: String(args.why ?? ''),
+              rightWay: words(args.rightWay),
+              example: words(args.example),
+              impact: words(args.impact),
+              openQuestions: Array.isArray(args.openQuestions) ? args.openQuestions.filter((one): one is string => typeof one === 'string' && one.trim() !== '') : [],
+              noahNote: words(args.noahNote),
+            },
+          });
+          return {
+            text: `Filed as ${filed.id}. Tell them the number, that it is written down for the people who build the system, and that nobody has promised it will be built or when. If questions are still open, ask the next one or two now; add the answers with change_request_followup.`,
+          };
+        } catch (error) {
+          return { text: `Not filed: ${error instanceof Error ? error.message : String(error)}` };
+        }
+      }
+      case 'change_request_followup': {
+        const status = (notes.REQUEST_STATUSES as readonly string[]).includes(String(args.status)) ? (args.status as (typeof notes.REQUEST_STATUSES)[number]) : undefined;
+        const answers = Array.isArray(args.answers)
+          ? (args.answers as unknown[]).flatMap((one) => {
+              const pair = one as { question?: unknown; answer?: unknown };
+              return typeof pair?.question === 'string' && typeof pair?.answer === 'string' ? [{ question: pair.question, answer: pair.answer }] : [];
+            })
+          : [];
+        try {
+          const added = notes.addToRequest({ id: String(args.id ?? '').trim().toUpperCase(), who: await whoIs(), note: words(args.note), answers, ...(status ? { status } : {}) });
+          return { text: added.ok ? `Added to ${added.id}; its status is ${added.status}.` : `Not added: ${added.reason}` };
+        } catch (error) {
+          return { text: `Not added: ${error instanceof Error ? error.message : String(error)}` };
+        }
+      }
+      case 'change_requests': {
+        const id = words(args.id);
+        if (id) return { text: notes.readRequest(id.toUpperCase()) ?? `There is no request ${id}. The list: ${notes.listRequests({ limit: 10 })}` };
+        return {
+          text: notes.listRequests({
+            ...(typeof args.limit === 'number' ? { limit: args.limit } : {}),
+            ...(words(args.status) ? { status: words(args.status)! } : {}),
+            ...(words(args.search) ? { search: words(args.search)! } : {}),
+          }),
+        };
+      }
+      case 'answer_feedback': {
+        const verdict = args.verdict === 'good' ? 'good' : 'wrong';
+        const last = meta?.lastExchange ?? null;
+        if (!last) return { text: 'There is no earlier answer of yours in this conversation for it to be about. Ask them which answer they mean, or what was wrong.' };
+        try {
+          const filed = notes.recordFeedback({
+            who: await whoIs(),
+            chat: chatLabel,
+            verdict,
+            question: last.question,
+            answer: last.answer,
+            whatWasWrong: words(args.whatWasWrong),
+            rightAnswer: words(args.rightAnswer),
+          });
+          return {
+            text:
+              verdict === 'wrong'
+                ? `Written down as ${filed.id}, and kept as a question you will be tested on. Now look again with the tools and give the corrected answer — or, if they have not said what was wrong, ask in one line.`
+                : `Noted (${filed.id}).`,
+          };
+        } catch (error) {
+          return { text: `Not written down: ${error instanceof Error ? error.message : String(error)}` };
+        }
+      }
+      case 'remember': {
+        const scope = args.about === 'company' ? 'company' : 'me';
+        // A fact about the company is the company's to state: whoever administers the system, or a super user.
+        if (scope === 'company' && !(ctx.principal.isSuperUser || can(ctx.principal, 'configure', 'whatsapp'))) {
+          return { text: 'A fact about the company is kept when an administrator states it. Keep it as a note about this person instead (about me), or tell them an administrator can teach it to you.' };
+        }
+        try {
+          const kept = notes.remember({ userId: ctx.principal.userId, who: await whoIs(), scope, fact: String(args.fact ?? '') });
+          return { text: kept.ok ? `Kept. ${kept.said}` : `Not kept: ${kept.reason}` };
+        } catch (error) {
+          return { text: `Not kept: ${error instanceof Error ? error.message : String(error)}` };
+        }
+      }
+      case 'forget': {
+        const scope = args.about === 'company' ? 'company' : 'me';
+        if (scope === 'company' && !(ctx.principal.isSuperUser || can(ctx.principal, 'configure', 'whatsapp'))) {
+          return { text: 'What the company taught you is an administrator\'s to take back.' };
+        }
+        const dropped = notes.forget({ userId: ctx.principal.userId, scope, match: String(args.match ?? '') });
+        return { text: dropped.removed > 0 ? `Dropped ${dropped.removed} line(s).` : 'Nothing you keep contains those words.' };
+      }
+      case 'walkthrough': {
+        const op = String(args.op ?? '');
+        if (op === 'clear') {
+          notes.clearWalkthrough(ctx.principal.userId);
+          return { text: 'The walkthrough is cleared.' };
+        }
+        const before = notes.readWalkthrough(ctx.principal.userId);
+        const steps = Array.isArray(args.steps) ? args.steps.filter((one): one is string => typeof one === 'string' && one.trim() !== '') : (before?.steps ?? []);
+        if (op === 'start' && steps.length < 2) return { text: 'A walkthrough needs its steps: give every step in order (at least two).' };
+        if (op === 'advance' && !before) return { text: 'There is no walkthrough in progress for this person. Start one (op start) with its steps.' };
+        // Counted from 1; one past the last step means every step is done.
+        const current = Math.max(1, Math.min(steps.length + 1, typeof args.current === 'number' ? Math.round(args.current) : op === 'advance' ? (before?.current ?? 1) + 1 : 1));
+        try {
+          const saved = notes.saveWalkthrough({
+            userId: ctx.principal.userId,
+            title: words(args.title) ?? before?.title ?? 'A task',
+            steps,
+            current,
+            document: words(args.document) ?? before?.document ?? null,
+            check: words(args.check) ?? before?.check ?? null,
+          });
+          if (saved.current > saved.steps.length) {
+            return { text: `Every step of "${saved.title}" is done. Say what the result is in the books (read it), then clear the walkthrough (op clear).` };
+          }
+          return { text: `Kept: "${saved.title}", step ${saved.current} of ${saved.steps.length} — ${saved.steps[saved.current - 1] ?? ''}. Give them this step only, with its picture, and ask them to reply !ai done when it is done.` };
+        } catch (error) {
+          return { text: `Not kept: ${error instanceof Error ? error.message : String(error)}` };
+        }
+      }
+      case 'report_issue': {
+        const summary = String(args.summary ?? '').trim();
+        if (summary.length < 4) return { text: 'Not written down: say in one line what is wrong (summary).' };
+        const kind = (ISSUE_KINDS as readonly string[]).includes(String(args.kind)) ? (args.kind as IssueKind) : 'other';
+        const severity = (ISSUE_SEVERITIES as readonly string[]).includes(String(args.severity)) ? (args.severity as IssueSeverity) : 'slows_work';
+        const text = (key: string) => (typeof args[key] === 'string' ? (args[key] as string) : null);
+        // Who they are, read as them: the list is read by people, and "who" should be a name they know.
+        // Read in a savepoint of its own, and optional: a problem is written
+        // down even when the database is the problem.
+        const row = await sqlService
+          .inSavepoint(ctx.tx, async () => {
+            const me = await ctx.tx.execute(sql`select display_name, email from app_user where id = ${ctx.principal.userId}`);
+            return me.rows[0] as { display_name?: string; email?: string } | undefined;
+          })
+          .catch(() => undefined);
+        const who = `${row?.display_name ?? meta?.userName ?? ctx.principal.userId}${row?.email ? ` <${row.email}>` : ''} · branch ${ctx.branchCode}`;
+        const filed = systemGuide.reportIssue({
+          who,
+          chat: !meta?.chat ? 'WhatsApp' : meta.chat === 'terminal' ? 'terminal (ask-noah)' : `WhatsApp ${meta.chat.includes('@g.us') ? 'group' : 'chat'}`,
+          issue: { summary, kind, severity, screen: text('screen'), doing: text('doing'), happened: text('happened'), message: text('message'), document: text('document'), note: text('note') },
+        });
+        return {
+          text: `Written down as ${filed.id}. Tell them it is on the issues list under that number, and then help them with a way round if there is one.`,
+        };
+      }
+      case 'reported_issues': {
+        if (!(ctx.principal.isSuperUser || can(ctx.principal, 'configure', 'whatsapp') || can(ctx.principal, 'view', 'audit_event'))) {
+          return { text: 'The whole list is for administrators. This person can still report a problem, and be told the number it was filed under.' };
+        }
+        return { text: systemGuide.issuesReported(typeof args.limit === 'number' ? args.limit : 10, Boolean(args.openOnly)) };
+      }
       case 'what_the_bot_can_do':
         return { text: helpText(ctx.locale) };
       default:
         return { text: `There is no tool called ${String(name)}.` };
     }
-    };
-  }
+  };
+
+  /*
+   * Each tool in its own savepoint: a statement PostgreSQL refuses inside one
+   * tool must not take the rest of the question with it (see `inSavepoint`).
+   */
+  return function runTool(name: string, args: Record<string, unknown>): Promise<ToolOutcome> {
+    return sqlService.inSavepoint(ctx.tx, () => run(name, args));
+  };
+}
   
   
 /** The agent, for one asker: the loop with this context's tools bound in. */
@@ -351,8 +757,27 @@ export async function runAgentFor(input: {
   readonly files?: SentFiles;
   /** WA-8 — present only when this contact may act. */
   readonly actions?: ActionHooks;
+  /** The group or number the question came from, for what a tool writes down. */
+  readonly chat?: string | null;
+  /** Pictures sent with the question, or with the message it replies to. */
+  readonly pictures?: readonly AskedPicture[];
+  /** Who is in the group, as the instructions say it (`rosterForPrompt`). */
+  readonly people?: string;
 }): Promise<AgentResult> {
-  return runAgent({
+  // What he has been told to keep about the company and this person, the walkthrough they are in, the last exchange.
+  const memory = (() => {
+    try {
+      return notes.memoryForPrompt({ userId: input.ctx.principal.userId });
+    } catch {
+      return '';
+    }
+  })();
+  // The exchange before this one, for "that was wrong": their last words and his.
+  const turns = input.history ?? [];
+  const answeredAt = turns.map((turn) => turn.role).lastIndexOf('assistant');
+  const askedAt = answeredAt > 0 ? turns.slice(0, answeredAt).map((turn) => turn.role).lastIndexOf('user') : -1;
+  const lastExchange = answeredAt >= 0 && askedAt >= 0 ? { question: turns[askedAt]!.text, answer: turns[answeredAt]!.text } : null;
+  const result = await runAgent({
     client: input.client,
     model: input.model,
     question: input.question,
@@ -361,6 +786,17 @@ export async function runAgentFor(input: {
     locale: input.ctx.locale,
     branchCode: input.ctx.branchCode,
     today: input.ctx.today,
-    runTool: toolRunnerFor(input.ctx, input.files ?? [], input.actions),
+    ...(input.pictures && input.pictures.length > 0 ? { pictures: input.pictures } : {}),
+    ...(input.people ? { people: input.people } : {}),
+    ...(memory ? { memory } : {}),
+    // Before an answer is sent: every document number and figure in it is something he read, or he is asked once to put it right.
+    check: (answer, sources) => {
+      const found = unsupportedIn(answer, sources);
+      return isClean(found) ? null : correctionFor(found);
+    },
+    runTool: toolRunnerFor(input.ctx, input.files ?? [], input.actions, { userName: input.userName, chat: input.chat ?? input.actions?.chat ?? null, lastExchange, question: input.question }),
   });
+  // What they asked and how he began to answer, for "continue" another day. Never a reason to lose the answer.
+  notes.noteExchange({ userId: input.ctx.principal.userId, question: input.question, answer: result.text, tools: result.used });
+  return result;
 }

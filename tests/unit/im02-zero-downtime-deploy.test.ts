@@ -29,6 +29,19 @@ describe('IM2 · deploy.sh', () => {
     expect(deploy.indexOf('npm run db:migrate')).toBeLessThan(deploy.indexOf('mv "\\$APP/.next" "\\$APP/.next-prev"'));
   });
 
+  it('runs nothing on the deployer by accident: no backtick inside the block sent to the server', () => {
+    // The block is an unquoted here-document, so the deployer's own shell
+    // expands it first: a `command` in backticks — even in a comment — is run
+    // on the deployer's machine. One in a comment printed "cp: missing file
+    // operand" in the middle of every deploy.
+    const from = deploy.indexOf('<<REMOTE');
+    const to = deploy.indexOf('\nREMOTE', from);
+    expect(from).toBeGreaterThan(0);
+    expect(to).toBeGreaterThan(from);
+    const sent = deploy.slice(from, to).split('\n');
+    expect(sent.filter((line) => /(^|[^\\])`/.test(line))).toEqual([]);
+  });
+
   it('keeps the previous build and prints the rollback', () => {
     expect(deploy).toContain('.next-prev');
     expect(deploy).toMatch(/Rollback: .*mv \.next-prev \.next/);

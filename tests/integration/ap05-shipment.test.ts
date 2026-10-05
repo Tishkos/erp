@@ -184,6 +184,14 @@ describe('§17.1 · B/Ls and containers', () => {
     expect(await stageOf()).toBe('shipped');
   });
 
+  it('the one size/type of a paste is the standard: capitals kept, anything else refused before a B/L is written', async () => {
+    expect(await rejection(createBl({ sizeType: '99XX' }))).toMatch(/'99XX' is not a container size\/type/);
+    expect((await ownerPool.query(`select 1 from bill_of_lading where payable_id = $1`, [payableId])).rowCount).toBe(0);
+    await createBl({ sizeType: ' 40hc ' });
+    const { rows } = await ownerPool.query(`select distinct size_type from shipment_container where payable_id = $1`, [payableId]);
+    expect(rows.map((r) => r.size_type)).toEqual(['40HC']);
+  });
+
   it('refuses what is not a container number, and a number still on a live B/L', async () => {
     expect(await rejection(createBl({ containers: 'MSCU123' }))).toMatch(/Not container numbers: MSCU123/);
     await createBl();
@@ -363,6 +371,7 @@ describe('A13 / A14 · container by container into the warehouse', () => {
       `select on_hand::text, in_transit::text, held::text from stock_position where item_code = $1 and warehouse_code = $2`,
       [PANEL, IN_PROCESS],
     );
+    // What was short stays in the transit warehouse: held there, and (0287) not on hand.
     expect(position[0]).toEqual({ on_hand: '0', in_transit: '10.000000', held: '10.000000' });
   });
 

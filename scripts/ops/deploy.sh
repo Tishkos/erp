@@ -154,7 +154,7 @@ tar -C "\$APP" --exclude=node_modules --exclude='.next*' --exclude=var -cf - . |
 # It was a symlink until 2026-10-02, when the first deploy on Next 16.3.8
 # died with "Symlink [project]/node_modules is invalid, it points out of the
 # filesystem root": Turbopack resolves the project root itself and refuses a
-# node_modules that leaves it. `cp -al` gives it a real directory, and
+# node_modules that leaves it. cp -al gives it a real directory, and
 # because the link targets are the same inodes on the same filesystem it
 # costs neither a copy nor the disk for one.
 cp -al "\$APP/node_modules" "\$BUILD_DIR/node_modules"
@@ -191,6 +191,13 @@ rm -rf "\$BUILD_DIR"
 
 pm2 restart "\$PM2_NAME" --update-env
 pm2 save
+
+# The WhatsApp bridge is its own process (systemd, not pm2) and runs the
+# scripts tree directly: without a restart it keeps answering with the last
+# release's tools and instructions. Skipped where the unit is not installed.
+if systemctl is-enabled --quiet whatsapp-bridge 2>/dev/null; then
+  systemctl restart whatsapp-bridge && echo "whatsapp-bridge restarted"
+fi
 
 # OP-7 — the crontab is the file in the repository.
 APP="\$APP" bash "\$APP/scripts/ops/install-cron.sh"

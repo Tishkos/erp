@@ -108,3 +108,234 @@ the e-mail rows are marked `suppressed` and the log says so once per run.
 | The CEO asks and hears nothing | the message log: `no reply` with the reason (unlisted / deactivated / not CEO / questions off) |
 | The CEO is answered "I can't answer that yet" | the phrase is outside the catalogue and no router model is configured; set `ANTHROPIC_API_KEY` on the bridge host, or ask with a catalogue phrase |
 | The number is banned | D-WA-5: re-pair a replacement SIM; if it recurs, the official Cloud API replaces the bridge layer only |
+
+## Noah for everybody (2026-10-04)
+
+* **Who may ask:** any active user with a contact row whose *Questions* switch
+  is on (Settings → Administration → WhatsApp). The CEO role is no longer
+  required. Each person is answered as themselves: a tool refuses what their
+  role cannot see and says which permission is missing.
+* **Who may act:** a contact whose *Actions* switch is on. Noah proposes, the
+  person answers with a plain yes, and the step runs through the document's own
+  service as that person — approve or reject from the inbox, a document's next
+  step by its number (submit, approve, post, reverse, cancel), a new customer
+  or supplier, approving a prospect.
+* **What he knows about the system:** the top bar as it is drawn (`screens`)
+  and the written guide in `docs/guide/` (`guide`). A deploy replaces the
+  guide; nothing needs restarting beyond the bridge itself.
+* **Issues:** whatever people report to him is appended to
+  `/opt/qs-erp-next/var/issues/reported-issues.md` — read it with
+  `ssh root@31.97.123.206 cat /opt/qs-erp-next/var/issues/reported-issues.md`,
+  or ask him "what issues were reported?". Change `Status: open` to
+  `Status: fixed` when one is dealt with.
+* **Without a phone:** `npx tsx scripts/ops/ask-noah.ts <email> "<question>"`
+  on the server answers exactly as the group would be answered, as that user.
+  Add `--propose` to try a preview or a plan: what he would ask a yes for is
+  printed and never run, and a preview undoes itself.
+* After a deploy: `systemctl restart whatsapp-bridge`, so the bridge runs the
+  new instructions and tools.
+
+## He speaks only when called (2026-10-04)
+
+* **The trigger is `!ai` at the very start of the message.** Anything else said
+  in the group is not read, not logged and not answered — a question he could
+  answer, his name, `!ai` in the middle of a sentence. Nothing is inferred.
+* `!ai <request>` — answered, for every group member whose number has a contact
+  row with *Questions* on. The request is whatever follows the trigger: a
+  question, a look-up, "digest this month's sales", a how-to, a draft.
+* `!ai … !dontwrite` and `!ai … !ignore` — nothing happens: no answer, and
+  nothing is run.
+* A yes to something he proposed is `!ai yes` (`!ai no` to decline); the typed
+  commands are `!ai approve <number>`, `!ai reject <number> <reason>`,
+  `!ai confirm <code>`, `!ai pending`.
+* `!ai` on its own gets one line saying how to use it. A group member whose
+  number is not on the contact list is told so once (and not again for six
+  hours); add them on Settings → Administration → WhatsApp.
+* **He says nothing unasked — never.** With *group only* on (the default) the
+  bridge cannot send a message that is not the answer to an `!ai` message: no
+  greeting when it starts, no copy of a notification, no morning digest. The
+  two switches *Post notifications to the group* and *Post the morning digest
+  to the group* do nothing while *group only* is on. Notifications still reach
+  people in the application and by e-mail. A restart of the bridge is silent.
+* The model is the `agent_model` setting — `claude-opus-5-5`.
+
+## What people can do in the group
+
+Everything starts with `!ai` at the beginning of the message.
+
+* **Ask anything** — `!ai why is the customer's account empty?`, `!ai what's stuck?`,
+  `!ai how do I add a supplier?` (he answers in steps, a picture at each step).
+* **Tag somebody** — `!ai explain this to @Ali in Arabic`: the answer is written
+  to Ali and tags him. It is still read as the person who asked.
+* **Reply to a message** with `!ai explain this` — he is shown that one message
+  (and its picture or file), nothing else from the group.
+* **Send a picture** — a screenshot of an error, a photo of a paper invoice —
+  with `!ai what is this?` in its caption. He reads it.
+* **Send a supplier's invoice** (PDF, Excel or photo) with `!ai enter this` — he
+  keys a draft purchase invoice and reads it back; nothing posts.
+* **Have him do a step** — `!ai post INV-…`: he shows what it will do and waits
+  for `!ai yes`.
+
+## Requests, feedback and what he remembers
+
+Everything Noah writes down besides answers is a file on the server under
+`/opt/qs-erp-next/var/noah/` (it outlives a deploy):
+
+| Folder | What | Who reads it |
+|---|---|---|
+| `requests/REQ-YYYYMMDD-NNN.md` (+ `INDEX.md`) | One file per thing people want changed: a new field, a new screen or report, a workflow the company does differently. Each has what is wanted, why, how it works today, the real steps, an example, the questions still open, and his own reading. | Whoever builds the system. Set `- Status:` by hand as it moves: `in progress`, `done`, `declined`. |
+| `feedback/FB-….md`, `feedback/eval-candidates.jsonl` | Each 👎 / 👍 with the exchange it was about. | Turn each candidate into a case in `tests/noah/questions.ts`. |
+| `memory/company.md`, `memory/people/<user>.md` | What he was told to keep. | Edit or delete a line by hand to correct him. |
+| `memory/walk/`, `memory/last/` | The walkthrough each person is in; their last exchange. | Nobody needs to. |
+
+```
+ssh root@31.97.123.206 'cat /opt/qs-erp-next/var/noah/requests/INDEX.md'
+ssh root@31.97.123.206 'cat /opt/qs-erp-next/var/noah/requests/REQ-20261005-001.md'
+```
+
+What people say in the group:
+
+* `!ai we need another field on bank loans: who guaranteed it` — he checks how it
+  works today, asks a question or two, files it and gives its number.
+* `!ai 👎` (or "that was wrong") after an answer — written down; he looks again.
+* `!ai remember that I always want Arabic` / `!ai remember: our Najaf store is WH-NJF`
+  (a company fact only from an administrator) / `!ai forget …`.
+* `!ai walk me through posting INV-…` — one step at a time; `!ai done` after each,
+  and he checks the system before giving the next.
+* `!ai what will posting INV-… do?` — the exact journal and stock lines, nothing changed.
+* `!ai approve the opening stock and then post the invoice` — one plan, one `!ai yes`.
+* `!ai show me the suppliers screen live` / `… the sample one` — whose data the picture shows.
+
+**Live data in how-to pictures** is `NOAH_HOWTO_LIVE=on` in `/opt/qs-erp-next/.env`
+(restart the bridge). Off, every how-to picture is the training copy; a person
+can still ask for a live one in words.
+
+## Trying him without the group watching
+
+The bridge is linked to one person's WhatsApp. With `WA_SELF_CHAT=on` in
+`/opt/qs-erp-next/.env` (then `systemctl restart whatsapp-bridge`), that person
+can open their own **Message yourself** chat and write `!ai …` there: he
+answers in that chat, as them, with everything he can do in the group. Nobody
+else's private chat is ever read, and a note to self that does not begin with
+`!ai` is not read either. Remove the line (or set it to `off`) to switch it off.
+
+## Live pictures
+
+`!ai show me INV-HQ-2026-000001 and where I press to post it` — Noah takes a
+picture of the real page as that person sees it, with a box and a number on
+each part and an arrow at the button, and explains it. About ten seconds.
+
+* It is taken **as the person who asked**, through a session that lives three
+  minutes and is revoked as soon as the picture is taken; it appears, revoked,
+  on that user's sessions list, and every picture is in the audit trail
+  (`whatsapp.screenshot`).
+* It **cannot change anything**: the browser it uses is refused every request
+  that is not a plain page read.
+* It shows **real figures in the group**. If that is ever not wanted, set
+  `NOAH_LIVE_SHOTS=off` in the bridge's environment and restart it; the
+  training pictures keep working.
+* The server needs a browser, once:
+  ```
+  cd /opt/qs-erp-next && npx playwright install chromium && npx playwright install-deps chromium
+  ```
+* Try one by hand: `npx tsx scripts/ops/live-shot.ts <email> /payables/invoices --point "New invoice"`.
+* A person with a temporary password, or a super user who has not set up the
+  authenticator yet, gets no picture — the application sends them to that
+  screen first, and Noah says so.
+
+## Noah's test set
+
+`tests/noah/questions.ts` holds some fifty real questions, each with what a
+right answer cannot be without: the tools he must have used, facts that must be
+in the words, things that must never be said, the language, the pictures, a
+proposal made and not run. Run them against the real model after any change to
+his instructions, his tools, the guide or the pictures:
+
+```
+NOAH_APP_URL=http://localhost:3000 npx tsx scripts/ops/noah-eval.ts   # all of them, about half an hour (the URL is for the live-picture cases)
+npx tsx scripts/ops/noah-eval.ts --only howto --only action
+npx tsx scripts/ops/noah-eval.ts --only doc-why-draft-en
+npx tsx scripts/ops/noah-eval.ts --list
+```
+
+It answers each question exactly as the bridge would (the path `ask-noah.ts`
+uses), as the seeded administrator unless the case names somebody else. It
+never acts: a proposal is recorded for the judge and dropped, and an issue he
+files goes to a scratch file. One line per case, a tally by area, and every
+answer in full in `var/noah/eval-<date>.json`. It ends 1 if a case fails. The
+facts are those of the seeded development database; when a fact moves, correct
+the case, and when Noah answers badly, leave it failing and fix Noah.
+
+## When Noah gets something wrong
+
+Every answer keeps what he did to reach it. On the server:
+
+```
+grep 'inbound from' /var/log/qs-erp/whatsapp-bridge.log | tail -40
+```
+
+shows, per answer, the look-ups in order with their time and what a refused
+one said (never the question or the answer). The same trace, with the
+arguments, is on the message itself — Settings → Administration → WhatsApp →
+the message log, or `whatsapp_message.detail -> 'trace'`.
+
+To ask him the same thing yourself, as that person, and see the trace:
+
+```
+cd /opt/qs-erp-next && npx tsx scripts/ops/ask-noah.ts <email> "<the question>"
+```
+
+What he can read to explain a problem: `document_story` (one document whole —
+lines, journal, stock, history, what it is waiting for), `activity_log` (who
+did what, what was refused and why), `system_status` (health, migrations,
+scheduled jobs, the application's error log). One failed look-up no longer
+ends the question: each runs in its own savepoint.
+
+## The pictures Noah sends
+
+Noah explains a task as steps with pictures — up to eight in one answer, each
+sent with its own step as the caption — in the language of the person who
+asked. Every picture carries red numbers on the things that matter (each field
+of a form, the buttons, the tabs, the search and filters, the table, a record's
+status and its printer / paperclip / notes / history icons), and he explains
+each number: what it is for, why it is needed, what to enter, what it changes.
+
+There are four pictures of a screen — `menu` (where it is, the entry ringed),
+`screen`, `form` (what its New button opens) and `record` (one saved document
+opened) — and one of each window that opens from it (`dialog`: attachments,
+notes, history, print, an action that asks for a reason), for **every built
+screen of the menu**, plus *sign in*, *the top
+bar*, *the account menu* and *change password*.
+
+They are not taken when the question is asked: they are made ahead of time
+from the **seeded local development server**, so they show sample data and
+never the company's. The script walks the menu itself, so a new screen is
+covered by running it again.
+
+Make them (the development server running on port 3000, signed-in user from
+`scripts/seed-dev.ts`):
+
+```
+npx tsx scripts/guide/make-screens.ts            # every built screen, English and Arabic
+npx tsx scripts/guide/make-screens.ts --only payables/suppliers --force
+npx tsx scripts/guide/make-screens.ts --only sign-in --force
+```
+
+They land in `var/guide-shots/` with an `index.json` (which also says what
+each red number points at). Put them on the server, where `var/` outlives a
+deploy:
+
+```
+scp -r var/guide-shots root@31.97.123.206:/opt/qs-erp-next/var/
+```
+
+Check from the server, without a phone:
+
+```
+cd /opt/qs-erp-next && npx tsx scripts/ops/ask-noah.ts <email> "how do I add a supplier? show me"
+```
+
+It prints the answer as the group would get it: each message, and under each
+picture the caption it is sent with. No pictures on the server is not an
+error: Noah says the path in words. Make them again when a screen's layout
+changes.

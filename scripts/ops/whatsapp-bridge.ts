@@ -47,12 +47,12 @@ import makeWASocket, {
   type WAMessage,
   type WASocket,
 } from '@whiskeysockets/baileys';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import qrcode from 'qrcode-terminal';
 import { pool, withScope, type RequestScope } from '../../src/server/db/client';
 import {
   checkingLine,
   detectLocale,
-  greetingLine,
   digestDue,
   e164ToJid,
   helpText,
@@ -68,6 +68,11 @@ import * as actions from '../../src/server/services/whatsapp-actions';
 import { agentClientFor, anthropicClient, modelRouter } from '../../src/server/services/whatsapp-router';
 import { runAgentFor, type AgentClient } from '../../src/server/services/whatsapp-agent';
 import { cliAgentClient, cliReady } from '../../src/server/services/whatsapp-cli-brain';
+import { AI_TRIGGER, isSelfChat, listensTo, maySendTo, triggerOf } from '../../src/server/domain/whatsapp';
+import { nameOf } from '../../src/server/domain/whatsapp-names';
+import { readTags, rosterForPrompt, rosterFrom, writeTags, type Member, type Participant } from '../../src/server/domain/whatsapp-people';
+import type { AskedPicture } from '../../src/server/domain/whatsapp-agent';
+import { knownNames, rememberNames } from '../../src/server/services/whatsapp-names';
 import { questionForFiles, type SentFile } from '../../src/server/domain/whatsapp-files';
 import { expired, isConfirmation, isRefusal, type PendingAction } from '../../src/server/domain/whatsapp-do';
 import { extractSentFile } from '../../src/server/services/whatsapp-files';
@@ -103,6 +108,14 @@ const AGENT_MODEL_OVERRIDE = process.env.WA_AGENT_MODEL?.trim() || null;
  * change: WA_ANSWER_SELF=off, or simply removed, puts it back.
  */
 const ANSWER_SELF = (process.env.WA_ANSWER_SELF ?? '').trim().toLowerCase() === 'on';
+
+/*
+ * The owner's own "Message yourself" chat (2026-10-05, by direction: "can I
+ * try on my own chat"). Off unless WA_SELF_CHAT=on: with it, a message the
+ * owner writes to THEMSELVES that begins with the trigger is answered in that
+ * chat. No other private chat is heard or written to (`isSelfChat`).
+ */
+const SELF_CHAT = (process.env.WA_SELF_CHAT ?? '').trim().toLowerCase() === 'on';
 const RESET = process.argv.includes('--reset-pairing');
 /** WA-5 — print the groups the bot is in, with their ids, and exit. */
 const LIST_GROUPS = process.argv.includes('--list-groups');
@@ -216,23 +229,74 @@ async function paced(perMinute: number): Promise<void> {
   sentAt.push(Date.now());
 }
 
-function transportFor(sock: () => WASocket | null, perMinute: () => number): wa.Transport {
+/**
+ * Set while a message that began with the trigger is being answered, and at
+ * no other time.
+ *
+ * By direction (2026-10-04): "shouldn't send any messages until called —
+ * never ever unless !ai". Every outgoing message passes through the one
+ * transport below, and in group-only mode it refuses to send unless it is
+ * inside the handling of a called message — whichever part of the code asked:
+ * a notification, a digest, a greeting somebody adds next year. The rule is
+ * held where a message leaves, not at each place one might be written.
+ */
+const called = new AsyncLocalStorage<{ quoted: WAMessage | null; used: boolean; self?: boolean }>();
+
+/**
+ * The registered group's members, as people (`domain/whatsapp-people.ts`).
+ *
+ * Read from WhatsApp for that one group only, when somebody calls him there,
+ * and kept for ten minutes: it is what turns "@159386907476204" into "@Ali"
+ * on the way in and back into a real tag on the way out.
+ */
+let roster: { readonly at: number; readonly jid: string; readonly members: readonly Member[] } | null = null;
+const ROSTER_MINUTES = 10;
+
+/** A picture worth showing the model: past this it is described, not shown. */
+const PICTURE_BYTES_CAP = 5 * 1024 * 1024;
+const PICTURE_TYPES: readonly string[] = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+
+function transportFor(sock: () => WASocket | null, current: () => Awaited<ReturnType<typeof wa.settings>>): wa.Transport {
   return async (to, message) => {
     const socket = sock();
     if (!socket) throw new Error('the bridge is not connected to WhatsApp');
-    await paced(perMinute());
+    if (current().groupOnly && !called.getStore()) {
+      throw new Error('unasked: the bot speaks only when a message begins with !ai, and nothing called it');
+    }
+    // The last word on where the bot writes: in group-only mode, its group
+    // and nowhere else, whichever part of the code asked (2026-10-04 — the
+    // account it is linked to is a person's own).
+    // …and, when the owner has switched it on, to the owner's own chat with
+    // themselves — while answering a message that was written there.
+    const own = jidToE164(jidNormalizedUser(socket.user?.id ?? ''));
+    const toSelf = SELF_CHAT && !to.groupJid && Boolean(own) && to.e164 === own && called.getStore()?.self === true;
+    if (!toSelf && !maySendTo(current(), to)) {
+      throw new Error('group only: the bot writes to its one registered group and to no private chat');
+    }
+    await paced(current().throttlePerMinute);
     // WA-5 — a group id addresses the group; otherwise the person's number.
     const jid = to.groupJid && isGroupJid(to.groupJid) ? to.groupJid : e164ToJid(to.e164);
+    // "@Ali" becomes a real tag: the digits WhatsApp wants in the text, and his
+    // address beside it. A name that is nobody in the group is left as written.
+    const tagged = to.groupJid && roster && roster.jid === to.groupJid ? writeTags(message.text, roster.members) : { text: message.text, mentions: [] as readonly string[] };
+    const mentions = tagged.mentions.length > 0 ? { mentions: [...tagged.mentions] } : {};
+    // The answer replies to the question it answers — once: in a busy group it
+    // says which message it belongs to. A courtesy line does not take the place.
+    const asked = called.getStore();
+    const quoting = asked && asked.quoted && !asked.used && message.quote !== false ? { quoted: asked.quoted } : undefined;
+    if (quoting && asked) asked.used = true;
     let sent: WAMessage | undefined;
-    if (message.attachment) {
-      sent = await socket.sendMessage(jid, {
-        document: message.attachment.body,
-        mimetype: message.attachment.contentType,
-        fileName: message.attachment.fileName,
-        caption: message.text,
-      });
+    if (message.attachment?.format === 'image') {
+      // A picture of a screen: shown in the chat itself, its caption under it.
+      sent = await socket.sendMessage(jid, { image: message.attachment.body, mimetype: message.attachment.contentType, caption: tagged.text, ...mentions }, quoting);
+    } else if (message.attachment) {
+      sent = await socket.sendMessage(
+        jid,
+        { document: message.attachment.body, mimetype: message.attachment.contentType, fileName: message.attachment.fileName, caption: tagged.text, ...mentions },
+        quoting,
+      );
     } else {
-      sent = await socket.sendMessage(jid, { text: message.text });
+      sent = await socket.sendMessage(jid, { text: tagged.text, ...mentions }, quoting);
     }
     remember(sent?.key?.id);
     return { waMessageId: sent?.key?.id ?? null };
@@ -276,6 +340,9 @@ const recentFiles = new Map<string, SentFile[]>();
  * sentence and the yes are both in the message log regardless.
  */
 const proposals = new Map<string, PendingAction>();
+
+/** When each number that is not set up was last told so (see `handleInbound`). */
+const toldNotSetUp = new Map<string, number>();
 
 /**
  * Asks WhatsApp to put a file back on its servers.
@@ -359,6 +426,52 @@ function senderOf(message: WAMessage, ownE164: string | null): { readonly e164: 
   return { e164, groupJid: null };
 }
 
+/**
+ * The names WhatsApp shows the bridge, kept as they are shown (2026-10-04, by
+ * direction: "fetch them from their name in WhatsApp").
+ *
+ * A contact as Baileys hands it over, whatever shape this version gives it:
+ * the number may be the id itself, or — where WhatsApp addresses the person by
+ * a hidden id — beside it. `name` is what the linked phone saved the number
+ * as; `notify` is what the person called themselves.
+ */
+function noteContacts(contacts: ReadonlyArray<unknown>): void {
+  const seen: { e164: string; saved?: string | null; profile?: string | null }[] = [];
+  for (const raw of contacts) {
+    const contact = (raw ?? {}) as Record<string, unknown>;
+    const e164 = [contact.id, contact.jid, contact.phoneNumber]
+      .filter((value): value is string => typeof value === 'string' && value.includes('@'))
+      .map((value) => jidToE164(jidNormalizedUser(value)))
+      .find((value): value is string => Boolean(value));
+    if (!e164) continue;
+    const text = (value: unknown) => (typeof value === 'string' ? value : null);
+    seen.push({ e164, saved: text(contact.name), profile: text(contact.notify) ?? text(contact.verifiedName) });
+  }
+  try {
+    const learned = rememberNames(seen);
+    if (learned > 0) log(`names: ${learned} learned from WhatsApp`);
+  } catch (error) {
+    log(`names: could not be kept — ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/** The message somebody replied to, when they replied to one: its words, its author, and itself. */
+function quotedOf(message: WAMessage): { readonly text: string; readonly author: string | null; readonly id: string | null; readonly message: NonNullable<WAMessage['message']> } | null {
+  const m = message.message;
+  if (!m) return null;
+  const inner = m.ephemeralMessage?.message ?? m.viewOnceMessage?.message ?? m;
+  const context =
+    inner.extendedTextMessage?.contextInfo ??
+    inner.imageMessage?.contextInfo ??
+    inner.documentMessage?.contextInfo ??
+    inner.documentWithCaptionMessage?.message?.documentMessage?.contextInfo ??
+    null;
+  const quoted = context?.quotedMessage;
+  if (!quoted) return null;
+  const said = textOf({ key: message.key, message: quoted } as WAMessage) ?? fileOf({ key: message.key, message: quoted } as WAMessage)?.caption ?? '';
+  return { text: said.trim(), author: context?.participant ?? null, id: context?.stanzaId ?? null, message: quoted };
+}
+
 async function handleInbound(
   scope: RequestScope,
   send: wa.Transport,
@@ -366,15 +479,76 @@ async function handleInbound(
   message: WAMessage,
   agentClient: AgentClient | undefined,
   ownE164: string | null,
+  members: (groupJid: string) => Promise<readonly Member[]>,
+  selfChat = false,
 ): Promise<void> {
   const { e164, groupJid } = senderOf(message, ownE164);
   const sentFile = fileOf(message);
-  const text = (textOf(message) ?? sentFile?.caption ?? '').trim();
-  // A file with nothing typed is still a question; silence with neither is not.
-  if (!e164 || (!text && !sentFile)) return;
+  const typed = (textOf(message) ?? sentFile?.caption ?? '').trim();
+  if (!e164 || (!typed && !sentFile)) return;
+
+  /*
+   * The one group, and nothing else — first, before anything is read, logged
+   * or remembered (2026-10-04, by direction: "never reply to personal
+   * messages … it's private, just for one group").
+   *
+   * The bridge is linked to a person's own WhatsApp account, so this handler
+   * is handed everything that account receives and everything its owner types:
+   * private chats, family groups. With `group_only` on, a message that is not
+   * in the registered group ends here — no log row, no line in the log file,
+   * no name kept — and until a group is registered nothing is heard at all.
+   */
+  const settings = await withScope(scope, (tx) => wa.settings(tx));
+  // The owner's own chat with themselves is the one private chat he hears —
+  // decided by the caller from the message's own address, never from its words.
+  if (!selfChat && !listensTo(settings, groupJid)) {
+    // Only with `group_only` off can this be another group, and that much may
+    // be said; a private message under `group_only` leaves no trace.
+    if (!settings.groupOnly && groupJid) log(`inbound from ${e164} in ${groupJid}: ignored (not the registered group)`);
+    return;
+  }
+
+  // Who WhatsApp says this is — kept only for a number on the expected list,
+  // so somebody named for the group can be put to their user by name.
+  if (!message.key.fromMe && message.pushName) {
+    try {
+      rememberNames([{ e164, profile: message.pushName }]);
+    } catch {
+      /* a name that cannot be kept is not a reason to drop the message */
+    }
+  }
+
+  /*
+   * The trigger — by direction, 2026-10-04: "the AI must ONLY respond when a
+   * WhatsApp message explicitly starts with `!ai`".
+   *
+   * The group is where the company talks; he is not one of the people talking.
+   * A message that does not BEGIN with the trigger ends here: not read, not
+   * logged, not answered, nothing inferred from it — whatever it says and
+   * whoever said it. So does one that begins with it and carries `!dontwrite`
+   * or `!ignore`: nothing is run for it and nothing is sent. Never add a
+   * handler that reads a group message before this line.
+   */
+  const trigger = triggerOf(typed);
+  if (trigger.kind !== 'ask') return;
+  // Who is in the group — only now that somebody has called him there. A tag
+  // arrives as "@" and WhatsApp's own digits for the person; it is read as
+  // their name, so he knows who was meant and the log says it in words.
+  const people = groupJid ? await members(groupJid).catch(() => [] as readonly Member[]) : [];
+  // From here on the message is what was asked, the trigger taken off.
+  const text = readTags(trigger.text, people).text;
+  // The message they replied to, if they replied to one: they pointed him at
+  // it on purpose, so he is shown it — its words, and its picture or file.
+  const quoted = quotedOf(message);
+  const quotedFile = !sentFile && quoted ? fileOf({ key: message.key, message: quoted.message } as WAMessage) : null;
+  const attached = sentFile ?? quotedFile;
+  const source: WAMessage =
+    sentFile || !quoted
+      ? message
+      : ({ key: { remoteJid: message.key.remoteJid, id: quoted.id, fromMe: false, ...(quoted.author ? { participant: quoted.author } : {}) }, message: quoted.message } as WAMessage);
   // What the log records as the message. A file sent without a word would
   // otherwise be an empty row, which reads as though nothing was said.
-  const body = text || `[${sentFile?.fileName ?? 'file'}]`;
+  const body = text || (sentFile ? `[${sentFile.fileName}]` : AI_TRIGGER);
 
   // Its own voice, heard back. Every answer the bridge sends is recorded with
   // the id WhatsApp gave it, so an id already in the log as outbound is the
@@ -384,27 +558,6 @@ async function handleInbound(
     const mine = await withScope(scope, (tx) => wa.sentByBridge(tx, message.key.id ?? null));
     if (mine) return;
     log(`inbound from ${e164}: typed on the bot's own phone, answering it`);
-  }
-
-  // WA-5 — one group, and no other. An unregistered group, or any group but
-  // the registered one, is silence: the same answer an unlisted number gets.
-  // Read before anything is logged, so a stranger's group leaves no trail of
-  // its own in the company's log.
-  const settings = await withScope(scope, (tx) => wa.settings(tx));
-  if (groupJid && !(wa.groupAllowed(settings, groupJid) && settings.groupQueries)) {
-    log(`inbound from ${e164} in ${groupJid}: ignored (not the registered group)`);
-    return;
-  }
-  // Questions belong in the group: an answer in a private chat is an answer
-  // nobody else saw. Read, logged, and left — the group is the record.
-  if (!groupJid && settings.groupJid && settings.groupOnly) {
-    await withScope(scope, async (tx) => {
-      const sender = await wa.resolveNumber(tx, e164);
-      const id = await wa.recordInbound(tx, { e164, body, waMessageId: message.key.id ?? null, sender, groupJid: null });
-      await wa.finishInbound(tx, id, { status: 'refused', intent: 'none', detail: { reason: 'direct messages are not answered; ask in the group' } });
-    });
-    log(`inbound from ${e164}: direct message ignored (questions belong in the group)`);
-    return;
   }
 
   // 1. Who is this, and may they ask? Logged either way; silence otherwise.
@@ -427,11 +580,40 @@ async function handleInbound(
     return { inboundId, sender, allowed };
   });
   if (!allowed.ok || !sender) {
-    log(`inbound from ${e164}: refused (${allowed.ok ? 'no sender' : allowed.reason})`);
+    log(`inbound from ${e164}${message.pushName ? ` (${message.pushName})` : ''}: refused (${allowed.ok ? 'no sender' : allowed.reason})`);
+    /*
+     * They called him by name, in the company's own group, so silence would
+     * read as a broken bot. One line saying why — never anything from the
+     * books — and not again for six hours, so it cannot be made to chatter.
+     */
+    const last = toldNotSetUp.get(e164) ?? 0;
+    if (groupJid && Date.now() - last > 6 * 60 * 60_000) {
+      toldNotSetUp.set(e164, Date.now());
+      const line =
+        detectLocale(text) === 'ar'
+          ? 'هذا الرقم غير مربوط بمستخدم في النظام بعد، لذلك لا أستطيع الإجابة. يضيفه مدير النظام من: الإعدادات ← الإدارة ← واتساب.'
+          : 'This number is not linked to a user of the ERP yet, so I cannot answer it. An administrator adds it on Settings → Administration → WhatsApp.';
+      await send({ e164, groupJid }, { text: line }).catch(() => {
+        /* a courtesy that fails is not worth a retry */
+      });
+    }
     return;
   }
 
   const locale = detectLocale(text);
+
+  // The trigger and nothing after it: say how it is used, once, in both languages.
+  if (!text && !sentFile && !quoted) {
+    await answerWith(scope, send, {
+      sender,
+      e164,
+      groupJid,
+      inboundId,
+      text: `اكتب سؤالك بعد ${AI_TRIGGER} — مثلاً: ${AI_TRIGGER} شلون أضيف مورد جديد؟\nWrite your question after ${AI_TRIGGER} — for example: ${AI_TRIGGER} how do I add a supplier?`,
+      intent: 'hint',
+    });
+    return;
+  }
 
   /*
    * 2. WA-8 — a yes, to something he asked about.
@@ -506,32 +688,38 @@ async function handleInbound(
    * conversation.
    */
   const chat = groupJid ?? e164;
-  if (sentFile) {
+  const pictures: AskedPicture[] = [];
+  if (attached) {
     try {
       const buffer = (await downloadMediaMessage(
-        message,
+        source,
         'buffer',
         {},
         { logger: silent as never, reuploadRequest: reupload ?? (async (m: WAMessage) => m) },
       )) as Buffer;
       if (buffer.length > FILE_BYTES_CAP) {
         rememberFile(chat, {
-          fileName: sentFile.fileName,
+          fileName: attached.fileName,
           kind: 'other',
-          mimetype: sentFile.mimetype,
+          mimetype: attached.mimetype,
           bytes: buffer.length,
-          caption: sentFile.caption,
+          caption: attached.caption,
           text: '',
           note: `this file is ${Math.round(buffer.length / 1_000_000)} MB, too large for me to read here`,
           sheets: [],
           at: new Date().toISOString(),
         });
       } else {
+        // A picture is shown to him as a picture, beside the question.
+        const type = attached.mimetype.split(';')[0]!.trim().toLowerCase();
+        if (PICTURE_TYPES.includes(type) && buffer.length <= PICTURE_BYTES_CAP && pictures.length === 0) {
+          pictures.push({ mediaType: type as AskedPicture['mediaType'], base64: buffer.toString('base64') });
+        }
         const read = await extractSentFile({
           buffer,
-          fileName: sentFile.fileName,
-          mimetype: sentFile.mimetype,
-          caption: sentFile.caption,
+          fileName: attached.fileName,
+          mimetype: attached.mimetype,
+          caption: attached.caption,
         });
         rememberFile(chat, read);
         log(
@@ -540,13 +728,13 @@ async function handleInbound(
       }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      log(`inbound from ${e164}: file ${sentFile.fileName} could not be downloaded — ${detail}`);
+      log(`inbound from ${e164}: file ${attached.fileName} could not be downloaded — ${detail}`);
       rememberFile(chat, {
-        fileName: sentFile.fileName,
+        fileName: attached.fileName,
         kind: 'other',
-        mimetype: sentFile.mimetype,
+        mimetype: attached.mimetype,
         bytes: 0,
-        caption: sentFile.caption,
+        caption: attached.caption,
         text: '',
         note: `it could not be downloaded from WhatsApp (${detail.slice(0, 120)})`,
         sheets: [],
@@ -558,7 +746,15 @@ async function handleInbound(
   // The question as a person would have put it: what they typed, with the
   // file named in it — or, for a file sent with no words, one written for
   // them, because somebody putting a workbook in the group means "look".
-  const asked = sentFile ? questionForFiles(text, files.slice(0, 1)) : text;
+  let asked = attached && pictures.length === 0 ? questionForFiles(text, files.slice(0, 1)) : text;
+  if (pictures.length > 0) {
+    // A picture he can look at: no "its contents are in a tool" — it is in front of him.
+    asked = `${text || 'Look at this picture: say what it shows and what should be done about it.'}\n\n[A picture is attached to this message${quotedFile ? ', from the message they replied to' : ''}: look at it and read exactly what is written in it.]`;
+  }
+  if (quoted && quoted.text) {
+    const author = quoted.author ? people.find((member) => member.jids.includes(quoted.author!.replace(/:\d+@/, '@'))) : null;
+    asked = `[They are replying to this message from ${author?.name ?? 'somebody in the group'}:\n«${readTags(quoted.text, people).text.slice(0, 2000)}»]\n\n${asked || 'Explain this.'}`;
+  }
 
   const history = await withScope(scope, (tx) => wa.recentTurns(tx, { groupJid, e164 }));
 
@@ -576,7 +772,7 @@ async function handleInbound(
   let checked = false;
   const checking = setTimeout(() => {
     checked = true;
-    void send({ e164, ...(groupJid ? { groupJid } : {}) }, { text: checkingLine(locale) }).catch(() => {
+    void send({ e164, ...(groupJid ? { groupJid } : {}) }, { text: checkingLine(locale), quote: false }).catch(() => {
       /* a courtesy that fails is not the answer failing */
     });
   }, 6_000);
@@ -600,6 +796,9 @@ async function handleInbound(
                 history,
                 userName,
                 files,
+                chat,
+                ...(pictures.length > 0 ? { pictures } : {}),
+                ...(people.length > 0 ? { people: rosterForPrompt(people, { e164 }) } : {}),
                 // WA-8 — the capability IS the hook: a contact who may not
                 // act is given nowhere to put a proposal, and the tool says
                 // so rather than appearing to work.
@@ -623,7 +822,8 @@ async function handleInbound(
     log(`inbound from ${e164}: failed — ${detail}`);
     await withScope(scope, (tx) => wa.finishInbound(tx, inboundId, { status: 'failed', intent: null, errorMessage: detail }));
     try {
-      await send({ e164 }, { text: words(locale).error });
+      // Where the question was asked — the group, when it was asked there.
+      await send({ e164, ...(groupJid ? { groupJid } : {}) }, { text: words(locale).error });
     } catch {
       /* the failure is on the record; the apology may fail too */
     }
@@ -648,15 +848,70 @@ async function handleInbound(
     }),
   );
   try {
-    const { waMessageId } = await send({ e164, groupJid }, { text: reply.text, attachment: reply.attachment });
+    let waMessageId: string | null = null;
+    if (reply.images.length === 0) {
+      ({ waMessageId } = await send({ e164, groupJid }, { text: reply.text, attachment: reply.attachment }));
+    } else {
+      /*
+       * A walk-through: step, picture, step, picture — each picture sent with
+       * the words of its own step under it, in the order he placed them. The
+       * whole answer is the one row recorded above; each picture is a row of
+       * its own. A picture that fails to send does not undo the answer; words
+       * that fail do.
+       */
+      for (const part of reply.parts) {
+        if (!part.image) {
+          const sent = await send({ e164, groupJid }, { text: part.text });
+          waMessageId ??= sent.waMessageId;
+          continue;
+        }
+        const picture = part.image;
+        const pictureId = await withScope(scope, (tx) =>
+          wa.recordOutbound(tx, {
+            e164,
+            groupJid,
+            body: part.text,
+            sender,
+            attachment: { name: picture.fileName, type: picture.contentType, bytes: picture.body.length },
+            inReplyTo: inboundId,
+            intent: 'picture',
+          }),
+        );
+        try {
+          const sent = await send({ e164, groupJid }, { text: part.text, attachment: picture });
+          waMessageId ??= sent.waMessageId;
+          await withScope(scope, (tx) => wa.markOutbound(tx, pictureId, { status: 'sent', waMessageId: sent.waMessageId }));
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          await withScope(scope, (tx) => wa.markOutbound(tx, pictureId, { status: 'failed', errorMessage: detail }));
+          log(`inbound from ${e164}: picture ${picture.fileName} — send failed: ${detail}`);
+          // The step's words still go, without their picture.
+          const sent = await send({ e164, groupJid }, { text: part.text });
+          waMessageId ??= sent.waMessageId;
+        }
+      }
+      if (reply.attachment) {
+        const sent = await send({ e164, groupJid }, { text: reply.attachment.fileName, attachment: reply.attachment });
+        waMessageId ??= sent.waMessageId;
+      }
+    }
     await withScope(scope, async (tx) => {
       await wa.markOutbound(tx, outId, { status: 'sent', waMessageId });
       await wa.finishInbound(tx, inboundId, { status: 'answered', intent: reply.intent.kind, detail: reply.detail });
       await wa.auditAnswer(tx, reply, { inboundId, question: text });
     });
     log(
-      `inbound from ${e164}: ${reply.intent.kind} answered${reply.attachment ? ` + ${reply.attachment.fileName}` : ''}${checked ? ' (said he was checking first)' : ''}`,
+      `inbound from ${e164}: ${reply.intent.kind} answered${reply.attachment ? ` + ${reply.attachment.fileName}` : ''}${reply.images.length > 0 ? ` + ${reply.images.length} picture(s)` : ''}${checked ? ' (said he was checking first)' : ''}`,
     );
+    // What he did to get there, for whoever reads this log to improve him: the
+    // look-ups in order with their time, and what a refused one said. Never
+    // the question or the answer — those are in the message log, under its
+    // own retention.
+    const trace = (reply.detail.trace as ReadonlyArray<{ tool: string; ms: number; ok: boolean; said?: string }> | undefined) ?? [];
+    if (trace.length > 0) {
+      log(`inbound from ${e164}: ${trace.map((step) => `${step.tool} ${step.ok ? '' : 'REFUSED '}${Math.round(step.ms)}ms`).join(' → ')}`);
+      for (const step of trace.filter((one) => !one.ok)) log(`inbound from ${e164}: ${step.tool} was refused — ${(step.said ?? '').replace(/\s+/g, ' ').slice(0, 300)}`);
+    }
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     await withScope(scope, async (tx) => {
@@ -750,7 +1005,7 @@ async function handleCommand(
               L(`Waiting for you (${waiting.length}):`, `بانتظار موافقتك (${waiting.length}):`),
               ...waiting.slice(0, 15).map((row) => `• *${row.documentNumber}* — ${row.documentType} · ${row.submittedByName ?? ''}`),
               '',
-              L('Reply: approve <number>  ·  reject <number> <reason>', 'أرسل: موافقة <الرقم>  ·  رفض <الرقم> <السبب>'),
+              L(`Reply: ${AI_TRIGGER} approve <number>  ·  ${AI_TRIGGER} reject <number> <reason>`, `أرسل: ${AI_TRIGGER} موافقة <الرقم>  ·  ${AI_TRIGGER} رفض <الرقم> <السبب>`),
             ].join('\n');
     } else if (command.kind === 'confirm') {
       const done = await withScope(scope, (tx) => actions.confirm(tx, { sender, code: command.code }));
@@ -785,7 +1040,7 @@ async function handleCommand(
           what,
           `${asked.waiting.documentType} · ${asked.waiting.submittedByName ?? ''}`,
           '',
-          L(`Reply:  confirm ${asked.code}`, `أرسل:  تأكيد ${asked.code}`),
+          L(`Reply:  ${AI_TRIGGER} confirm ${asked.code}`, `أرسل:  ${AI_TRIGGER} تأكيد ${asked.code}`),
           L(`The code is good for ${actions.CODE_MINUTES} minutes.`, `الرمز صالح لمدة ${actions.CODE_MINUTES} دقيقة.`),
         ].join('\n');
       }
@@ -822,13 +1077,19 @@ async function handleCommand(
 // ---------------------------------------------------------------------------
 
 async function sendDigest(scope: RequestScope, send: wa.Transport, settings: Awaited<ReturnType<typeof wa.settings>>): Promise<void> {
+  // In group-only mode nothing is said unasked, and a digest nobody asked for
+  // is exactly that. "!ai today's summary" gives the same figures on request.
+  if (settings.groupOnly) return;
   const lastSentDay = await withScope(scope, (tx) => wa.digestLastSentDay(tx));
   const { due, day } = digestDue({ digestHour: settings.digestHour, lastSentDay, at: new Date() });
   if (!due) return;
   // Marked first: a digest that fails to send is retried tomorrow, not every poll.
   await withScope(scope, (tx) => wa.markDigestSent(tx, day));
   const recipients = await withScope(scope, (tx) => wa.digestRecipients(tx));
-  for (const recipient of recipients) {
+  // Group only (2026-10-04): with `group_only` on, the digest is the group's
+  // one copy and nobody is written to on their own.
+  const groupOnly = settings.groupOnly;
+  for (const recipient of groupOnly ? [] : recipients) {
     try {
       const reply = await wa.answer({ userId: recipient.userId, text: 'summary', settings, locale: settings.digestLocale });
       const outId = await withScope(scope, (tx) => wa.recordOutbound(tx, { e164: recipient.e164, body: reply.text, sender: recipient, intent: 'digest', detail: reply.detail }));
@@ -869,51 +1130,6 @@ async function sendDigest(scope: RequestScope, send: wa.Transport, settings: Awa
   log(`digest for ${day}: ${recipients.length} recipient(s)`);
 }
 
-// ---------------------------------------------------------------------------
-// The greeting on connect
-// ---------------------------------------------------------------------------
-
-/**
- * A reconnect is not news. Baileys drops and resumes a socket routinely — a
- * 515 on first pair, a network blink, a server restart — and a greeting on
- * every one of those would be the bot talking over the people in the group.
- * One greeting, then quiet for this long however many times it reconnects.
- */
-const GREETING_QUIET_MS = 30 * 60_000;
-let lastGreetingAt = 0;
-
-/**
- * Says hello in the group when the bridge comes up, so the room can see it is
- * listening.
- *
- * One line, as a colleague arriving would, and a different one each time —
- * the words are in `domain/whatsapp`, with the reasoning for them.
- */
-async function greet(scope: RequestScope, send: wa.Transport, botE164: string | null): Promise<void> {
-  const settings = await withScope(scope, (tx) => wa.settings(tx));
-  if (!settings.groupJid) return;
-  // The log's `e164` is a phone number by CHECK constraint, and a greeting is
-  // the bot speaking: its own number is the honest answer. Without one (an
-  // odd pairing) the words still go out and only the log row is skipped.
-  if (Date.now() - lastGreetingAt < GREETING_QUIET_MS) return;
-  lastGreetingAt = Date.now();
-
-  const text = greetingLine(settings.digestLocale);
-
-  try {
-    const outId = botE164
-      ? await withScope(scope, (tx) =>
-          wa.recordOutbound(tx, { e164: botE164, groupJid: settings.groupJid, body: text, intent: 'greeting' }),
-        )
-      : null;
-    const { waMessageId } = await send({ e164: botE164 ?? '', groupJid: settings.groupJid }, { text });
-    if (outId !== null) await withScope(scope, (tx) => wa.markOutbound(tx, outId, { status: 'sent', waMessageId }));
-    log('greeting posted to the group');
-  } catch (error) {
-    log(`greeting failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
 /**
  * `--list-groups` — every group the bot has been added to, with its id.
  *
@@ -924,14 +1140,32 @@ async function greet(scope: RequestScope, send: wa.Transport, botE164: string | 
  */
 async function listGroups(socket: WASocket): Promise<void> {
   const all = await socket.groupFetchAllParticipating();
-  const rows = Object.values(all);
+  // The account is a person's own, so its other groups are nobody's business
+  // here: name the group (`--list-groups "ERP trial"`) and only it is shown.
+  const wanted = (process.argv[process.argv.indexOf('--list-groups') + 1] ?? '').trim().toLowerCase();
+  const named = wanted && !wanted.startsWith('--') ? wanted : '';
+  const rows = Object.values(all).filter((group) => !named || (group.subject ?? '').toLowerCase().includes(named));
+  if (named && rows.length === 0) {
+    log(`no group whose name contains "${named}" (the account is in ${Object.keys(all).length} group(s))`);
+    return;
+  }
   if (rows.length === 0) {
     log('the bot is in no groups yet — add it to the group, then run this again');
     return;
   }
   log(`${rows.length} group(s):`);
+  const book = knownNames();
   for (const group of rows) {
     console.log(`  ${group.id}   ${group.subject}   (${group.participants?.length ?? 0} members)`);
+    for (const raw of group.participants ?? []) {
+      const member = raw as unknown as Record<string, unknown>;
+      const e164 = [member.id, member.phoneNumber, member.jid]
+        .filter((value): value is string => typeof value === 'string' && value.includes('@'))
+        .map((value) => jidToE164(jidNormalizedUser(value)))
+        .find((value): value is string => Boolean(value));
+      const shown = typeof member.notify === 'string' ? member.notify : typeof member.name === 'string' ? member.name : null;
+      console.log(`      ${e164 ?? String(member.id ?? '?')}   ${(e164 ? nameOf(book, e164) : null) ?? shown ?? ''}`);
+    }
   }
   console.log('\nRegister the one you want in Administration → WhatsApp → the group id field.');
 }
@@ -999,9 +1233,33 @@ async function main(): Promise<void> {
   );
 
   let socket: WASocket | null = null;
+  /**
+   * Is the link to WhatsApp actually open? A socket exists from the first
+   * attempt, paired or not — while it shows a QR code it is not a connection.
+   * The minute's heartbeat used to say "connected" whenever a socket existed,
+   * so the Bridge window read Connected on an install nobody had paired, and
+   * the outbox was run against a socket that could send nothing (2026-10-04).
+   */
+  let linked = false;
   let stopping = false;
-  const send = transportFor(() => socket, () => settings.throttlePerMinute);
+  const send = transportFor(() => socket, () => settings);
   wa.registerWhatsappSender(send);
+
+  // The one group's members, read from WhatsApp when somebody calls him there.
+  const members = async (groupJid: string): Promise<readonly Member[]> => {
+    if (roster && roster.jid === groupJid && Date.now() - roster.at < ROSTER_MINUTES * 60_000) return roster.members;
+    if (!socket || groupJid !== settings.groupJid) return roster?.jid === groupJid ? roster.members : [];
+    const meta = await socket.groupMetadata(groupJid);
+    const users = await withScope(scope, (tx) => wa.contactPeople(tx));
+    const book = knownNames();
+    const names = new Map<string, string>();
+    for (const e164 of Object.keys(book)) {
+      const name = nameOf(book, e164);
+      if (name) names.set(e164, name);
+    }
+    roster = { at: Date.now(), jid: groupJid, members: rosterFrom((meta.participants ?? []) as unknown as Participant[], { users, names }) };
+    return roster.members;
+  };
 
   const heartbeat = (state: string) =>
     withScope(scope, (tx) => wa.heartbeat(tx, { state, me: socket?.user?.id ? jidToE164(jidNormalizedUser(socket.user.id)) : null })).catch((e) => log(`heartbeat failed: ${e}`));
@@ -1032,18 +1290,27 @@ async function main(): Promise<void> {
       saveCreds().catch((e) => log(`saving credentials failed: ${e}`));
     });
 
+    // The contact list comes with the link, and again whenever a name changes.
+    socket.ev.on('contacts.upsert', (contacts) => noteContacts(contacts));
+    socket.ev.on('contacts.update', (updates) => noteContacts(updates));
+    socket.ev.on('messaging-history.set', (history) => noteContacts(history.contacts ?? []));
+
     socket.ev.on('connection.update', (update) => {
       const { connection, lastDisconnect, qr } = update;
       if (qr) {
         log('scan this QR code with the company phone (WhatsApp → Linked devices → Link a device):');
         qrcode.generate(qr, { small: true });
+        linked = false;
         void heartbeat('waiting for QR scan');
       }
       if (connection === 'connecting') log('socket connecting…');
       if (connection === 'open') {
         log(`connected as ${socket?.user?.id ?? '?'}`);
+        linked = true;
         void heartbeat('connected');
-        if (!LIST_GROUPS) void greet(scope, send, jidToE164(jidNormalizedUser(socket?.user?.id ?? '')));
+        // Nothing is said on connect (2026-10-04, by direction: he speaks only
+        // when a message begins with the trigger). It used to post a greeting
+        // here; a bridge that restarts is not news to the people in the group.
         // `--list-groups` is a question, not a service: it answers and leaves.
         if (LIST_GROUPS && socket) {
           const live = socket;
@@ -1067,6 +1334,7 @@ async function main(): Promise<void> {
         const code = (lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
         const loggedOut = code === DisconnectReason.loggedOut;
         log(`connection closed (${code ?? 'no code'})${loggedOut ? ' — logged out; run with --reset-pairing and scan again' : ', reconnecting in 5s'}`);
+        linked = false;
         void heartbeat(loggedOut ? 'logged out' : 'reconnecting');
         socket = null;
         if (!loggedOut && !stopping) setTimeout(() => connect().catch((e) => log(`reconnect failed: ${e}`)), 5000);
@@ -1078,7 +1346,16 @@ async function main(): Promise<void> {
       for (const message of messages) {
         if (message.key.fromMe && !ANSWER_SELF) continue;
         const ownE164 = socket?.user?.id ? jidToE164(jidNormalizedUser(socket.user.id)) : null;
-        handleInbound(scope, send, router, message, agent ?? undefined, ownE164).catch((e) => log(`inbound handling failed: ${e}`));
+        // Inside `called` — `handleInbound` returns before it reads anything
+        // unless the message begins with the trigger, so what it sends is
+        // always an answer to somebody who called.
+        const ownJids = [socket?.user?.id, (socket?.user as { lid?: string } | undefined)?.lid]
+          .filter((value): value is string => typeof value === 'string' && value !== '')
+          .map((value) => jidNormalizedUser(value));
+        const selfChat = isSelfChat({ enabled: SELF_CHAT, fromMe: message.key.fromMe, remoteJid: message.key.remoteJid, ownJids });
+        called
+          .run({ quoted: message, used: false, self: selfChat }, () => handleInbound(scope, send, router, message, agent ?? undefined, ownE164, members, selfChat))
+          .catch((e) => log(`inbound handling failed: ${e}`));
       }
     });
   };
@@ -1091,12 +1368,12 @@ async function main(): Promise<void> {
     if (stopping) return;
     try {
       settings = await withScope(scope, (tx) => wa.settings(tx));
-      if (socket) {
+      if (socket && linked) {
         const result = await runner.runOnce(scope, { channels: ['whatsapp'] });
         const r = result.channels.whatsapp;
         if (result.dispatched || (r && (r.sent || r.failed || r.suppressed))) log(runner.describe(result));
       }
-      if (socket) await sendDigest(scope, send, settings);
+      if (socket && linked) await sendDigest(scope, send, settings);
       if (Date.now() - lastRedaction > 3_600_000) {
         lastRedaction = Date.now();
         const blanked = await withScope(scope, (tx) => wa.redactExpired(tx, settings.retentionDays));
@@ -1107,7 +1384,7 @@ async function main(): Promise<void> {
     }
   };
   const poll = setInterval(() => void tick(), POLL_SECONDS * 1000);
-  const beat = setInterval(() => void heartbeat(socket ? 'connected' : 'disconnected'), 60_000);
+  const beat = setInterval(() => void heartbeat(linked ? 'connected' : socket ? 'waiting for QR scan' : 'disconnected'), 60_000);
   await tick();
 
   const stop = async () => {

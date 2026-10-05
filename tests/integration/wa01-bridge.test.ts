@@ -41,13 +41,13 @@ async function createUser(roles: string, name = 'Test User'): Promise<ActorConte
 const scope = (ctx: ActorContext) => ({ userId: ctx.principal.userId, branchCode: BAGHDAD });
 const systemScope = () => ({ userId: admin.principal.userId, branchCode: '', isSuperUser: true });
 
-type Sent = { e164: string; text: string; attachment: string | null };
+type Sent = { e164: string; groupJid: string | null; text: string; attachment: string | null };
 let sent: Sent[];
 let transportError: string | null;
 
 const transport: wa.Transport = async (to, message) => {
   if (transportError) throw new Error(transportError);
-  sent.push({ e164: to.e164, text: message.text, attachment: message.attachment?.fileName ?? null });
+  sent.push({ e164: to.e164, groupJid: to.groupJid ?? null, text: message.text, attachment: message.attachment?.fileName ?? null });
   return { waMessageId: `WA-${sent.length}` };
 };
 
@@ -74,6 +74,9 @@ beforeEach(async () => {
   sent = [];
   transportError = null;
   await ownerPool.query(`update notification_rule set channels = ARRAY['in_app','email','whatsapp'] where code = 'journal_awaiting_approval'`);
+  // Most of this file is about a person's own copy, which is the arrangement
+  // with `group_only` off; the group-only tests switch it back on themselves.
+  await ownerPool.query(`update whatsapp_setting set value = 'off' where key = 'group_only'`);
 });
 
 afterEach(() => {
@@ -131,6 +134,8 @@ describe('W1 · wa01-outbox — the whatsapp channel delivers, fails with its re
     await withScope(scope(admin), (tx) => wa.saveSetting(tx, admin, 'group_jid', '120363000000000001@g.us'));
     await withScope(scope(admin), (tx) => wa.saveSetting(tx, admin, 'group_notifications', 'true'));
 
+    // With `group_only` off: each person their own copy, and the group one.
+
     await withScope(scope(officer), (tx) => notifications.raise(tx, EVENT));
     wa.registerWhatsappSender(transport);
     const result = await withScope(systemScope(), (tx) => notifications.deliverChannel(tx, 'whatsapp'));
@@ -143,6 +148,70 @@ describe('W1 · wa01-outbox — the whatsapp channel delivers, fails with its re
       { intent: 'notification', n: 2 },
       { intent: 'notification.group', n: 1 },
     ]);
+  });
+
+  it('group only — the default: nothing is said unasked, not to a private chat and not to the group', async () => {
+    // 2026-10-04, by direction: "it should only send it to the group … never
+    // reply to personal messages … it's private, just for one group" — and
+    // then: "shouldn't send any messages until called, never ever unless !ai".
+    // So even with the group's copy switched on, a notification is not posted.
+    for (const person of [manager, secondManager]) {
+      await withScope(scope(admin), (tx) =>
+        wa.saveContact(tx, admin, {
+          userId: person.principal.userId,
+          e164: person === manager ? '+9647701112233' : '+9647701112244',
+          allowNotifications: true,
+          allowQueries: false,
+          allowDigest: false,
+        }),
+      );
+    }
+    await withScope(scope(admin), (tx) => wa.saveSetting(tx, admin, 'group_jid', '120363000000000001@g.us'));
+    await withScope(scope(admin), (tx) => wa.saveSetting(tx, admin, 'group_notifications', 'true'));
+    await withScope(scope(admin), (tx) => wa.saveSetting(tx, admin, 'group_only', 'true'));
+
+    await withScope(scope(officer), (tx) => notifications.raise(tx, EVENT));
+    wa.registerWhatsappSender(transport);
+    const result = await withScope(systemScope(), (tx) => notifications.deliverChannel(tx, 'whatsapp'));
+    expect(result).toMatchObject({ sent: 0, failed: 0 });
+
+    expect(sent).toHaveLength(0);
+    const { rows } = await ownerPool.query(`select count(*)::int as n from whatsapp_message where direction = 'out'`);
+    expect(rows[0].n).toBe(0);
+    // Suppressed, with the reason — the person still has it in the application.
+    const mine = (await deliveries('whatsapp')).filter((row) => [manager.principal.userId, secondManager.principal.userId].includes(row.recipient_user_id as string));
+    expect(mine.length).toBe(2);
+    for (const row of mine) expect(row).toMatchObject({ status: 'suppressed' });
+  });
+
+  it('group only, with notifications to the group switched off: nothing is sent, and the delivery says why', async () => {
+    await withScope(scope(admin), (tx) =>
+      wa.saveContact(tx, admin, { userId: manager.principal.userId, e164: '+9647701112233', allowNotifications: true, allowQueries: false, allowDigest: false }),
+    );
+    await withScope(scope(admin), (tx) => wa.saveSetting(tx, admin, 'group_only', 'true'));
+    await withScope(scope(admin), (tx) => wa.saveSetting(tx, admin, 'group_jid', '120363000000000001@g.us'));
+    await withScope(scope(admin), (tx) => wa.saveSetting(tx, admin, 'group_notifications', 'false'));
+
+    await withScope(scope(officer), (tx) => notifications.raise(tx, EVENT));
+    wa.registerWhatsappSender(transport);
+    const result = await withScope(systemScope(), (tx) => notifications.deliverChannel(tx, 'whatsapp'));
+    expect(result).toMatchObject({ sent: 0, failed: 0 });
+    expect(sent).toHaveLength(0);
+    expect((await deliveries('whatsapp')).find((row) => row.recipient_user_id === manager.principal.userId)).toMatchObject({ status: 'suppressed' });
+  });
+
+  it('group only, with no group registered yet: nothing is sent to anybody', async () => {
+    await withScope(scope(admin), (tx) =>
+      wa.saveContact(tx, admin, { userId: manager.principal.userId, e164: '+9647701112233', allowNotifications: true, allowQueries: false, allowDigest: false }),
+    );
+    await withScope(scope(admin), (tx) => wa.saveSetting(tx, admin, 'group_only', 'true'));
+
+    await withScope(scope(officer), (tx) => notifications.raise(tx, EVENT));
+    wa.registerWhatsappSender(transport);
+    const result = await withScope(systemScope(), (tx) => notifications.deliverChannel(tx, 'whatsapp'));
+    expect(result).toMatchObject({ sent: 0, failed: 0 });
+    expect(sent).toHaveLength(0);
+    expect((await deliveries('whatsapp')).find((row) => row.recipient_user_id === manager.principal.userId)).toMatchObject({ status: 'suppressed' });
   });
 
   it('copies the next day’s notice into the group again', async () => {
@@ -300,30 +369,34 @@ describe('W2 · wa01-allowlist — silence for anyone not on the list', () => {
     expect(wa.mayAsk(sender)).toEqual({ ok: true });
   });
 
-  it('mayAsk names what is missing: unlisted, deactivated contact, deactivated user, no CEO role, queries off', async () => {
+  it('mayAsk names what is missing: unlisted, deactivated contact, deactivated user, queries off — and no longer asks for the CEO role', async () => {
     expect(wa.mayAsk(null)).toEqual({ ok: false, reason: 'unlisted number' });
     await withScope(scope(admin), (tx) =>
       wa.saveContact(tx, admin, { userId: manager.principal.userId, e164: '+9647701112233', allowNotifications: true, allowQueries: false, allowDigest: false }),
     );
     const managerContact = (await withScope(scope(admin), (tx) => wa.resolveNumber(tx, '+9647701112233')))!;
-    expect(wa.mayAsk(managerContact)).toEqual({ ok: false, reason: 'user does not hold the ceo role' });
-    expect(wa.mayAsk({ ...managerContact, isCeo: true })).toEqual({ ok: false, reason: 'queries not allowed for this contact' });
+    expect(wa.mayAsk(managerContact)).toEqual({ ok: false, reason: 'queries not allowed for this contact' });
+    // 2026-10-04, by direction — "make it available for all users": the role is not a condition.
+    expect(managerContact.isCeo).toBe(false);
+    expect(wa.mayAsk({ ...managerContact, allowQueries: true })).toEqual({ ok: true });
     expect(wa.mayAsk({ ...managerContact, active: false })).toEqual({ ok: false, reason: 'contact deactivated' });
     expect(wa.mayAsk({ ...managerContact, userActive: false })).toEqual({ ok: false, reason: 'user deactivated' });
   });
 
-  it('D-WA-3 — allow_queries cannot be given to a user who does not hold the CEO role', async () => {
-    expect(
-      await rejection(
-        withScope(scope(admin), (tx) =>
-          wa.saveContact(tx, admin, { userId: manager.principal.userId, e164: '+9647701112233', allowNotifications: true, allowQueries: true, allowDigest: false }),
-        ),
-      ),
-    ).toMatch(/only a user holding the ceo role/);
+  it('allow_queries may be given to any active user (D-WA-3 lifted, 2026-10-04)', async () => {
+    await withScope(scope(admin), (tx) =>
+      wa.saveContact(tx, admin, { userId: manager.principal.userId, e164: '+9647701112233', allowNotifications: true, allowQueries: true, allowDigest: false, allowActions: true }),
+    );
+    const sender = (await withScope(scope(admin), (tx) => wa.resolveNumber(tx, '+9647701112233')))!;
+    expect(sender).toMatchObject({ userId: manager.principal.userId, isCeo: false, allowQueries: true, allowActions: true });
+    expect(wa.mayAsk(sender)).toEqual({ ok: true });
+    expect(wa.mayAct(sender)).toEqual({ ok: true });
   });
 
-  it('answer() itself refuses a user without the CEO role, whatever the bridge was told', async () => {
-    expect(await rejection(wa.answer({ userId: manager.principal.userId, text: 'help' }))).toMatch(/does not hold the ceo role/);
+  it('answer() answers anybody who is active, as themselves — the manager is read as the manager', async () => {
+    const asManager = await wa.answer({ userId: manager.principal.userId, text: 'help' });
+    expect(asManager.intent).toEqual({ kind: 'help' });
+    expect(asManager.readAs.userId).toBe(manager.principal.userId);
     const reply = await wa.answer({ userId: ceo.principal.userId, text: 'help' });
     expect(reply.intent).toEqual({ kind: 'help' });
     expect(reply.text).toContain('read as The CEO');

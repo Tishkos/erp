@@ -3,53 +3,17 @@
 import { redirect } from 'next/navigation';
 import { runAdminAndReturn, text } from '@/server/admin-action';
 import { registerAllRecords } from '@/server/records';
-import { parseQuantity } from '@/server/domain/uom';
 import * as attachments from '@/server/services/attachments';
 import * as events from '@/server/services/payable-events';
 import * as payables from '@/server/services/payables';
 import * as shipments from '@/server/services/shipments';
+import { blContainers, containerRows, quantity } from './bl-form';
 
 /** Shipments & containers — REQ-AP-001 §17, §18, §21.9. Every verb is the service's. */
 const BLS = '/payables/shipments';
 const CONTAINERS = '/payables/containers';
 const blRecord = (blNo: string) => `${BLS}/${encodeURIComponent(blNo)}`;
 const containerRecord = (containerNo: string) => `${CONTAINERS}/${encodeURIComponent(containerNo)}`;
-
-const quantity = (value: string) => {
-  const cleaned = value.replace(/[,\s]/g, '');
-  if (!cleaned) return 0n;
-  if (!/^\d+(\.\d{1,6})?$/.test(cleaned)) throw new Error(`"${value}" is not a quantity.`);
-  return parseQuantity(cleaned);
-};
-
-/**
- * IM2 — the B/L's containers table: a row per container (number, size/type,
- * seal) and per model what it carries; a cell left empty is not typed.
- */
-function containerRows(formData: FormData): shipments.ContainerRowInput[] {
-  const rowCount = Number(text(formData, 'row_count')) || 0;
-  const modelCount = Number(text(formData, 'model_count')) || 0;
-  const models = Array.from({ length: modelCount }, (_, m) => text(formData, `model_${m}`));
-  const rows: shipments.ContainerRowInput[] = [];
-  for (let index = 0; index < rowCount; index += 1) {
-    const containerNo = text(formData, `container_no_${index}`).trim();
-    const quantities: Record<string, bigint | null> = {};
-    let any = false;
-    for (const [m, key] of models.entries()) {
-      const raw = text(formData, `qty_${index}_${m}`).trim();
-      quantities[key] = raw ? quantity(raw) : null;
-      if (raw) any = true;
-    }
-    if (!containerNo && !any && !text(formData, `seal_no_${index}`).trim()) continue;
-    rows.push({
-      containerNo,
-      sizeType: text(formData, `size_type_${index}`) || null,
-      sealNo: text(formData, `seal_no_${index}`) || null,
-      quantities,
-    });
-  }
-  return rows;
-}
 
 export async function createBlAction(formData: FormData): Promise<void> {
   const back = text(formData, 'back');
@@ -67,7 +31,8 @@ export async function createBlAction(formData: FormData): Promise<void> {
         portOfLoading: text(formData, 'port_of_loading') || null,
         portOfDischargeCode: text(formData, 'port_of_discharge') || null,
         eta: text(formData, 'eta') || null,
-        containerRows: containerRows(formData),
+        // The table, or the list screen's pasted box — whichever this form has.
+        ...blContainers(formData),
       });
     },
     (value) => {

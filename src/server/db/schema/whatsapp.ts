@@ -33,9 +33,9 @@ export const whatsappContact = pgTable(
     /** Receives the notifications the rules send over the `whatsapp` channel. */
     allowNotifications: boolean('allow_notifications').notNull().default(true),
     /**
-     * May ask questions. Granted only to a user holding the `ceo` role
-     * (D-WA-3 as ratified: "only ceo role"); the service refuses otherwise,
-     * and the bridge checks the role again on every message.
+     * May ask questions. Any active user may be given it (2026-10-04; until
+     * then only a holder of the `ceo` role, D-WA-3). The bridge checks the
+     * flag on every message, and every answer is read as the asker.
      */
     allowQueries: boolean('allow_queries').notNull().default(false),
     /** Receives the morning digest (WA-4). */

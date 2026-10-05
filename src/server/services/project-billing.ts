@@ -832,7 +832,7 @@ export async function missingRecognition(tx: Tx, periodEnd: string): Promise<{ r
       select p.code from project p
         join project_type t on t.code = p.type_code and t.kind = 'customer'
        where p.status in ('active', 'on_hold', 'closing', 'closed')
-         and (p.closed_at is null or p.closed_at::date > ${periodEnd}::date)
+         and (p.closed_at is null or (p.closed_at at time zone 'Asia/Baghdad')::date > ${periodEnd}::date)
          and (exists (select 1 from project_cost k where k.project_code = p.code and k.incurred_on <= ${periodEnd}::date)
               or exists (select 1 from project_certificate c where c.project_code = p.code and c.status = 'posted' and c.certified_on <= ${periodEnd}::date))
          and not exists (select 1 from project_recognition r where r.project_code = p.code and r.period_end = ${periodEnd}::date)

@@ -35,6 +35,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { MenuItem, MenuSection } from '@domain/menu';
+import { MODULES, type ModuleKey } from '@domain/modules';
 import {
   APPEARANCE_PRESETS,
   APPEARANCE_PRESET_SETTINGS,
@@ -48,7 +49,7 @@ import {
   type AppearancePreset,
   type UserAppearanceSettings,
 } from '@domain/appearance';
-import { routeFor } from '@domain/screens';
+import { isDelivered, routeFor } from '@domain/screens';
 import { saveMyAppearanceSettings } from '@/app/(app)/appearance-actions';
 import { Button, Panel } from '@/components/ui';
 /*
@@ -65,22 +66,6 @@ import { GlobalSearch } from './global-search';
 import { ChatCount, ChatGlyph, ChatPopover, useChatLabel } from './chat/chat-header';
 import { BellCount, BellGlyph, BellPopover, useBellLabel } from './notifications/notification-bell';
 import { switchBranch } from '@/app/(app)/actions';
-
-type ModuleKey =
-  | 'dashboard'
-  | 'accounting'
-  | 'sales'
-  | 'payables'
-  | 'logistics'
-  | 'money_transfer'
-  | 'crm'
-  | 'projects'
-  | 'inventory'
-  | 'hr'
-  | 'reports'
-  | 'documents'
-  | 'monitoring'
-  | 'settings';
 
 type UtilityPanel = 'notifications' | 'messages' | 'user';
 
@@ -146,63 +131,29 @@ interface AppearancePreferences {
 type PreferenceName = keyof AppearancePreferences;
 type PreferenceValue = AppearancePreferences[PreferenceName];
 
-const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
-  { key: 'dashboard', icon: LayoutDashboard, sectionKeys: ['home'] },
-  {
-    key: 'accounting',
-    icon: Calculator,
-    // The Accounting navbar (by direction, 2026-10-04): General Ledger, then
-    // Treasury & Banking, then Master Data & Configuration in its four
-    // headings. The sections after them have no built screen yet, so they
-    // draw nothing until one is delivered.
-    sectionKeys: [
-      'finance_gl',
-      // finance_ap merged into the Payables module (REQ-AP-001 §21.1).
-      'treasury',
-      'master_data',
-      'master_banking',
-      'master_organization',
-      'master_inventory',
-      'finance_ar',
-      'fixed_assets',
-      'budgeting',
-      'investments',
-    ],
-  },
-  // Selling and buying are their own work, with their own screens and their
-  // own people. They used to sit inside Accounting because they end in a
-  // receivable and a payable — but that is where their *postings* go, not
-  // where the work happens, and a salesperson opening Accounting to reach
-  // Customers had to read past the general ledger to find them.
-  { key: 'sales', icon: ShoppingCart, sectionKeys: ['sales'] },
-  // Purchasing became Payables — one module for everything owed (REQ-AP-001 D7).
-  // Three headings (2026-10-04): purchasing & invoices, supplier payments &
-  // credits, supplier balances. Its settings and sheet migration are
-  // Administration's; the supplier master heads Supplier Balances (by
-  // direction, 2026-10-04), as Customers heads Sales & Receivables.
-  { key: 'payables', icon: ShoppingBag, sectionKeys: ['payables', 'payables_payments', 'payables_suppliers'] },
-  // Everything logistics in the system (by direction, 2026-10-02) — the
-  // owner's four headings (REQ-LOG-001). The client jobs (`logistics`) are
-  // out of the dropdown until they have a screen (Q3).
-  {
-    key: 'logistics',
-    icon: Truck,
-    sectionKeys: ['logistics_customs', 'logistics_shipping', 'logistics_in_transit', 'logistics_landed_costs'],
-  },
-  { key: 'money_transfer', icon: ArrowLeftRight, sectionKeys: ['money_transfer'] },
-  { key: 'crm', icon: Handshake, sectionKeys: ['crm'] },
-  { key: 'projects', icon: FolderKanban, sectionKeys: ['projects'] },
-  { key: 'inventory', icon: Boxes, sectionKeys: ['inventory'] },
-  { key: 'hr', icon: Users, sectionKeys: ['hr_payroll'] },
-  { key: 'documents', icon: Files, sectionKeys: ['documents'] },
-  { key: 'monitoring', icon: Activity, sectionKeys: ['monitoring'] },
-  { key: 'reports', icon: BarChart3, sectionKeys: ['reports'] },
-  {
-    key: 'settings',
-    icon: Settings,
-    sectionKeys: ['administration', 'integrations'],
-  },
-] as const;
+/** Each module's icon; which headings it opens is `domain/modules.ts`, which Noah reads too. */
+const MODULE_ICONS: Readonly<Record<ModuleKey, LucideIcon>> = {
+  dashboard: LayoutDashboard,
+  accounting: Calculator,
+  sales: ShoppingCart,
+  payables: ShoppingBag,
+  logistics: Truck,
+  money_transfer: ArrowLeftRight,
+  crm: Handshake,
+  projects: FolderKanban,
+  inventory: Boxes,
+  hr: Users,
+  documents: Files,
+  monitoring: Activity,
+  reports: BarChart3,
+  settings: Settings,
+};
+
+const MODULE_DEFINITIONS: readonly ModuleDefinition[] = MODULES.map((module) => ({
+  key: module.key,
+  icon: MODULE_ICONS[module.key],
+  sectionKeys: module.sectionKeys,
+}));
 
 const DEFAULT_APPEARANCE: AppearancePreferences = {
   theme: 'light',
@@ -393,7 +344,11 @@ function ModuleContents({
               // tree says which pages are previews without refusing to open
               // them — which is what it used to do, for 176 of 218 items.
               const href = routeFor(item, section.key);
-              const preview = item.href === null;
+              // Unbuilt means not delivered — not "its address is derived".
+              // Sales Invoices, Customer Receipts and every other built
+              // screen whose route comes from its key were drawn grey with
+              // "Not yet built" on them (found 2026-10-04).
+              const preview = !isDelivered(href);
               return (
                 <li className="erp-module-section__item" key={item.key}>
                   <Link
