@@ -74,6 +74,9 @@ test.describe('the Operations Build screens open', () => {
     await page.goto('/inventory/fifo-valuation');
 
     await expect(page.getByRole('heading', { name: 'Warehouses Report' })).toBeVisible();
+    // The report proper: a "By warehouse" summary sits above it (2026-10-04)
+    // and repeats the warehouse columns.
+    const report = page.getByRole('table').last();
     for (const column of [
       'Item Name',
       'Item Code',
@@ -84,7 +87,7 @@ test.describe('the Operations Build screens open', () => {
       // selling price.
       'Total Price (IQD)',
     ]) {
-      await expect(page.getByRole('columnheader', { name: column, exact: true })).toBeVisible();
+      await expect(report.getByRole('columnheader', { name: column, exact: true })).toBeVisible();
     }
   });
 
@@ -134,10 +137,12 @@ test.describe('the Operations Build screens open', () => {
     });
     await expect(page.getByLabel('Warehouse Name')).toHaveValue(name);
 
-    // Laid out as a branch is: identity and facts on the left, editing and
-    // history on the right.
+    // Laid out as a branch is: identity and facts on the left, editing on the
+    // right — and the history behind the clock door every record wears
+    // (2026-10-04), opened to be read.
     await expect(page.getByRole('heading', { name: 'Details' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Audit log' })).toBeVisible();
+    await page.getByRole('button', { name: /^Audit log/ }).click();
+    await expect(page.getByRole('dialog').getByRole('heading', { name: 'Audit log' }).first()).toBeVisible();
   });
 
   test('block 4 · the Purchase Invoice register opens', async ({ page }) => {
@@ -159,7 +164,7 @@ test.describe('the Operations Build screens open', () => {
     const supplier = page.locator('dialog[open], [role="dialog"]').first();
     await supplier.getByLabel('Legal name').fill('End To End Supplies');
     await supplier.getByRole('button', { name: 'Create' }).click();
-    await expect(page.getByText('End To End Supplies').first()).toBeVisible();
+    await expect(page.getByText('End To End Supplies').filter({ visible: true }).first()).toBeVisible();
 
     await page.goto('/payables/invoices/new');
 
@@ -196,9 +201,10 @@ test.describe('the Operations Build screens open', () => {
      * the reason behind a duplicate exception (§15). Every invoice raised here
      * came back refused.
      *
-     * It proves §16 on the same pass. The due date is not typed — it is the
-     * supplier's payment terms counted from the posting date, filled in by the
-     * form before anything is saved.
+     * It proves §16 on the same pass. The due date is not typed — the form
+     * no longer asks for one at all (by direction, 2026-10-03: the real date
+     * is set once the SWIFT is confirmed) — and the record carries the
+     * supplier's payment terms counted from the posting date until then.
      */
     const stamp = Date.now().toString().slice(-6);
     let termsCode = '';
@@ -240,9 +246,10 @@ test.describe('the Operations Build screens open', () => {
     thirtyDaysOn.setUTCDate(thirtyDaysOn.getUTCDate() + 30);
 
     await page.getByLabel('Supplier Code').fill(supplierCode);
-    await expect(page.getByLabel('Due Date')).toHaveValue(thirtyDaysOn.toISOString().slice(0, 10));
+    await expect(page.locator('input[name="due_date"]')).toHaveCount(0);
 
     await page.locator('input[name="item_code_0"]').fill('ITM-SEED');
+    await expect(page.getByLabel('Item Name').first()).toHaveValue(/Seed/, { timeout: 30_000 });
     await page.getByLabel('Quantity').first().fill('2');
     await page.getByLabel('Unit Price').first().fill('1000');
     await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
@@ -260,6 +267,9 @@ test.describe('the Operations Build screens open', () => {
       { timeout: 120_000 },
     );
     await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible({ timeout: 60_000 });
+    // The record says when it falls due: thirty days on, from the terms.
+    const dueText = new Intl.DateTimeFormat('en-US', { month: 'short', day: '2-digit', year: 'numeric', timeZone: 'UTC' }).format(thirtyDaysOn);
+    await expect(page.getByText('Due Date', { exact: true }).locator('..')).toContainText(dueText);
   });
 
   test('draft quantity remains reliable while a row saves', async ({ browser, page }) => {
@@ -654,7 +664,7 @@ test.describe('the Operations Build screens open', () => {
       await page.goto(path);
       await expect(page.getByLabel('Control account', { exact: true })).toBeVisible();
       await page.getByRole('button', { name: 'Approve', exact: true }).click();
-      await expect(page.getByText('Approved', { exact: true }).first()).toBeVisible({
+      await expect(page.getByText('Approved', { exact: true }).filter({ visible: true }).first()).toBeVisible({
         timeout: 30_000,
       });
       return { accountId, path };
@@ -898,7 +908,7 @@ test.describe('the Operations Build screens open', () => {
     await page.goto('/sales/customer-receipts/new');
     const draft = page.locator('#receipt-new');
     await expect(draft).toBeVisible();
-    await expect(draft.getByText('Customer Receipts', { exact: false }).first()).toBeVisible();
+    await expect(draft.getByText('Customer Receipts', { exact: false }).filter({ visible: true }).first()).toBeVisible();
     await expect(draft.getByText('Customer Invoice', { exact: true })).toBeVisible();
     await expect(draft.getByRole('button', { name: 'Create' })).toBeVisible();
   });
@@ -913,7 +923,7 @@ test.describe('the Operations Build screens open', () => {
     // under the person who pressed it.
     const draft = page.locator('#payment-new');
     await expect(draft).toBeVisible();
-    await expect(draft.getByText('Supplier Payments', { exact: false }).first()).toBeVisible();
+    await expect(draft.getByText('Supplier Payments', { exact: false }).filter({ visible: true }).first()).toBeVisible();
     await expect(draft.getByText('Supplier Invoice', { exact: true })).toBeVisible();
     await expect(draft.getByRole('button', { name: 'Create' })).toBeVisible();
 
@@ -955,9 +965,11 @@ test.describe('the Operations Build screens open', () => {
 
     // Every record carries its history, as the master-data screens do. A
     // document you cannot ask "who did this, and when" of is a document you
-    // cannot defend a year later.
-    await expect(page.getByRole('link', { name: 'Audit log' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Audit log' })).toBeVisible();
+    // cannot defend a year later. It is the clock door in the title bar
+    // (2026-10-04), opened to be read.
+    await page.getByRole('button', { name: /^Audit log/ }).click();
+    await expect(page.getByRole('dialog').getByRole('heading', { name: 'Audit log' }).first()).toBeVisible();
+    await page.keyboard.press('Escape');
 
     // The Journal Entry's window: the document's type and number in the title
     // bar, its fields in boxes, a disclosed lines grid, and the verbs in the
@@ -965,7 +977,7 @@ test.describe('the Operations Build screens open', () => {
     // is the thing that was asked for and the thing that drifts.
     const window = page.locator('#payment-document');
     await expect(window).toBeVisible();
-    await expect(window.getByText('Supplier Payments', { exact: false }).first()).toBeVisible();
+    await expect(window.getByText('Supplier Payments', { exact: false }).filter({ visible: true }).first()).toBeVisible();
     await expect(window.getByText('Supplier Invoice', { exact: true })).toBeVisible();
   });
 

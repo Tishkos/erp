@@ -51,9 +51,15 @@ export function screenCount(archetype: ScreenArchetype): number {
 export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   // 1 — Home
   my_dashboard: 'dashboard',
-  my_tasks: 'inbox',
+  // The Task Center (platform phase): a numbered record with a list (Mine / Assigned by me / Team) and a page.
+  my_tasks: 'document',
   my_approvals: 'inbox',
   notifications: 'inbox',
+  // The Exception Center (platform phase): a numbered finding with a register and a page of its own.
+  exceptions: 'document',
+  // The ERP Control Center (platform phase): parameters (domain, state) over figures, each with its way down — a report.
+  control_center: 'report',
+  chat: 'workspace',
   recent_records: 'list',
   global_search: 'workspace',
 
@@ -127,7 +133,10 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   payables_migration: 'settings',
   legacy_import: 'settings',
   hr_settings: 'settings',
+  cloud_files_settings: 'settings',
   whatsapp: 'settings',
+  // Automation (platform phase, Agent 10): rules, templates, runs and the kill switch; a rule and a run have record pages behind it.
+  automation: 'settings',
   project_settings: 'settings',
 
   // 5 — Inventory (IMPROVEMENT-002: the twelve screens)
@@ -406,6 +415,14 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/master-data/chart-of-accounts',
   '/inventory/availability',
   '/documents',
+  // Internal chat (platform phase, Agent 1).
+  '/chat',
+  // The Task Center (platform phase, Agent 3).
+  '/tasks',
+  // The Exception Center (platform phase, Agent 7).
+  '/exceptions',
+  // The ERP Control Center (platform phase, Agent 9).
+  '/control-center',
   // Monitoring — drawn, reading nothing yet (2026-10-03).
   '/monitoring/customer-list',
   '/monitoring/history',
@@ -417,10 +434,15 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/administration/roles',
   '/administration/permissions',
   '/administration/numbering',
+  '/administration/cloud-files',
   '/administration/audit',
   '/master-data/branches',
   '/master-data/departments',
   '/approvals',
+  // Global Search (platform phase): the results page behind the palette's "see all".
+  '/search',
+  // Notification Center (platform phase): the bell's "see all", every notification of mine.
+  '/notifications',
   // The accounting core.
   '/finance/journals',
   '/finance/reversals',
@@ -555,6 +577,8 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/administration/hr-settings',
   // REQ-WA-001 WA-1/WA-2 — the WhatsApp bridge.
   '/administration/whatsapp',
+  // Automation (platform phase, Agent 10).
+  '/administration/automation',
   // REQ-PM-001 PM-1 — the Project System's structure.
   '/projects',
   '/projects/contracts',

@@ -187,6 +187,7 @@ export default async function NewLoanPage({ searchParams }: { readonly searchPar
             swift: t('bank_swift'),
           }}
           newBankValue={NEW_BANK}
+          defaultBank={said('bank_code')}
         />
       ),
     },

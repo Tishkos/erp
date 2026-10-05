@@ -20,6 +20,7 @@ import type { FiscalPeriod } from '../domain/periods';
 import { businessToday } from '../domain/business-date';
 import * as inventoryIntegrity from './inventory-integrity';
 import * as inventoryValuation from './inventory-valuation';
+import * as notifications from './notifications';
 import * as subledger from './subledger';
 
 export type CheckSeverity = 'blocking' | 'warning';
@@ -284,20 +285,19 @@ export async function notifyFailures(tx: Tx, checked: CloseReport, today = busin
   const key = failing.map((c) => c.code).join(',');
   let notified = 0;
   for (const { user_id } of recipients) {
-    const inserted = (
-      await tx.execute(sql`
-        insert into notification
-          (rule_code, event_type, object_type, object_id, recipient_user_id, subject, body, context, dedupe_key, branch_code)
-        values
-          (null, 'fiscal_period.close_blocked', 'fiscal_period', ${checked.period.id}, ${user_id},
-           ${`${checked.period.name} cannot close yet: ${failing.length} check(s) fail`},
-           ${lines.join('\n')},
-           ${JSON.stringify({ day: today, period: checked.period.name, failing: failing.map((c) => c.code) })}::jsonb,
-           ${`closing-checks:${today}:${checked.period.id}:${key}:${user_id}`}, null)
-        on conflict (dedupe_key) do nothing
-        returning id`)
-    ).rows;
-    notified += inserted.length;
+    const id = await notifications.insertNotification(tx, {
+      ruleCode: null,
+      eventType: 'fiscal_period.close_blocked',
+      objectType: 'fiscal_period',
+      objectId: checked.period.id,
+      recipientUserId: user_id,
+      subject: `${checked.period.name} cannot close yet: ${failing.length} check(s) fail`,
+      body: lines.join('\n'),
+      context: { day: today, period: checked.period.name, failing: failing.map((c) => c.code) },
+      dedupeKey: `closing-checks:${today}:${checked.period.id}:${key}:${user_id}`,
+      branchCode: null,
+    });
+    if (id !== null) notified += 1;
   }
   return { notified };
 }

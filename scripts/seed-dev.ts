@@ -62,15 +62,28 @@ async function main() {
         VALUES ('WH-HQ', 'Head Office Main Warehouse', 'HQ', 'main')
       `);
 
-      const account = await tx.execute(sql`
+      await tx.execute(sql`
+        UPDATE branch SET default_warehouse_code = 'WH-HQ' WHERE code = 'HQ'
+      `);
+    }
+
+    // The example bank account is keyed on its own absence, not the branch's:
+    // a database whose HQ came from create-first-user.ts (the live setup
+    // order, AGENTS.md) has the branch and no CASH-HQ, and the opening
+    // journal below then had one line and failed at commit (2026-10-04).
+    const cash = await tx.execute(sql`SELECT 1 FROM bank_cash_account WHERE code = 'CASH-HQ'`);
+
+    if (cash.rows.length === 0) {
+      await tx.execute(sql`
         INSERT INTO chart_of_account
           (code, name, account_type, parent_id, is_group, is_active, approval_status, level,
            currency_restriction)
         SELECT 'A100001', 'Head Office Cash at Bank', 'asset', id, false, true, 'approved', 1,
                'IQD'
           FROM chart_of_account WHERE code = 'A000001'
-        RETURNING id
+        ON CONFLICT (code) DO NOTHING
       `);
+      const account = await tx.execute(sql`SELECT id FROM chart_of_account WHERE code = 'A100001'`);
       const glAccountId = (account.rows[0] as { id: string }).id;
 
       await tx.execute(sql`
@@ -78,10 +91,6 @@ async function main() {
           (code, name, account_type, bank_name, account_number, gl_account_id)
         VALUES ('CASH-HQ', 'Head Office Cash Account', 'bank', 'Seed Bank', 'ACC-HQ',
                 ${glAccountId})
-      `);
-
-      await tx.execute(sql`
-        UPDATE branch SET default_warehouse_code = 'WH-HQ' WHERE code = 'HQ'
       `);
     }
 

@@ -15,6 +15,8 @@ import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as availability from '@/server/services/availability';
 import { issueStock } from './actions';
+import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
+import { savedViewsFor } from '@/server/saved-views-gate';
 
 /**
  * Availability — Appendix A menu 5, on Phase 04's §9.5 buckets.
@@ -51,6 +53,8 @@ export default async function AvailabilityPage({ searchParams }: { searchParams:
   // Issuing is `execute` on the movement, as `inventory.issue` checks it.
   const mayIssue = can(principal, 'execute', availability.PERMISSION_OBJECT);
 
+  // The person's saved views of this screen — and, on a bare arrival, their default one.
+  const saved = await savedViewsFor('inventory.availability', searchParams);
   const params = await searchParams;
   const warehouseCode = typeof params.warehouse === 'string' && params.warehouse ? params.warehouse : null;
   const category = typeof params.category === 'string' && params.category ? params.category : null;
@@ -121,7 +125,9 @@ export default async function AvailabilityPage({ searchParams }: { searchParams:
             placeholder={admin('search_placeholder')}
             q={outcome.q}
             searchLabel={admin('search')}
-          />
+          >
+            <SavedViewsMenu state={saved} />
+          </ListToolbar>
 
           <form className={s.filterBar} method="get">
             <FilterRow>

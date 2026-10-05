@@ -84,6 +84,22 @@ fi
 # them costs nothing, and the day one of them fills is not the day anybody
 # wants to discover this list was written before it existed.
 read -r -d '' DOCUMENT_TABLES <<'TABLES' || true
+chat_reaction
+chat_receipt
+chat_message
+chat_participant
+chat_conversation
+chat_presence
+task
+exception_history
+exception
+exception_sweep_run
+automation_made
+automation_run
+automation_event
+automation_rule_version
+automation_rule
+cloud_file_link
 employee_request_line
 employee_document
 review_goal

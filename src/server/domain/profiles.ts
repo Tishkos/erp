@@ -64,6 +64,9 @@ export const PROFILE_KINDS = [
   'supplier_contract',
   'supplier_credit_note',
   'opening_stock',
+  // Inventory's stock documents (2026-10-04): a transfer and an Item Reconciliation have record pages.
+  'stock_transfer',
+  'stock_reconciliation',
   'project_certificate',
   'project_budget',
   'project_variation',
@@ -76,6 +79,10 @@ export const PROFILE_KINDS = [
   'performance_review',
   'vacancy',
   'payroll_run',
+  // The Task Center (platform phase): a task opens its record page.
+  'task',
+  // The Exception Center (platform phase): an exception opens its record page.
+  'exception',
   // Kinds with no page yet.
   'currency',
   'fixed_asset',
@@ -144,6 +151,8 @@ const BASES: Readonly<Record<ProfileKind, string | null>> = {
   // REQ-PAY-001 PAY8 — the standalone supplier credit note (payables, 2026-10-04).
   supplier_credit_note: '/payables/credit-memos',
   opening_stock: '/inventory/opening-stock',
+  stock_transfer: '/inventory/transfers',
+  stock_reconciliation: '/inventory/stock-reconciliation',
   project_certificate: '/projects/billing',
   project_budget: '/projects/budgets',
   project_variation: '/projects/change-orders',
@@ -155,6 +164,8 @@ const BASES: Readonly<Record<ProfileKind, string | null>> = {
   performance_review: '/hr/performance',
   vacancy: '/hr/recruitment',
   payroll_run: '/hr/payroll',
+  task: '/tasks',
+  exception: '/exceptions',
   currency: null, // missing — shared (exchange rates are a settings screen, no record page)
   fixed_asset: null, // missing — shared (no module owns it yet)
   investment: null, // missing — shared (no module owns it yet)

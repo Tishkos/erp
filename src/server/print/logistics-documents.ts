@@ -275,7 +275,7 @@ export async function containerReceipt(ctx: BuildContext, receiptNo: string): Pr
           ),
           empty: t('no_plan'),
           totals: {
-            label: m.column('total'),
+            label: m.admin('reports.totals'),
             cells: {
               planned: qty(found.totals.planned),
               received: qty(found.totals.received),

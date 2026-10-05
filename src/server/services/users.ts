@@ -12,6 +12,7 @@
  * trail and by everything it ever approved.
  */
 import { bumpPermissions } from './authorization';
+import * as cloudAccounts from './cloud-accounts';
 import * as employees from './employees';
 import { randomBytes } from 'node:crypto';
 import { and, asc, eq } from 'drizzle-orm';
@@ -249,6 +250,8 @@ export async function setActive(
   await tx.update(appUser).set({ isActive: active, updatedAt: new Date() }).where(eq(appUser.id, id));
   if (!active) {
     await revokeAllSessionsFor(tx, ctx, id, `Account deactivated: ${reason!.trim()}`);
+    // Their Cloud Files app password goes with their access (D-FX-3): revoked at the cloud, the sealed copy deleted.
+    await cloudAccounts.removeForDeactivation(tx, ctx, id);
   }
   await bumpPermissions(tx, id);
   await recordChange(tx, ctx, {

@@ -13,7 +13,6 @@ import {
   Submit,
   SubmitRow,
   admin as s,
-  matches,
 } from '@/components/admin';
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
@@ -28,6 +27,9 @@ import * as expenses from '@/server/services/expenses';
 import * as partners from '@/server/services/partners';
 import { addExpenseAction } from './actions';
 import { businessToday } from '@/server/domain/business-date';
+import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
+import { savedViewsFor } from '@/server/saved-views-gate';
+import { invoiceRegister } from '@/server/services/screen-registers';
 
 /**
  * Purchase Invoices — Operations build, block 4.
@@ -68,43 +70,22 @@ export default async function ApInvoicesPage({ searchParams }: { searchParams: S
   }
   const mayCreate = can(principal, 'create', ap.PERMISSION_OBJECT);
 
+  // The person's saved views of this screen — and, on a bare arrival, their default one.
+  const saved = await savedViewsFor('payables.invoices', searchParams);
   const params = await searchParams;
   const viewParam = typeof params.view === 'string' ? params.view : '';
+  // Validated by the registry (an amount, at most four decimals), so the floor below cannot be a typo.
+  const minAmount = saved?.current.params['min_amount'] ?? '';
   const today = businessToday();
 
-  const { rows, notes, suppliers, categories, imports } = await withCurrentUser(async (tx) => ({
-    rows: await ap.list(tx),
+  const { shown, notes, suppliers, categories, imports } = await withCurrentUser(async (tx) => ({
+    // The register's rows and filters are `invoiceRegister` — the pinned count on Home asks the same function.
+    ...(await invoiceRegister(tx, { q: outcome.q, view: viewParam, minAmount }, today)),
     notes: await expenses.latestNotes(tx),
     suppliers: mayCreate ? await partners.listActiveInRole(tx, 'supplier') : [],
     categories: mayCreate ? await expenses.categories(tx) : [],
     imports: mayCreate ? await expenses.openImports(tx) : [],
   }));
-
-  const withState = rows.map((row) => ({
-    ...row,
-    state: expenses.paymentState(
-      {
-        status: row.status,
-        dueDate: row.dueDate,
-        totalIqd: row.totalIqd,
-        settledAmountIqd: row.settledAmountIqd,
-      },
-      today,
-    ),
-  }));
-  const shown = withState
-    .filter((row) => matches(row, outcome.q))
-    .filter((row) =>
-      viewParam === 'imports'
-        ? row.isImport
-        : viewParam === 'expenses'
-          ? Boolean(row.expenseCategoryCode)
-          : viewParam === 'overdue'
-            ? row.state === 'overdue'
-            : viewParam === 'unpaid'
-              ? row.state === 'unpaid' || row.state === 'part_paid' || row.state === 'overdue'
-              : true,
-    );
 
   return (
     <AdminPage
@@ -140,9 +121,12 @@ export default async function ApInvoicesPage({ searchParams }: { searchParams: S
             clearLabel={t('clear_search')}
             countLabel={t('rows_shown', { count: shown.length })}
             placeholder={t('search_placeholder')}
+            hidden={{ ...(viewParam ? { view: viewParam } : {}), ...(minAmount ? { min_amount: minAmount } : {}) }}
             q={outcome.q}
             searchLabel={t('search')}
-          />
+          >
+            <SavedViewsMenu state={saved} />
+          </ListToolbar>
 
           <form className={s.filterBar} method="get">
             <FilterRow>
@@ -158,6 +142,7 @@ export default async function ApInvoicesPage({ searchParams }: { searchParams: S
                   { value: 'overdue', label: x('view_overdue') },
                 ]}
               />
+              <Field defaultValue={minAmount} label={x('min_amount')} min={0} name="min_amount" type="number" />
               <SubmitRow>
                 <Submit label={x('filter')} />
               </SubmitRow>

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
@@ -196,7 +197,10 @@ export default async function TransfersPage({ searchParams }: { searchParams: Se
               {shown.map((row) => (
                 <tr key={row.id}>
                   <td>
-                    <bdi dir="ltr">{row.transferNo}</bdi>
+                    {/* The number opens the transfer's own page (2026-10-04). */}
+                    <Link href={`/inventory/transfers/${encodeURIComponent(row.transferNo)}`}>
+                      <bdi dir="ltr">{row.transferNo}</bdi>
+                    </Link>
                   </td>
                   <td>
                     <bdi dir="ltr">{row.transferDate}</bdi>

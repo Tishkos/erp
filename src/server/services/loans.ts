@@ -1971,9 +1971,11 @@ export async function setManualShares(
     amountOf(loan.principalTxn),
     live.map((row) => ({ id: row.id, amount: amountOf(row.amountTxn), manualShare: typed.get(row.id) ?? amountOf(row.commissionShareTxn) })),
   );
+  const restated: { allocationId: string; before: string; after: string }[] = [];
   for (const row of live) {
     const share = typed.get(row.id);
     if (share === undefined || share === amountOf(row.commissionShareTxn)) continue;
+    restated.push({ allocationId: row.id, before: money(amountOf(row.commissionShareTxn)), after: money(share) });
     // Stated here; restateShares re-issues the charge for the new figure.
     await tx
       .update(bankLoanAllocation)
@@ -1988,6 +1990,20 @@ export async function setManualShares(
     }
   }
   await restateShares(tx, ctx, loan, 'Commission share restated');
+  // The loan's own log says the shares were restated (2026-10-04): the import
+  // events alone left the loan's history silent about a typed figure.
+  if (restated.length > 0) {
+    await audit.record(tx, {
+      actorUserId: ctx.principal.userId,
+      action: 'bank_loan.shares_set',
+      objectType: PERMISSION_OBJECT,
+      objectId: loan.id,
+      branchCode: loan.branchCode,
+      after: { shares: restated },
+      outcome: 'success',
+      requestId: ctx.requestId ?? null,
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -133,12 +133,19 @@ export function LoanBankField({
   banks,
   labels,
   newBankValue,
+  defaultBank,
 }: {
   readonly banks: readonly Choice[];
   readonly labels: LoanBankLabels;
   readonly newBankValue: string;
+  /** The bank already chosen — the new-loan page re-renders from its address after *Update schedule*. */
+  readonly defaultBank?: string;
 }) {
-  const [chosen, setChosen] = useState(banks[0]?.value ?? newBankValue);
+  const [chosen, setChosen] = useState(
+    defaultBank && (defaultBank === newBankValue || banks.some((bank) => bank.value === defaultBank))
+      ? defaultBank
+      : (banks[0]?.value ?? newBankValue),
+  );
   const naming = chosen === newBankValue;
 
   return (

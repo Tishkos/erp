@@ -239,26 +239,43 @@ export async function check(tx: Tx, options: CheckOptions = {}): Promise<HealthR
 
   // 6. The delivery outbox: pending rows older than a day mean no runner.
   checked.push('deliveries');
-  const stuck = (await tx.execute(sql`
-    select count(*)::int as n from notification_delivery
-     where status = 'pending' and last_attempt_at is null
-       and exists (select 1 from notification n where n.id = notification_id and n.created_at < now() - interval '1 day')`)).rows as { n: number }[];
-  if ((stuck[0]?.n ?? 0) > 0) {
-    findings.push({ code: 'deliveries_stuck', severity: 'warn', message: `${stuck[0]!.n} notification deliveries have waited more than a day: the delivery job is not running (REQ-HARDEN-001 F2).` });
+  // Across everybody's notifications, so through the definer function (0350): a notification is its recipient's alone.
+  const stuck = await stuckDeliveries(tx);
+  if (stuck > 0) {
+    findings.push({ code: 'deliveries_stuck', severity: 'warn', message: `${stuck} notification deliveries have waited more than a day: the delivery job is not running (REQ-HARDEN-001 F2).` });
   }
 
   // 7. Bank/cash accounts whose ledger account is gone — the restore drill
   // fails on exactly this foreign key (REQ-HARDEN-001 F5, CASH-ACCOUNTANT_ERBIL).
   checked.push('bank_accounts');
-  const dangling = (await tx.execute(sql`
-    select b.code from bank_cash_account b
-     where b.active and not exists (select 1 from chart_of_account a where a.id = b.gl_account_id and a.is_active)
-     order by b.code`)).rows as { code: string }[];
+  const dangling = await unlinkedBankAccounts(tx);
   if (dangling.length > 0) {
     findings.push({ code: 'bank_account_unlinked', severity: 'stop', message: `${dangling.map((d) => d.code).join(', ')}: the ledger account behind this bank/cash account is missing or inactive. Re-link it on Master Data → Bank/Cash Accounts; until then the restore drill and the statements fail on it.` });
   }
 
   return { today, findings, checked };
+}
+
+/**
+ * Notification deliveries that have waited more than a day without an attempt — across everybody's
+ * notifications, so through the definer function (0350): a notification is its recipient's alone.
+ * `check` and the Control Center ask it here, so the two cannot disagree.
+ */
+export async function stuckDeliveries(tx: Tx): Promise<number> {
+  const stuck = (await tx.execute(sql`select app_deliveries_stuck() as n`)).rows as { n: number }[];
+  return stuck[0]?.n ?? 0;
+}
+
+/**
+ * Active bank/cash accounts whose ledger account is missing or inactive, by code — the restore drill fails on
+ * exactly this foreign key (REQ-HARDEN-001 F5, CASH-ACCOUNTANT_ERBIL). Shared by `check` and the Control Center.
+ */
+export async function unlinkedBankAccounts(tx: Tx): Promise<{ code: string; accountType: string }[]> {
+  const dangling = (await tx.execute(sql`
+    select b.code, b.account_type::text as "accountType" from bank_cash_account b
+     where b.active and not exists (select 1 from chart_of_account a where a.id = b.gl_account_id and a.is_active)
+     order by b.code`)).rows as { code: string; accountType: string }[];
+  return dangling;
 }
 
 /** Tells every accounting manager and super user once a day, in the bell. */

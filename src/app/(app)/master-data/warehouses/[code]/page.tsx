@@ -23,6 +23,8 @@ import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatMoney, formatTimestamp, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
+import { formatQuantity as formatUnits, parseQuantity } from '@domain/uom';
+import { sumMoney } from '@/server/print/decimal';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as reports from '@/server/services/inventory-reports';
@@ -88,8 +90,10 @@ export default async function WarehouseRecordPage({
   const { row, stock, notes } = data;
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
-  const units = (quantity: string) => String(Number(quantity));
-  const total = stock.reduce((sum, line) => sum + Number(line.valueIqd), 0);
+  // Exact, as the Warehouses Report is: a scaled integer for the quantity, and
+  // the printed copy's own `sumMoney` for the total.
+  const units = (quantity: string) => formatUnits(parseQuantity(quantity));
+  const total = sumMoney(stock.map((line) => line.valueIqd));
 
   return (
     <AdminPage
@@ -138,7 +142,7 @@ export default async function WarehouseRecordPage({
               </li>
               <li>
                 <span>{t('reports.totals')}</span>
-                <span>{money(String(total))}</span>
+                <span>{money(total)}</span>
               </li>
               <li>
                 <span>{t('created_at')}</span>

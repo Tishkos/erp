@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, Hidden, Submit, admin as s } from '@/components/admin';
@@ -6,7 +5,11 @@ import { DocumentWindow, type DocumentField } from '@/components/admin/document-
 import { RecordHistory } from '@/components/admin/history';
 import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
 import { Attachments } from '@/components/admin/attachments';
+import { ExportIcon } from '@/components/print/export-menu';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import * as attachmentsService from '@/server/services/attachments';
+import * as recordNotes from '@/server/services/record-notes';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -59,35 +62,46 @@ export default async function DepositPage({ params, searchParams }: { params: Pr
   // a receipt, into the cash or into the bank (2026-10-04).
   const object = deposit.source === 'transfer' ? deposits.PERMISSION_OBJECT : deposits.RECEIPT_PERMISSION_OBJECT;
   // What the paperclip says it holds — the slip, on whichever document the
-  // deposit actually is.
-  const attached = await withCurrentUser((tx) =>
-    attachmentsService.currentFor(tx, deposit.source === 'transfer' ? 'bank_transfer' : 'other_receipt', deposit.id),
-  );
+  // deposit actually is — and the notes behind the third door (2026-10-04).
   const historyType = deposit.source === 'transfer' ? 'bank_transfer' : 'other_receipt';
+  const [attached, notes] = await withCurrentUser(async (tx) => [
+    await attachmentsService.currentFor(tx, historyType, deposit.id),
+    await recordNotes.listNotes(tx, { object: historyType, recordId: deposit.id }),
+  ] as const);
   const money = (amount: string) => formatMoney(amount, deposit.currency, locale as Locale);
   const mayApprove = deposit.status === 'draft' && can(principal, 'approve', object) && deposit.createdBy !== principal.userId;
   const mayPost = deposit.status === 'approved' && can(principal, 'post', object);
-  const from = deposit.payer ? `${deposit.payer}` : `${deposit.fromName} (${deposit.fromCode})`;
+  // The accounts open their own profiles (the shared `ProfileLink`): the
+  // deposit lands in a bank or cash account; a transfer comes out of a cash
+  // account, a receipt is credited to a G/L account.
+  const intoKind = deposit.source === 'cash' ? 'cash_account' : 'bank_account';
+  const from = deposit.payer ? (
+    <bdi dir="auto">{deposit.payer}</bdi>
+  ) : (
+    <ProfileLink code={deposit.fromCode} dir="auto" kind="cash_account">
+      {`${deposit.fromName} (${deposit.fromCode})`}
+    </ProfileLink>
+  );
 
   const fields: DocumentField[] = [
     { label: t('col_no'), value: <bdi dir="ltr">{deposit.no}</bdi> },
     { label: t('col_status'), value: status.has(deposit.status) ? status(deposit.status) : deposit.status, status: deposit.status },
     { label: t('date'), value: <bdi dir="ltr">{formatBusinessDate(deposit.depositDate, locale as Locale)}</bdi> },
     { label: t('source'), value: t(`source_${deposit.source}`) },
-    { label: t('into'), value: <bdi dir="auto">{`${deposit.intoName} (${deposit.intoCode}) · ${deposit.currency}`}</bdi> },
-    { label: t('from'), value: <bdi dir="auto">{from}</bdi> },
-    ...(deposit.source !== 'transfer' ? [{ label: t('credit_account'), value: <bdi dir="auto">{`${deposit.fromCode} · ${deposit.fromName}`}</bdi> }] : []),
-    { label: t('reference'), value: <bdi dir="auto">{deposit.reference ?? '—'}</bdi> },
     {
-      label: t('journal'),
-      value: deposit.journalEntryNo ? (
-        <Link className={s.sapLink} href={`/finance/journals/${encodeURIComponent(deposit.journalEntryNo)}`}>
-          <bdi dir="ltr">{deposit.journalEntryNo}</bdi>
-        </Link>
-      ) : (
-        '—'
+      label: t('into'),
+      value: (
+        <ProfileLink code={deposit.intoCode} dir="auto" kind={intoKind}>
+          {`${deposit.intoName} (${deposit.intoCode}) · ${deposit.currency}`}
+        </ProfileLink>
       ),
     },
+    { label: t('from'), value: from },
+    ...(deposit.source !== 'transfer'
+      ? [{ label: t('credit_account'), value: <ProfileLink code={deposit.fromCode} dir="auto" kind="gl_account" name={deposit.fromName} /> }]
+      : []),
+    { label: t('reference'), value: <bdi dir="auto">{deposit.reference ?? '—'}</bdi> },
+    { label: t('journal'), value: <ProfileLink code={deposit.journalEntryNo} kind="journal" /> },
     ...(deposit.note ? [{ label: t('note'), value: <bdi dir="auto">{deposit.note}</bdi>, wide: true }] : []),
   ];
 
@@ -120,8 +134,10 @@ export default async function DepositPage({ params, searchParams }: { params: Pr
         }
         titleActions={
           <>
-            {/* The slip the bank gave, and what happened to the deposit —
-                behind the doors every record wears (2026-10-04). */}
+            {/* The copy, the slip the bank gave, the notes and what happened
+                to the deposit — behind the four doors every record wears
+                (2026-10-04). */}
+            <ExportIcon exportKey="bank_deposit" id={deposit.no} title={`${t(`document_type_${deposit.source}`)} ${deposit.no}`} />
             <AttachmentsButton
               closeLabel={admin('close')}
               count={attached.length}
@@ -136,6 +152,7 @@ export default async function DepositPage({ params, searchParams }: { params: Pr
                 objectType={historyType}
               />
             </AttachmentsButton>
+            <RecordNotesDoor notes={notes} object={historyType} recordId={deposit.id} />
             <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
               <RecordHistory objectId={deposit.id} objectType={historyType} />
             </HistoryButton>
@@ -174,7 +191,6 @@ export default async function DepositPage({ params, searchParams }: { params: Pr
           </tbody>
         </table>
       </DocumentWindow>
-      <RecordHistory objectId={deposit.id} objectType={historyType} />
     </AdminPage>
   );
 }

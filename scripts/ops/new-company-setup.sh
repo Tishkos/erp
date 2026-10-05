@@ -28,9 +28,17 @@ APP="${APP:-/opt/qs-erp-next}"
 # recorded exception for the day the marker is set before the setup is run.
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/live-guard.sh"
 [[ "${1:-}" == "--i-know-this-is-live" ]] || refuse_on_live "set up a new company"
-PW=$(grep -oP '^DATABASE_URL_OWNER=postgres://erp_owner:\K[^@]+' "$APP/.env")
-export PGPASSWORD="$PW"
-PSQL=(psql -h 127.0.0.1 -p 5434 -U erp_owner -d erp -v ON_ERROR_STOP=1)
+# The owner URL in .env names the cluster and the database as well as the
+# password: the live box is 127.0.0.1:5434/erp; a database built from nothing
+# for a trial is wherever its own .env says. One source, so the script sets up
+# the database the application in $APP actually runs on.
+OWNER_URL=$(grep -oP '^DATABASE_URL_OWNER=\K.*' "$APP/.env" || true)
+if [[ ! "$OWNER_URL" =~ ^postgres(ql)?://erp_owner:([^@]+)@([^:/]+)(:([0-9]+))?/([^?/]+) ]]; then
+  echo "DATABASE_URL_OWNER in $APP/.env is not postgres://erp_owner:<password>@<host>[:port]/<database>" >&2
+  exit 1
+fi
+export PGPASSWORD="${BASH_REMATCH[2]}"
+PSQL=(psql -h "${BASH_REMATCH[3]}" -p "${BASH_REMATCH[5]:-5432}" -U erp_owner -d "${BASH_REMATCH[6]}" -v ON_ERROR_STOP=1)
 
 # The rate to seed. The CBI official rate has been 1,320 IQD to the dollar
 # since February 2023; change it here, or supersede it later on the Currencies

@@ -89,7 +89,13 @@ test.describe('IM2 · supplier bank accounts on the profile', () => {
     await manager.page.waitForURL(/saved=1/);
     const verified = manager.page.getByRole('region', { name: /Bank of China/ });
     await expect(verified.getByText('Verified', { exact: true })).toBeVisible();
-    await expect(verified).toContainText('Default');
+    // The first verified account becomes the default (im2-04 holds the rule).
+    // On a database an earlier run left a default on, this one is made it.
+    if ((await verified.getByRole('button', { name: 'Make default' }).count()) > 0) {
+      await verified.getByRole('button', { name: 'Make default' }).click();
+      await manager.page.waitForURL(/saved=1/);
+    }
+    await expect(manager.page.getByRole('region', { name: /Bank of China/ })).toContainText('Default');
     await manager.close();
 
     // A second account, verified and made the default; the first taken out of use.

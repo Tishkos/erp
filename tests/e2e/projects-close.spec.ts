@@ -52,7 +52,7 @@ test.describe('REQ-PM-001 Stage PM-6 · hours, settlement, close and reports', (
     await book.locator('input[name="hours"]').fill('7.5');
     await book.locator('button[type="submit"]').first().click();
     await page.waitForURL(/saved=1/);
-    await expect(page.getByText('Booked', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Booked', { exact: true }).filter({ visible: true }).first()).toBeVisible();
     await expect(page.getByRole('row', { name: /7\.5/ }).getByRole('button', { name: 'Approve' })).toHaveCount(0);
     await adminPage.goto(`/projects/progress?project=${encodeURIComponent(code)}`);
     await adminPage.getByRole('row', { name: /7\.5/ }).getByRole('button', { name: 'Approve' }).click();
@@ -74,7 +74,7 @@ test.describe('REQ-PM-001 Stage PM-6 · hours, settlement, close and reports', (
     await page.getByRole('dialog').locator('input[name="note"]').fill('Handed to facilities');
     await page.getByRole('dialog').locator('button[type="submit"]').first().click();
     await page.waitForURL(/saved=1/);
-    await expect(page.getByText('Asset under construction').first()).toBeVisible();
+    await expect(page.getByText('Asset under construction').filter({ visible: true }).first()).toBeVisible();
     await expect(page.getByRole('row', { name: /PST-/ }).getByRole('button', { name: 'Post' })).toHaveCount(0);
 
     await adminPage.goto(`/projects/close?project=${encodeURIComponent(code)}`);
@@ -98,7 +98,7 @@ test.describe('REQ-PM-001 Stage PM-6 · hours, settlement, close and reports', (
       await page.goto(`/projects/reports?project=${encodeURIComponent(code)}&report=${report}`);
       await expect(page.getByRole('heading', { name: 'Reports', level: 1 })).toBeVisible();
       await expect(page.getByRole('columnheader', { name: heading, exact: false }).first()).toBeVisible();
-      await expect(page.getByText('Print / Export').first()).toBeVisible();
+      await expect(page.getByText('Print / Export').filter({ visible: true }).first()).toBeVisible();
     }
 
     // Arabic, at a phone's width, right to left.

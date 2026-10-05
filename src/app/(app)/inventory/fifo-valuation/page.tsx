@@ -18,6 +18,8 @@ import { SectionTabs } from '@/components/admin/section-tabs';
 import { ProfileLink } from '@/components/admin/profile-link';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
+import { formatQuantity as formatUnits, parseQuantity } from '@domain/uom';
+import { sumMoney } from '@/server/print/decimal';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as items from '@/server/services/items';
@@ -88,10 +90,14 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
   // The layers carry quantities at six decimal places. A warehouse list reads
   // in whole units where the stock is whole, so trailing zeros are dropped
-  // rather than printed.
-  const units = (quantity: string) => String(Number(quantity));
+  // rather than printed — exactly, as a scaled integer, never through a float.
+  const units = (quantity: string) => formatUnits(parseQuantity(quantity));
 
-  const total = rows.reduce((sum, row) => sum + Number(row.valueIqd), 0);
+  // The footers are the printed copy's own sums (`print/decimal.sumMoney`):
+  // scaled integers, each row rounded half up to four places as it is shown,
+  // so the screen and its export can never total a fils apart.
+  const total = sumMoney(rows.map((row) => row.valueIqd));
+  const summaryTotal = sumMoney(summary.map((row) => row.valueIqd));
 
   return (
     <AdminPage
@@ -146,6 +152,9 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
       </form>
 
       {summary.length > 0 ? (
+        /* Nine columns scroll inside their own frame on a phone; unframed,
+           the summary pushed the whole page sideways (2026-10-04). */
+        <div className={s.sapTableWrap}>
         <table aria-label={t('reports.warehouse_summary')} className={`${s.sapTable} ${s.sapReportTable}`}>
           <caption className={s.sapTitleMeta}>{t('reports.warehouse_summary')}</caption>
           <thead>
@@ -213,14 +222,18 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
             <tr className={s.sapTotalRow}>
               <td colSpan={5}>{t('reports.totals')}</td>
               <td className={s.sapNum}>
-                <bdi dir="ltr">{money(summary.reduce((sum, row) => sum + Number(row.valueIqd), 0).toFixed(4))}</bdi>
+                <bdi dir="ltr">{money(summaryTotal)}</bdi>
               </td>
               <td colSpan={3} />
             </tr>
           </tfoot>
         </table>
+        </div>
       ) : null}
 
+      {/* Framed like the summary above: nine columns scroll within the
+          frame on a phone rather than widening the page (2026-10-04). */}
+      <div className={s.sapTableWrap}>
       <table className={`${s.sapTable} ${s.sapReportTable}`}>
         <thead>
           <tr>
@@ -299,13 +312,14 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
             <tr className={s.sapTotalRow}>
               <td colSpan={7}>{t('reports.totals')}</td>
               <td className={s.sapNum}>
-                <bdi dir="ltr">{money(String(total))}</bdi>
+                <bdi dir="ltr">{money(total)}</bdi>
               </td>
               <td />
             </tr>
           </tfoot>
         )}
       </table>
+      </div>
     </AdminPage>
   );
 }

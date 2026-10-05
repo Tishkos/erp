@@ -38,6 +38,8 @@ export interface InboxItem {
   readonly currentStep: number | null;
   readonly approverKind: string | null;
   readonly approverRole: string | null;
+  /** Whether the step lets the person who submitted decide it too (the approval center asks before it lists). */
+  readonly allowSelfApproval: boolean | null;
 }
 
 /**
@@ -62,6 +64,7 @@ export async function inbox(tx: Tx, principal: Principal): Promise<InboxItem[]> 
       currentStep: workflowInstance.currentStep,
       approverKind: workflowStep.approverKind,
       approverRole: workflowStep.approverRole,
+      allowSelfApproval: workflowStep.allowSelfApproval,
     })
     .from(workflowInstance)
     .leftJoin(

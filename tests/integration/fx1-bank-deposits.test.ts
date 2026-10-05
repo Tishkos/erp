@@ -21,6 +21,8 @@ import * as rates from '@/server/services/exchange-rates';
 import * as reports from '@/server/services/treasury-reports';
 import * as deposits from '@/server/services/bank-deposits';
 import type { ActorContext } from '@/server/services/chart-of-accounts';
+import { mayExport } from '@/server/print/access';
+import { runExport } from '@/server/print/export';
 
 const BRANCH = 'HQ';
 const ON = '2026-05-10';
@@ -165,6 +167,29 @@ describe('FX3 · bank deposits', () => {
     await expect(withScope(scope(manager), (tx) => deposits.depositOther(tx, manager, { intoAccountId: cashId, creditAccountId: incomeId, payer: 'x', depositDate: ON, amount: iqd(1) }))).rejects.toThrow(
       /into a bank account/,
     );
+  });
+
+  it('prints a deposit as its record page shows it, for whoever reads the treasury accounts (the printer door, 2026-10-04)', async () => {
+    const found = await withScope(scope(manager), (tx) => deposits.listForScreen(tx, { search: 'insurance' }));
+    const no = found.rows[0]!.no;
+    expect(mayExport(manager.principal, 'bank_deposit', 'pdf')).toBe(true);
+    const result = await withScope(scope(manager), (tx) =>
+      runExport(tx, manager, { key: 'bank_deposit', format: 'xlsx', locale: 'en', at: '2026-05-11T09:00:00.000Z', input: { id: no, query: new URLSearchParams() } }),
+    );
+    expect(result.status).toBe(200);
+    if (result.status !== 200) return;
+    expect(result.fileName).toBe(`${no}.xlsx`);
+    const facts = new Map(result.model.fields.map((fact) => [fact.label, fact.value]));
+    expect(facts.get('Deposit no.')).toBe(no);
+    expect(facts.get('From')).toBe('Insurance claim');
+    expect(facts.get('Source')).toBe('Bank');
+    expect(result.model.posted).toBe(true);
+    expect(result.model.tables[0]!.rows.map((row) => row.cells.amount)).toEqual(['250.0000']);
+
+    const missing = await withScope(scope(manager), (tx) =>
+      runExport(tx, manager, { key: 'bank_deposit', format: 'pdf', locale: 'ar', at: '2026-05-11T09:00:00.000Z', input: { id: 'ORC-NOWHERE', query: new URLSearchParams() } }),
+    );
+    expect(missing.status).toBe(404);
   });
 
   it('the register reads both, pages with a true count, and filters in the query', async () => {

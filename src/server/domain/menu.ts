@@ -82,6 +82,16 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('my_tasks', 'task', '/tasks'),
       page('my_approvals', 'workflow_instance', '/approvals'),
       page('notifications', 'notification', '/notifications'),
+      // The Exception Center (platform phase, Agent 7): what in the books and the work needs a person,
+      // found by the system and kept until its cause is gone. One object `exception`, every role may view.
+      page('exceptions', 'exception', '/exceptions'),
+      // The ERP Control Center (platform phase, Agent 9): real checks of whether Qimah is internally consistent, with the
+      // figures behind each and the way to the record. Read only. One object `control_center`, granted to the CEO, the
+      // accounting manager and the system administrator (migration 0390).
+      page('control_center', 'control_center', '/control-center'),
+      // Internal chat (platform phase, Agent 1): conversations between people
+      // inside the ERP, one object `chat` every role may view.
+      page('chat', 'chat', '/chat'),
       page('recent_records', 'dashboard', '/recent'),
       page('global_search', 'dashboard', '/search'),
     ],
@@ -537,7 +547,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     key: 'documents',
     ordinal: 16,
     items: [
-      page('document_centre', 'attachment', '/documents'),
+      page('document_centre', 'cloud_files', '/documents'),
       page('templates', 'document_template'),
       page('checklists', 'checklist'),
       page('expiring_documents', 'expiring_document'),
@@ -629,6 +639,8 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('roles', 'role', '/administration/roles'),
       page('permissions', 'permission', '/administration/permissions'),
       page('numbering', 'number_series', '/administration/numbering'),
+      // Platform phase, Agent 4 — QS Cloud Files: on/off, address, role -> group mapping.
+      page('cloud_files_settings', 'cloud_setting', '/administration/cloud-files'),
       page('audit_trail', 'audit_event', '/administration/audit'),
       page('system_parameters', 'system_parameter', '/administration/parameters'),
       page('background_jobs', 'job', '/administration/jobs'),
@@ -642,6 +654,8 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('hr_settings', 'hr_setting', '/administration/hr-settings'),
       // REQ-WA-001 §6 — the bridge, the allow-list, the rules, the log.
       page('whatsapp', 'whatsapp', '/administration/whatsapp'),
+      // Platform phase, Agent 10 — the first controlled automation layer: rules from templates, their runs, the kill switch.
+      page('automation', 'automation', '/administration/automation'),
       // REQ-PM-001 R4 — project types, tolerance profiles, cost codes.
       page('project_settings', 'project_setting', '/administration/project-settings'),
       // REQ-AP-001 §21.11 — payable types, stages, time limits, reason codes,

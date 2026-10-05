@@ -10,7 +10,12 @@
  *   * stock moved on before a lock: the moved stock is on hand and its charges
  *     are not lost (the audit's A1 and A2);
  *   * every lock reconciles: what went into stock and what followed departed
- *     stock is its total, exactly.
+ *     stock is its total, exactly;
+ *   * the departed share by the transaction that took it (a sale, a project
+ *     Material Issue, a supplier return, a write-off, an Item Reconciliation,
+ *     a rounding residue), each with its document's number and, for a project,
+ *     never its code or WBS element; and a lock written before 0280, with no
+ *     departure rows, that is whole and says which part is unattributed.
  *
  * The import is built as `ap07-landed-cost.test.ts` builds it.
  */
@@ -21,19 +26,31 @@ import { withScope, type Tx } from '@/server/db/client';
 import { registerDepartureRuntime } from '@/server/departures-runtime';
 import * as ap from '@/server/services/ap-invoice';
 import * as ar from '@/server/services/ar-invoice';
+import * as authz from '@/server/services/authorization';
+import * as coa from '@/server/services/chart-of-accounts';
 import * as customs from '@/server/services/customs-pd';
+import * as gr from '@/server/services/goods-return';
 import * as inventory from '@/server/services/inventory';
 import * as landed from '@/server/services/landed-cost';
 import * as finalCosts from '@/server/services/final-cost';
 import * as inventoryReports from '@/server/services/inventory-reports';
+import * as pb from '@/server/services/project-budget';
+import * as pe from '@/server/services/project-execution';
+import * as ps from '@/server/services/project-system';
 import * as shipments from '@/server/services/shipments';
+import * as states from '@/server/services/stock-states';
+import * as stock from '@/server/services/stock-operations';
+import type { ActorContext } from '@/server/services/chart-of-accounts';
 import { parseDecimal } from '@/server/domain/money';
 import { parseQuantity } from '@/server/domain/uom';
 import { runExport } from '@/server/print/export';
 import { readPdf, readWord, readWorkbook } from '../support/export-files';
 import { BAGHDAD, PANEL, WAREHOUSE, buildTradingWorld, scope, type TradingWorld } from './trading-fixture';
 import { fundBank } from './hr-funds';
+import { assertImportFullyAccounted, assertLockBalanced } from './support/landed-cost-balance';
 
+/** Each case builds an import end to end and some a project; the per-test default is not enough. */
+const SLOW = 120_000;
 const IN_PROCESS = 'WH-LC03-INPROC';
 const SECOND = 'WH-LC03-ERBIL';
 let world: TradingWorld;
@@ -561,12 +578,7 @@ describe('LC-3 · the final cost', () => {
     ]);
   });
 
-  /*
-   * Stock that had left before a lock. The departure engine (writing
-   * `landed_cost_departure`) is built in parallel; until it is merged a lock
-   * with a departed share is refused at commit by 0280's deferred check, so
-   * these are written once it is in.
-   */
+  // Stock that had left before a lock: a sale, below; the other transactions in the nested block after it.
   it('a layer sold out before the lock shows 100 a received unit, not 0 (A1); three locks read 150, not 130; departed under Sale → cost of sales with the invoice number; and it prints', async () => {
     const [first, second] = await receivedLayers();
     // The first fifty sold on 20 August — the first layer, whole.
@@ -666,8 +678,425 @@ describe('LC-3 · the final cost', () => {
     expect(pdf!.status === 200 ? pdf!.fileName : '').toBe(`${payable[0].payable_no}-final-cost.pdf`);
   });
 
-  it.todo('a project material issue before the lock: the Material Issue number and the transaction type are shown, never the project code or the WBS element');
-  it.todo('a goods return, a write-off and an Item Reconciliation before the lock: grouped by movement kind and destination role with their document numbers');
-  it.todo('a rounding residue with no movement behind it is its own group and counts in the lock’s reconciliation');
-  it.todo('a lock written before 0280 (cost of sales, no departure rows): unattributed in its reconciliation, counted as departed in the model');
+  /*
+   * The departed share, by the transaction that took the stock. The engine's
+   * own routing (which account, which dimensions, balanced journals) is held
+   * by `lc01-landed-cost-routing`; these cases hold what the *Final Cost* shows
+   * a reader of it: one group per movement kind and destination role, each
+   * entry with the number of the document behind it — and, on the import's
+   * pages, never a project or a WBS element.
+   */
+  describe('where the departed share went, by transaction and document', () => {
+    const DAMAGED = 'WH-LC03-DAMAGED';
+    let releaser: ActorContext;
+
+    /** A posting rule, as the Posting Mappings screen would write it. */
+    const map = (event: string, role: string, accountId: string) =>
+      ownerPool.query(
+        `insert into posting_rule (event_type, line_role, account_id, is_active, created_by)
+         values ($1,$2,$3,true,$4) on conflict do nothing`,
+        [event, role, accountId, world.manager.principal.userId],
+      );
+
+    /** A second accounting manager — the four eyes a project's release and budget need. */
+    async function anotherManager(): Promise<ActorContext> {
+      const id = randomUUID();
+      await ownerPool.query(`insert into app_user (id, email, display_name) values ($1,$2,'Releaser')`, [id, `${id}@example.com`]);
+      await ownerPool.query(`insert into user_role (user_id, role_code) values ($1,'accounting_manager')`, [id]);
+      await ownerPool.query(`insert into user_branch_scope (user_id, branch_code) values ($1,$2)`, [id, BAGHDAD]);
+      await ownerPool.query(`insert into user_department_scope (user_id, department_code) values ($1,'FIN') on conflict do nothing`, [id]);
+      const principal = await withScope({ userId: id, branchCode: BAGHDAD }, (tx) => authz.loadPrincipal(tx, id));
+      return { principal, branchCode: BAGHDAD };
+    }
+
+    beforeEach(async () => {
+      await ownerPool.query(
+        `insert into warehouse (code, name, branch_code, warehouse_type, is_transit, shipment_stage)
+         values ($1,'Damaged Goods',$2,'damaged_goods',false,null)`,
+        [DAMAGED, BAGHDAD],
+      );
+      // The destinations the trading world does not have, and the documents' own events that name them.
+      for (const [role, parent, code, name] of [
+        ['inventory_adjustment', 'X000001', 'X980001', 'Inventory Adjustments'],
+        ['inventory_loss', 'X000001', 'X980002', 'Inventory Loss'],
+        ['project_material_cost', 'X000001', 'X980003', 'Project Material Cost'],
+      ] as const) {
+        const { rows: parents } = await ownerPool.query(`select id, account_type from chart_of_account where code = $1`, [parent]);
+        const { rows } = await ownerPool.query(
+          `insert into chart_of_account (code, name, account_type, parent_id, is_group, is_active, approval_status, level, currency_restriction)
+           values ($1,$2,$3,$4,false,true,'approved',1,'IQD') returning id`,
+          [code, name, parents[0].account_type, parents[0].id],
+        );
+        world.accounts[role] = rows[0].id;
+        await withScope(scope(world.manager), (tx) => coa.setRequiredDimensions(tx, world.manager, rows[0].id, []));
+      }
+      await map('payables.landed_cost', 'cogs', world.accounts.cogs!);
+      await map('payables.landed_cost', 'purchase_variance', world.accounts.purchase_variance!);
+      await map('payables.landed_cost', 'inventory_adjustment', world.accounts.inventory_adjustment!);
+      await map('inventory.stock_adjustment', 'inventory_adjustment', world.accounts.inventory_adjustment!);
+      await map('payables.landed_cost', 'inventory_loss', world.accounts.inventory_loss!);
+      await map('inventory.write_off', 'inventory_loss', world.accounts.inventory_loss!);
+      await map('payables.landed_cost', 'project_material_cost', world.accounts.project_material_cost!);
+      await map('projects.material_issue', 'project_material_cost', world.accounts.project_material_cost!);
+      releaser = await anotherManager();
+    });
+
+    const as = <T>(ctx: ActorContext, fn: (tx: Tx) => Promise<T>) => withScope(scope(ctx), fn);
+    const codeOf = async (role: string) =>
+      (await ownerPool.query(`select code from chart_of_account where id = $1`, [world.accounts[role]])).rows[0].code as string;
+    const batchOf = async (layerId: string) =>
+      (
+        await ownerPool.query(
+          `select m.batch_number from cost_layer cl join inventory_movement m on m.id = cl.created_by_movement_id where cl.id = $1`,
+          [layerId],
+        )
+      ).rows[0].batch_number as string | null;
+
+    /** A direct Sales Invoice: raised by the clerk, approved and posted by the manager. */
+    async function sell(quantity: string, on: string) {
+      const made = await as(world.clerk, (tx) =>
+        ar.createDirect(tx, world.clerk, {
+          customerId: world.customerId,
+          branchCode: BAGHDAD,
+          invoiceDate: on,
+          dueDate: '2026-12-31',
+          lines: [{ itemCode: PANEL, quantity: q(quantity), unitPriceIqd: iqd('15000'), warehouseCode: WAREHOUSE }],
+        }),
+      );
+      await as(world.manager, (tx) => ar.approve(tx, world.manager, made.id));
+      await as(world.manager, (tx) => ar.post(tx, world.manager, made.id));
+      return made;
+    }
+
+    /** A printed Final Cost, in one of its formats. */
+    async function exported(format: 'xlsx' | 'docx') {
+      const { rows } = await ownerPool.query(`select payable_no from payable where id = $1`, [payableId]);
+      const copy = await withScope(scope(world.manager), (tx) =>
+        runExport(
+          tx,
+          { principal: world.manager.principal, branchCode: BAGHDAD },
+          { key: 'landed_cost_final', format, locale: 'en', at: '2026-09-26T10:00:00.000Z', input: { id: rows[0].payable_no, query: new URLSearchParams() } },
+        ),
+      );
+      expect(copy!.status).toBe(200);
+      return copy!.status === 200 ? copy!.body : Buffer.alloc(0);
+    }
+    /** The workbook's strings: what a printed Final Cost says. */
+    const printed = async (): Promise<readonly string[]> => readWorkbook(await exported('xlsx')).strings;
+
+    const groupsOf = (layer: finalCosts.ReceivedLayerTrace) =>
+      layer.departures.map((group) => [group.movementKind, group.destinationRole, group.quantity, group.departedIqd, group.returnedIqd, group.netIqd]);
+
+    it('a project material issue before the lock: the Material Issue number and the transaction type are shown, never the project code or the WBS element', async () => {
+      const [first] = await receivedLayers();
+      const batch = await batchOf(first!);
+      const { projectCode } = await as(world.manager, (tx) =>
+        ps.createDefinition(tx, world.manager, {
+          name: 'Solar farm site works',
+          typeCode: 'INTERNAL',
+          code: 'SITE-26',
+          branchCode: BAGHDAD,
+          managerUserId: world.manager.principal.userId,
+          baselineStartsOn: '2026-08-01',
+          baselineEndsOn: '2027-03-31',
+        }),
+      );
+      const wbs = (await as(world.manager, (tx) => ps.addElement(tx, world.manager, projectCode, { parentCode: `${projectCode}-1`, name: 'Panel installation' }))).code;
+      await as(releaser, (tx) => ps.release(tx, releaser, projectCode));
+      const budget = await as(world.manager, (tx) =>
+        pb.createBudgetDocument(tx, world.manager, projectCode, {
+          kind: 'original',
+          description: 'Tender',
+          lines: [{ wbsCode: wbs, costCode: 'MAT', amountIqd: '1010000' }],
+        }),
+      );
+      await as(world.manager, (tx) => pb.submitBudgetDocument(tx, world.manager, budget.documentNo));
+      await as(releaser, (tx) => pb.approveBudgetDocument(tx, releaser, budget.documentNo));
+
+      // 20 of the first layer's 50, issued to the element on 12 August.
+      const issue = await as(world.clerk, (tx) =>
+        pe.createIssue(tx, world.clerk, {
+          projectCode,
+          wbsCode: wbs,
+          costCode: 'MAT',
+          warehouseCode: WAREHOUSE,
+          movementDate: '2026-08-12',
+          description: 'Panels to site',
+          lines: [{ itemCode: PANEL, quantity: '20', batchNumber: batch }],
+          documentId: randomUUID(),
+        }),
+      );
+      await as(world.manager, (tx) => pe.postIssue(tx, world.manager, issue.documentNo));
+      await writeOffPd();
+      await charge('freight', '10000');
+      const done = await lock({ basisCode: 'by_value' });
+      // 5,000 a layer: the first has 30 of 50 left (3,000 stays), the 20 issued take 2,000.
+      expect([done.inventoryIqd, done.cogsIqd]).toEqual(['8000.0000', '2000.0000']);
+      await assertLockBalanced(done.id);
+
+      const result = await trace();
+      const [issued, whole] = result.models[0]!.layers;
+      expect(groupsOf(issued!)).toEqual([['project_issue', 'project_material_cost', '20', '2000.0000', '0.0000', '2000.0000']]);
+      expect(issued!.departures[0]!.entries).toHaveLength(1);
+      expect(issued!.departures[0]!.entries[0]!.departure).toMatchObject({
+        kind: 'departure',
+        movementKind: 'project_issue',
+        // The Material Issue's number — found through its line — and the transaction type.
+        documentType: 'project_material_issue',
+        documentNo: issue.documentNo,
+        destinationRole: 'project_material_cost',
+        accountCode: await codeOf('project_material_cost'),
+        quantity: '20',
+        amountIqd: '2000.0000',
+        lockSequence: 1,
+      });
+      expect(whole!.departures).toEqual([]);
+      expectAccountedFor(result);
+
+      // The import sees inventory transactions, not projects: neither the project's code nor its element is anywhere in the trace…
+      const everything = JSON.stringify(result);
+      expect(everything).not.toContain(projectCode);
+      expect(everything).not.toContain(wbs);
+      // …nor on the printed copy, which names the issue and the type.
+      const strings = await printed();
+      expect(strings).toContain(issue.documentNo);
+      expect(strings).toContain('Material issue');
+      expect(strings).toContain('Project material cost');
+      expect(strings.filter((text) => text.includes(projectCode) || text.includes(wbs))).toEqual([]);
+    }, SLOW);
+
+    it('a goods return, a write-off and an Item Reconciliation before the lock: grouped by movement kind and destination role with their document numbers', async () => {
+      const [first] = await receivedLayers();
+      const batch = await batchOf(first!);
+      const { rows: lines } = await ownerPool.query(`select id from ap_invoice_line where ap_invoice_id = $1`, [invoiceId]);
+
+      // 10 sent back to the supplier (12 Aug), 10 damaged and written off (13–14 Aug), 5 found missing (15 Aug).
+      const sent = await as(world.clerk, (tx) =>
+        gr.createFromInvoice(tx, world.clerk, {
+          apInvoiceId: invoiceId,
+          returnDate: '2026-08-12',
+          reason: 'Cracked glass on arrival',
+          offsetKind: 'payable',
+          lines: [{ apInvoiceLineId: lines[0].id, quantity: q('10'), warehouseCode: WAREHOUSE }],
+        }),
+      );
+      await as(world.manager, (tx) => gr.approve(tx, world.manager, sent.id));
+      await as(world.manager, (tx) => gr.post(tx, world.manager, sent.id));
+      await as(world.manager, (tx) =>
+        states.approveDamage(tx, world.manager, {
+          itemCode: PANEL,
+          fromWarehouseCode: WAREHOUSE,
+          damagedWarehouseCode: DAMAGED,
+          branchCode: BAGHDAD,
+          quantity: q('10'),
+          movementDate: '2026-08-13',
+          reason: 'Crushed by a forklift in the yard',
+          batchNumber: batch,
+        }),
+      );
+      const written = await as(world.manager, (tx) =>
+        states.writeOff(tx, world.manager, {
+          itemCode: PANEL,
+          damagedWarehouseCode: DAMAGED,
+          branchCode: BAGHDAD,
+          quantity: q('10'),
+          movementDate: '2026-08-14',
+          reason: 'Beyond repair',
+          batchNumber: batch,
+        }),
+      );
+      const counted = await as(world.manager, (tx) =>
+        stock.adjust(tx, world.manager, { itemCode: PANEL, warehouseCode: WAREHOUSE, direction: 'out', quantity: q('5'), adjustmentDate: '2026-08-15' }),
+      );
+      await writeOffPd();
+      await charge('freight', '10000');
+      const done = await lock({ basisCode: 'by_value' });
+      // The first layer's 5,000: 25 of 50 left (2,500 stays); 2,500 over 10 + 10 + 5 gone — 1,000, 1,000, 500.
+      expect([done.inventoryIqd, done.cogsIqd]).toEqual(['7500.0000', '2500.0000']);
+      await assertLockBalanced(done.id);
+      expect(await assertImportFullyAccounted(payableId)).toEqual({
+        chargesIqd: '10000.0000',
+        inventoryIqd: '7500.0000',
+        departedIqd: '2500.0000',
+      });
+
+      const result = await trace();
+      const [layer, untouched] = result.models[0]!.layers;
+      // One group each, by what took the stock and where its share went.
+      expect(groupsOf(layer!).sort()).toEqual(
+        [
+          ['count_adjustment', 'inventory_adjustment', '5', '500.0000', '0.0000', '500.0000'],
+          ['goods_return', 'purchase_variance', '10', '1000.0000', '0.0000', '1000.0000'],
+          ['write_off', 'inventory_loss', '10', '1000.0000', '0.0000', '1000.0000'],
+        ].sort(),
+      );
+      const only = (kind: string) => {
+        const group = layer!.departures.find((candidate) => candidate.movementKind === kind)!;
+        expect(group.entries).toHaveLength(1);
+        return group.entries[0]!.departure!;
+      };
+      // …with the number of the document behind each: the return's, the reconciliation's.
+      expect(only('goods_return')).toMatchObject({
+        documentType: 'goods_return',
+        documentNo: sent.returnNo,
+        accountCode: await codeOf('purchase_variance'),
+        destinationRole: 'purchase_variance',
+        quantity: '10',
+        amountIqd: '1000.0000',
+      });
+      expect(only('count_adjustment')).toMatchObject({
+        documentType: 'stock_adjustment',
+        documentNo: counted.adjustmentNo,
+        accountCode: await codeOf('inventory_adjustment'),
+        destinationRole: 'inventory_adjustment',
+        quantity: '5',
+        amountIqd: '500.0000',
+      });
+      // A write-off names no numbered document of its own: the row names its movement, and says so.
+      expect(only('write_off')).toMatchObject({
+        documentType: null,
+        documentNo: null,
+        movementId: written.movementId,
+        accountCode: await codeOf('inventory_loss'),
+        destinationRole: 'inventory_loss',
+        quantity: '10',
+        amountIqd: '1000.0000',
+      });
+      expect(untouched!.departures).toEqual([]);
+      expect(result.locks[0]!.reconciliation).toMatchObject({
+        totalIqd: '10000.0000',
+        inventoryIqd: '7500.0000',
+        departureIqd: '2500.0000',
+        roundingIqd: '0.0000',
+        accountedIqd: '10000.0000',
+        balanced: true,
+      });
+      expectAccountedFor(result);
+
+      const strings = await printed();
+      for (const text of [sent.returnNo, counted.adjustmentNo, 'Supplier return', 'Write-off', 'Reconciliation / count', 'Purchase variance', 'Inventory loss', 'Inventory adjustment']) {
+        expect(strings, text).toContain(text);
+      }
+    }, SLOW);
+
+    it('a rounding residue with no movement behind it is its own group and counts in the lock’s reconciliation', async () => {
+      // The first layer sold out, the second untouched: 200.0030 by quantity is 100.0015 to each.
+      // The sold layer's goes to its sale whole; the other restates 50 units at +2.0000 (100.0000)
+      // and the 0.0015 the unit cost cannot hold is nobody's movement.
+      const sale = await sell('50', '2026-08-20');
+      await writeOffPd();
+      await charge('freight', '200.0030');
+      const done = await lock({ basisCode: 'by_quantity' });
+      expect([done.inventoryIqd, done.cogsIqd]).toEqual(['100.0000', '100.0030']);
+      await assertLockBalanced(done.id);
+
+      const { rows: written } = await ownerPool.query(
+        `select kind, movement_id, movement_kind, quantity::text as quantity, amount_iqd::text as amount, destination_role
+           from landed_cost_departure where lock_id = $1 order by kind`,
+        [done.id],
+      );
+      expect(written).toEqual([
+        { kind: 'departure', movement_id: expect.any(String), movement_kind: 'delivery', quantity: '50.000000', amount: '100.0015', destination_role: 'cogs' },
+        { kind: 'rounding', movement_id: null, movement_kind: null, quantity: '0.000000', amount: '0.0015', destination_role: 'cogs' },
+      ]);
+
+      const result = await trace();
+      const [sold, kept] = result.models[0]!.layers;
+      // The sale's group is the sale's; the residue is a group of its own on the layer it came from — no movement kind, no quantity.
+      expect(groupsOf(sold!)).toEqual([['delivery', 'cogs', '50', '100.0015', '0.0000', '100.0015']]);
+      expect(sold!.departures[0]!.entries[0]!.departure).toMatchObject({ documentType: 'ar_invoice', documentNo: sale.invoiceNo });
+      expect(groupsOf(kept!)).toEqual([[null, 'cogs', '0', '0.0015', '0.0000', '0.0015']]);
+      expect(kept!.departures[0]!.entries).toHaveLength(1);
+      expect(kept!.departures[0]!.entries[0]!.departure).toMatchObject({
+        kind: 'rounding',
+        movementKind: null,
+        movementId: null,
+        documentType: null,
+        documentNo: null,
+        destinationRole: 'cogs',
+        quantity: '0',
+        amountIqd: '0.0015',
+      });
+      // It counts: stock, sale and residue are the lock, to the last 0.0001.
+      expect(result.locks[0]!.reconciliation).toMatchObject({
+        totalIqd: '200.0030',
+        inventoryIqd: '100.0000',
+        departureIqd: '100.0015',
+        roundingIqd: '0.0015',
+        accountedIqd: '200.0030',
+        differenceIqd: '0.0000',
+        balanced: true,
+        unattributedIqd: '0.0000',
+      });
+      const [row] = await finalCost();
+      expect(row).toMatchObject({ chargesIqd: '200.0030', stockValueIqd: '500100.0000', departedIqd: '100.0030', consumedIqd: '500000.0000', unexplainedIqd: '0.0000' });
+      expectAccountedFor(result);
+
+      const strings = await printed();
+      expect(strings).toContain('Rounding');
+      expect(strings).toContain(sale.invoiceNo);
+    }, SLOW);
+
+    it('a lock written before 0280 (cost of sales, no departure rows): unattributed in its reconciliation, counted as departed in the model', async () => {
+      const sale = await sell('50', '2026-08-20');
+      await writeOffPd();
+      await charge('freight', '10000');
+      const done = await lock({ basisCode: 'by_value' });
+      expect([done.inventoryIqd, done.cogsIqd]).toEqual(['5000.0000', '5000.0000']);
+      await assertLockBalanced(done.id);
+      const modern = await trace();
+      expect(modern.locks[0]!.reconciliation).toMatchObject({ departureIqd: '5000.0000', unattributedIqd: '0.0000', balanced: true });
+      const modernRow = (await finalCost())[0]!;
+
+      // What the engine wrote before 0280: the sold-out layer's share is cost of
+      // sales on the lock and on its adjustment row, and no departure row says which sale.
+      // Done as the owner with the guards lifted — the application cannot delete one.
+      const client = await ownerPool.connect();
+      try {
+        await client.query('set session_replication_role = replica');
+        await client.query(`delete from landed_cost_departure where lock_id = $1`, [done.id]);
+      } finally {
+        await client.query('set session_replication_role = origin').catch(() => {});
+        client.release();
+      }
+      const { rows: left } = await ownerPool.query(`select count(*)::int as n from landed_cost_departure where lock_id = $1`, [done.id]);
+      expect(left[0].n).toBe(0);
+
+      const result = await trace();
+      // The lock's own record places the 5,000: whole, with the unattributed part shown, not hidden and not a difference.
+      expect(result.locks[0]!.reconciliation).toEqual({
+        totalIqd: '10000.0000',
+        chargesIqd: '10000.0000',
+        chargesMatch: true,
+        inventoryIqd: '5000.0000',
+        departureIqd: '0.0000',
+        roundingIqd: '0.0000',
+        accountedIqd: '10000.0000',
+        differenceIqd: '0.0000',
+        balanced: true,
+        recordedInventoryIqd: '5000.0000',
+        recordedDepartedIqd: '5000.0000',
+        unattributedIqd: '5000.0000',
+      });
+      // The model counts it as departed: the same figures as before the rows were taken away.
+      const [model] = result.models;
+      expect(model!.totals.departedIqd).toBe('5000.0000');
+      expect(model!.totals.unexplainedIqd).toBe('0.0000');
+      expect(model!.totals).toEqual(modern.models[0]!.totals);
+      expect((await finalCost())[0]).toEqual(modernRow);
+      const [sold, kept] = model!.layers;
+      expect(sold).toMatchObject({ chargesIqd: '5000.0000', departedIqd: '5000.0000', onHandQty: '0' });
+      // No row, so no group: nothing to name the sale by.
+      expect(sold!.departures).toEqual([]);
+      expect(kept!.departures).toEqual([]);
+
+      // The printed copy puts the figure in the lock's Departed column and says why no row lists it.
+      const word = readWord(await exported('docx')).text;
+      expect(word).toContain('The part of this cost that had already left stock was recorded as one figure on the lock, with no movement behind it (a lock written before departures were itemised).');
+      expect(word).not.toContain('Nothing had left when the cost was locked.');
+      expect(word).not.toContain(sale.invoiceNo);
+      const strings = await printed();
+      expect(strings).not.toContain(sale.invoiceNo);
+    }, SLOW);
+  });
 });

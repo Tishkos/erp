@@ -40,14 +40,14 @@ async function press(page: Page, name: string, expected: string) {
     await expect(button).toBeEnabled({ timeout: 20_000 });
     await button.click();
     try {
-      await expect(page.getByText(expected, { exact: true }).first()).toBeVisible({ timeout: 25_000 });
+      await expect(page.getByText(expected, { exact: true }).filter({ visible: true }).first()).toBeVisible({ timeout: 25_000 });
       return;
     } catch {
       await page.reload();
       await page.waitForTimeout(2_000);
     }
   }
-  await expect(page.getByText(expected, { exact: true }).first()).toBeVisible({ timeout: 25_000 });
+  await expect(page.getByText(expected, { exact: true }).filter({ visible: true }).first()).toBeVisible({ timeout: 25_000 });
 }
 
 async function signIn(page: Page, user: { email: string; password: string }) {
@@ -111,7 +111,7 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
       await page.getByRole('button', { name: 'Publish', exact: true }).click();
       await expect(page.getByRole('status')).toContainText('Saved');
     }
-    await expect(page.getByText('1,310').first()).toBeVisible();
+    await expect(page.getByText('1,310').filter({ visible: true }).first()).toBeVisible();
   });
 
   test('2 · an account is raised by one person and approved by another', async ({ page }) => {
@@ -182,7 +182,7 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     // Requirement 2 — the number is the system's.
     entryNo = (await page.getByRole('heading', { level: 1 }).innerText()).trim();
     expect(entryNo).toMatch(/^JE-\d{4}-\d+$/);
-    await expect(page.getByText('Draft', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Draft', { exact: true }).filter({ visible: true }).first()).toBeVisible();
     await expect(page.getByRole('textbox', { name: 'Posting date', exact: true })).toHaveValue(TODAY);
 
     // The description is typed on the document and saved when the box is left.
@@ -223,7 +223,7 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     await expect(page.getByRole('status')).toContainText('Saved', { timeout: 30_000 });
 
     // A Finance Manager creates and posts directly (§14.4).
-    await expect(page.getByText('Posted', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Posted', { exact: true }).filter({ visible: true }).first()).toBeVisible();
     // And a posted entry stops offering anything that would change it.
     await expect(page.getByRole('combobox', { name: 'Account' })).toHaveCount(0);
     // The audit log is one press away from the entry.
@@ -267,7 +267,9 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     await page.waitForLoadState('networkidle');
     const pl = page.locator('section', { hasText: 'Income Statement' }).last();
     await expect(pl).toContainText('Revenue');
-    await expect(pl).toContainText('Net profit');
+    // The result line is named by its sign, and what the rest of the suite
+    // has posted this year decides the sign.
+    await expect(pl).toContainText(/Net (profit|loss)/);
 
     await page.goto(`/finance/balance-sheet?to=${YEAR}-12-31`);
     await page.waitForLoadState('networkidle');
@@ -315,12 +317,12 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     expect(reversalNo).not.toBe(entryNo);
 
     // The original is closed, and says what closed it.
-    await expect(page.getByText('Reversed', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Reversed', { exact: true }).filter({ visible: true }).first()).toBeVisible();
 
     // The reversal points back, posted, for the same money.
     await page.goto(`/finance/journals/${reversalNo}`);
     await expect(page.getByRole('heading', { level: 1 })).toContainText(reversalNo);
-    await expect(page.getByText('Posted', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Posted', { exact: true }).filter({ visible: true }).first()).toBeVisible();
     await expect(
       page.locator('#journal-document').getByRole('link', { name: entryNo }),
     ).toBeVisible();
@@ -396,7 +398,7 @@ test('an account statement keeps its partner when the filters run', async ({ pag
 
     // Opened with nobody chosen, it says so rather than guessing a partner.
     await page.goto(route);
-    await expect(page.getByText(`Choose a ${kind} to read their account.`).first()).toBeVisible({
+    await expect(page.getByText(`Choose a ${kind} to read their account.`).filter({ visible: true }).first()).toBeVisible({
       timeout: 60_000,
     });
   }
@@ -524,5 +526,5 @@ test('a sales invoice header carries block 5 fields, and approves without dimens
   await expect(page.locator('select[name="department_code"]')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Approve', exact: true }).click();
-  await expect(page.getByText('Approved', { exact: true }).first()).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText('Approved', { exact: true }).filter({ visible: true }).first()).toBeVisible({ timeout: 60_000 });
 });

@@ -254,7 +254,7 @@ async function raiseOneOfEach(browser: Browser) {
     await pd.getByLabel('Registered').fill('2026-09-02');
     await pd.getByLabel('Expires').fill('2027-03-01');
     await pd.getByRole('button', { name: 'Register PD' }).click();
-    await expect(page.getByRole('link', { name: `6${run}` })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('link', { name: `6${run}` }).first()).toBeVisible({ timeout: 30_000 });
 
     // A B/L with one container.
     await page.goto(importUrl);
@@ -265,16 +265,15 @@ async function raiseOneOfEach(browser: Browser) {
     await bl.getByLabel('ETA').fill('2026-10-20');
     await bl.getByLabel('Container no. 1').fill(containerNo('TEMU', `${digits}5`));
     await bl.getByRole('button', { name: 'New B/L' }).click();
-    await expect(page.getByRole('link', { name: `BL-THEME-${run}` })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('link', { name: `BL-THEME-${run}` }).first()).toBeVisible({ timeout: 30_000 });
 
-    // A loan, entered.
-    await page.goto('/treasury/loans');
-    await page.getByRole('button', { name: 'New loan' }).click();
-    const loan = page.getByRole('dialog');
-    await loan.getByLabel('Proceeds land in').selectOption({ index: 0 });
-    await loan.getByRole('textbox', { name: 'Principal' }).fill('100000');
-    await loan.getByRole('button', { name: 'Create loan' }).click();
-    await page.waitForURL(/\/payables\/loans\/LOAN-/, { timeout: 60_000 });
+    // A loan, entered — on its own page since PR #42 (`/treasury/loans/new`).
+    await page.goto('/treasury/loans/new');
+    await page.getByLabel('Proceeds land in').selectOption({ index: 0 });
+    await page.getByRole('textbox', { name: 'Principal' }).fill('100000');
+    await page.getByLabel('First instalment due').fill('2026-12-31');
+    await page.getByRole('button', { name: 'Create loan' }).click();
+    await page.waitForURL(/\/treasury\/loans\/LOAN-/, { timeout: 60_000 });
 
     // A migration dry run: the run register's row.
     // The sheet's shape, as payables.spec.ts Stage 8 writes it: 46266 is
@@ -310,60 +309,71 @@ async function raiseOneOfEach(browser: Browser) {
   }
 }
 
-test('status chips follow the palette into the dark, on every screen that draws one', async ({ browser, page }) => {
-  test.setTimeout(300_000);
-  await raiseOneOfEach(browser);
-  await signIn(page);
+/**
+ * A status is drawn in three different rules — the document window's
+ * `.sapStatus`, the register's `.sapRegisterStatus`, and the global `.status`
+ * on a SAP page. They were three copies of the same twelve hexes, so fixing
+ * the dark palette in one fixed exactly one, and twice it was not noticed
+ * (2026-09-29: "approved posted draft status in dark mode they shouldn't be
+ * white"). One screen per rule, so a fourth copy cannot hide.
+ *
+ * One test per screen (2026-10-04): the fixture is raised once for the file,
+ * and each screen's reading fits its own budget on a small machine instead of
+ * nine readings sharing one 300 s clock.
+ */
+const CHIP_SCREENS = [
+  '/payables/invoices',
+  '/finance/journals',
+  '/master-data/chart-of-accounts',
+  // REQ-AP-001's registers draw the same chips (Stages 3–8).
+  '/payables/payment-applications',
+  '/payables/pd?view=all',
+  '/payables/shipments',
+  '/payables/containers?view=all',
+  '/treasury/loans?view=all',
+  // …and Stage 8's run register.
+  '/administration/payables-migration',
+];
 
-  // A status is drawn in three different rules — the document window's
-  // `.sapStatus`, the register's `.sapRegisterStatus`, and the global
-  // `.status` on a SAP page. They were three copies of the same twelve hexes,
-  // so fixing the dark palette in one fixed exactly one, and twice it was not
-  // noticed (2026-09-29: "approved posted draft status in dark mode they
-  // shouldn't be white"). One screen per rule, so a fourth copy cannot hide.
-  const screens = [
-    '/payables/invoices',
-    '/finance/journals',
-    '/master-data/chart-of-accounts',
-    // REQ-AP-001's registers draw the same chips (Stages 3–8).
-    '/payables/payment-applications',
-    '/payables/pd?view=all',
-    '/payables/shipments',
-    '/payables/containers?view=all',
-    '/treasury/loans?view=all',
-    // …and Stage 8's run register.
-    '/administration/payables-migration',
-  ];
+test.describe('status chips follow the palette into the dark, on every screen that draws one', () => {
+  test.beforeAll(async ({ browser }) => {
+    test.setTimeout(300_000);
+    await raiseOneOfEach(browser);
+  });
 
-  for (const route of screens) {
-    await page.goto(route);
-    await setAppearance(page, 'midnight', 'gold');
+  for (const route of CHIP_SCREENS) {
+    test(`on ${route}`, async ({ page }) => {
+      test.setTimeout(120_000);
+      await signIn(page);
+      await page.goto(route);
+      await setAppearance(page, 'midnight', 'gold');
 
-    const chips = await page.locator('[class*="tatus"]').evaluateAll((els) =>
-      els
-        .filter((el) => {
-          const text = el.textContent?.trim() ?? '';
-          return text.length > 0 && text.length <= 24;
-        })
-        .map((el) => {
-          const style = getComputedStyle(el);
-          return { text: el.textContent!.trim(), background: style.backgroundColor, color: style.color };
-        }),
-    );
+      const chips = await page.locator('[class*="tatus"]').evaluateAll((els) =>
+        els
+          .filter((el) => {
+            const text = el.textContent?.trim() ?? '';
+            return text.length > 0 && text.length <= 24;
+          })
+          .map((el) => {
+            const style = getComputedStyle(el);
+            return { text: el.textContent!.trim(), background: style.backgroundColor, color: style.color };
+          }),
+      );
 
-    expect(chips.length, `${route} draws at least one status`).toBeGreaterThan(0);
+      expect(chips.length, `${route} draws at least one status`).toBeGreaterThan(0);
 
-    for (const chip of chips) {
-      // On a dark ground the chip's own surface must be dark. A pale pastel
-      // here is the light-mode treatment showing through, which is what the
-      // sponsor saw as "white".
-      const background = luminance(chip.background);
-      expect(background, `${route} · ${chip.text} background is dark`).toBeLessThan(0.35);
-      // And it still has to be readable, which a dark chip with dark ink is not.
-      expect(
-        contrast(chip.color, chip.background),
-        `${route} · ${chip.text} is readable`,
-      ).toBeGreaterThan(4.5);
-    }
+      for (const chip of chips) {
+        // On a dark ground the chip's own surface must be dark. A pale pastel
+        // here is the light-mode treatment showing through, which is what the
+        // sponsor saw as "white".
+        const background = luminance(chip.background);
+        expect(background, `${route} · ${chip.text} background is dark`).toBeLessThan(0.35);
+        // And it still has to be readable, which a dark chip with dark ink is not.
+        expect(
+          contrast(chip.color, chip.background),
+          `${route} · ${chip.text} is readable`,
+        ).toBeGreaterThan(4.5);
+      }
+    });
   }
 });

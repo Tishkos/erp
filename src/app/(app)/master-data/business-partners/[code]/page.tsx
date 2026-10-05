@@ -20,6 +20,7 @@ import {
 } from '@/components/admin';
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { AuditLogButton, RecordHistory } from '@/components/admin/history';
+import { RelatedRecords } from '@/components/admin/related-records';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, formatQuantity, formatTimestamp, type Locale } from '@/i18n/config';
@@ -33,6 +34,7 @@ import * as bankDetails from '@/server/services/business-partner';
 import * as rates from '@/server/services/exchange-rates';
 import * as legacy from '@/server/services/legacy-import';
 import * as partners from '@/server/services/partners';
+import * as relationships from '@/server/services/relationships';
 import * as terms from '@/server/services/payment-terms';
 import * as supplierPayments from '@/server/services/supplier-payment';
 import { businessToday } from '@/server/domain/business-date';
@@ -132,6 +134,10 @@ export default async function BusinessPartnerPage({
   const selfHref = `${listRoute}/${encodeURIComponent(row.code)}?role=${routeRole}`;
   const accountHidden = (id: string) => ({ code: row.code, returnRole: routeRole, account: id });
   const showBanks = row.isSupplier || accounts.length > 0;
+  // Platform phase, Agent 9 — the chain of real records around this party, on the side the page is read as.
+  const related = await withCurrentUser((tx) =>
+    relationships.graphFor(tx, { principal, branchCode: context.scope.branchCode }, routeRole, row.code),
+  );
 
   return (
     <AdminPage
@@ -731,6 +737,8 @@ export default async function BusinessPartnerPage({
               </div>
             </Panel>
           ) : null}
+
+          {related ? <RelatedRecords graph={related} variant="panel" /> : null}
 
           <RecordHistory
             objectId={row.id}

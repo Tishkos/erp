@@ -122,6 +122,13 @@ const SALES = ['sales', 'finance_ar', 'crm'];
 const MONEY_OUT = ['treasury', 'money_transfer'];
 const BUYING = ['payables'];
 
+/**
+ * Items and units of measure were the Inventory section's on 2026-10-03, when
+ * these roles were set, and have since moved to Master Data (with Warehouses,
+ * which none of these roles held). Named, so the roles keep what they had.
+ */
+const STOCK_MASTER = ['item', 'uom'];
+
 /*
  * The objects inside Payables that are money leaving, rather than buying.
  *
@@ -131,24 +138,20 @@ const BUYING = ['payables'];
  * Shene `post` on a supplier payment — she could have sent money with nobody
  * approving it, which is the opposite of what was asked (caught by reading the
  * grants back, 2026-10-03). Named here so no section grant can include them by
- * accident again.
+ * accident again. (`ap_allocation` was the never-built Allocations item's
+ * object until 2026-10-04; it left the menu, and `setGrants` refuses an object
+ * the menu does not know.)
  */
-/**
- * Items and units of measure were the Inventory section's on 2026-10-03, when
- * these roles were set, and have since moved to Master Data (with Warehouses,
- * which none of these roles held). Named, so the roles keep what they had.
- */
-const STOCK_MASTER = ['item', 'uom'];
-
-const PAYING = ['payment_application', 'supplier_payment', 'supplier_advance', 'ap_allocation'];
+const PAYING = ['payment_application', 'supplier_payment', 'supplier_advance'];
 
 type Grant = { readonly object: string; readonly verb: PermissionVerb };
 
 /**
- * Only objects the system grants on. A name that is not one — `ap_allocation`
- * in PAYING, a menu entry whose screen has no permission object yet — would
- * make `setGrants` refuse the whole role ("not a system section"); it is
- * passed over instead, so the role holds every object that does exist.
+ * Only objects the system grants on. A name that is not one — a menu entry
+ * whose screen has no permission object yet, or one that has left the menu
+ * (`ap_allocation`) — would make `setGrants` refuse the whole role ("not a
+ * system section"); it is passed over instead, so the role holds every object
+ * that does exist.
  */
 const GRANTABLE = new Set(roles.grantableObjects());
 
@@ -209,8 +212,10 @@ const NEW_ROLES = [
             'payables_payments',
           ),
           ...STOCK_MASTER,
-          // Payables Settings and the sheet migration: the menu's payables_setup
-          // until both moved to Administration (2026-10-04), named by object now.
+          // Payables Settings and the sheet migration were the module's own
+          // section (`payables_setup`) until 2026-10-04, when they moved to
+          // Administration beside the other modules' settings. The rest of
+          // that section is not hers, so the two objects are named instead.
           'payables_settings',
           'payables_migration',
         ],

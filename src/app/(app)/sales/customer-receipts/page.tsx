@@ -11,6 +11,8 @@ import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as receipts from '@/server/services/customer-receipt';
+import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
+import { savedViewsFor } from '@/server/saved-views-gate';
 
 /**
  * Receipts — Operations build, block 6.
@@ -47,6 +49,8 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Sea
   }
   const mayCreate = can(principal, 'create', receipts.PERMISSION_OBJECT);
 
+  // The person's saved views of this screen — and, on a bare arrival, their default one.
+  const saved = await savedViewsFor('sales.receipts', searchParams);
   const rows = await withCurrentUser((tx) => receipts.list(tx));
   const shown = rows.filter((row) => matches(row, outcome.q));
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
@@ -87,7 +91,9 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Sea
             placeholder={t('search_placeholder')}
             q={outcome.q}
             searchLabel={t('search')}
-          />
+          >
+            <SavedViewsMenu state={saved} />
+          </ListToolbar>
 
           <div className={`${s.sapTableWrap} ${s.sapRegisterTableWrap}`}>
             <table aria-labelledby="rec-list-title" className={`${s.sapTable} ${s.sapRegisterTable}`}>

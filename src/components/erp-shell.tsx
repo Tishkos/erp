@@ -64,6 +64,8 @@ import { Button, Panel } from '@/components/ui';
  */
 import mainLogo from '../../mainLogoMark.png';
 import { GlobalSearch } from './global-search';
+import { ChatCount, ChatGlyph, ChatPopover, useChatLabel } from './chat/chat-header';
+import { BellCount, BellGlyph, BellPopover, useBellLabel } from './notifications/notification-bell';
 import { switchBranch } from '@/app/(app)/actions';
 
 type UtilityPanel = 'notifications' | 'messages' | 'user';
@@ -86,14 +88,6 @@ interface ModuleGroup extends ModuleDefinition {
   readonly sections: readonly MenuSection[];
 }
 
-export interface ShellNotification {
-  readonly id: string;
-  readonly subject: string;
-  readonly body: string;
-  readonly createdAt: string;
-  readonly read: boolean;
-}
-
 interface ErpShellProps {
   readonly brand: string;
   readonly branchCode: string;
@@ -108,11 +102,13 @@ interface ErpShellProps {
   readonly initialAppearanceSettings: UserAppearanceSettings;
   readonly appearanceSettingsSaved: boolean;
   /**
-   * The signed-in person's latest notifications, newest first — what the bell
-   * shows. Block 8's status changes land here for the users selected to be
-   * told.
+   * How many notifications the signed-in person has not read — what the bell
+   * shows first. The list itself is fetched when the popover opens
+   * (`components/notifications`), so a page render costs one count.
    */
-  readonly notifications?: readonly ShellNotification[];
+  readonly unreadNotifications?: number;
+  /** The books' time zone, for the hover time of a notification. */
+  readonly notificationZone?: string;
   /** Rendered after the main region, so it always ends the page. */
   readonly footer?: ReactNode;
   readonly children: ReactNode;
@@ -392,7 +388,8 @@ export function ErpShell({
   sections,
   initialAppearanceSettings,
   appearanceSettingsSaved,
-  notifications = [],
+  unreadNotifications = 0,
+  notificationZone = 'Asia/Baghdad',
   footer,
   children,
 }: ErpShellProps) {
@@ -418,6 +415,9 @@ export function ErpShell({
   );
 
   const shortUserId = userId.slice(0, 8);
+  // On whitespace: `/s+/` split the name on its letter s, so "System
+  // Administrator" wore "ST" and nobody with an s in their name their own
+  // initials.
   const initials = displayName
     .split(/\s+/)
     .filter(Boolean)
@@ -430,9 +430,11 @@ export function ErpShell({
     : roleCodes.length > 0
       ? roleCodes.join(' · ')
       : shell('no_role');
-  const notificationItem = sections
-    .flatMap((section) => section.items)
-    .find((item) => item.key === 'notifications');
+  const bellSeed = { unread: unreadNotifications, zone: notificationZone };
+  const bellLabel = useBellLabel(bellSeed, shell('notifications'));
+  // Internal chat: the messages button carries the unread count for a person who holds chat.
+  const chatEnabled = sections.some((section) => section.items.some((item) => item.key === 'chat'));
+  const messagesLabel = useChatLabel(chatEnabled, shell('messages'));
 
   const persistAppearanceSettings = async (settings: UserAppearanceSettings) => {
     setAppearanceSaveState('saving');
@@ -744,23 +746,23 @@ export function ErpShell({
             <button
               className="erp-icon-button"
               type="button"
-              aria-label={shell('notifications')}
+              aria-label={bellLabel}
               aria-expanded={openPopover === 'notifications'}
               aria-controls="erp-notifications-panel"
               onClick={() => togglePopover('notifications')}
             >
-              <Bell aria-hidden="true" />
+              <BellGlyph seed={bellSeed} />
             </button>
 
             <button
               className="erp-icon-button"
               type="button"
-              aria-label={shell('messages')}
+              aria-label={messagesLabel}
               aria-expanded={openPopover === 'messages'}
               aria-controls="erp-messages-panel"
               onClick={() => togglePopover('messages')}
             >
-              <Mail aria-hidden="true" />
+              <ChatGlyph enabled={chatEnabled} />
             </button>
 
             <button
@@ -814,34 +816,7 @@ export function ErpShell({
               <Bell aria-hidden="true" />
               <h2>{shell('notifications')}</h2>
             </div>
-            {notifications.length > 0 ? (
-              <ul className="erp-notifications__list">
-                {notifications.map((note) => (
-                  <li key={note.id} className={note.read ? undefined : 'erp-notifications__unread'}>
-                    <strong>
-                      <bdi dir="auto">{note.subject}</bdi>
-                    </strong>
-                    <p>
-                      <bdi dir="auto">{note.body}</bdi>
-                    </p>
-                    <time dateTime={note.createdAt}>{note.createdAt.slice(0, 16).replace('T', ' ')}</time>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            {notifications.length > 0 ? null : notificationItem?.href ? (
-              <Link
-                className="erp-utility-popover__link"
-                href={notificationItem.href}
-                onClick={closeNavigation}
-              >
-                {page(notificationItem.key)}
-              </Link>
-            ) : notificationItem ? (
-              <PendingItem item={notificationItem} />
-            ) : (
-              <p className="erp-utility-popover__empty">{shell('notifications_empty')}</p>
-            )}
+            <BellPopover onNavigate={closeNavigation} seed={bellSeed} />
           </section>
         ) : null}
 
@@ -855,7 +830,11 @@ export function ErpShell({
               <Mail aria-hidden="true" />
               <h2>{shell('messages')}</h2>
             </div>
-            <p className="erp-utility-popover__empty">{shell('messages_empty')}</p>
+            {chatEnabled ? (
+              <ChatPopover onNavigate={closeNavigation} />
+            ) : (
+              <p className="erp-utility-popover__empty">{shell('messages_empty')}</p>
+            )}
           </section>
         ) : null}
 
@@ -936,7 +915,7 @@ export function ErpShell({
             <div className="erp-mobile-drawer__context">
               {branchControl}
               <div className="erp-mobile-user">
-                <strong>{shortUserId}</strong>
+                <strong>{displayName}</strong>
                 <span title={roleLabel}>{roleLabel}</span>
               </div>
             </div>
@@ -987,6 +966,7 @@ export function ErpShell({
               >
                 <Bell aria-hidden="true" />
                 <span>{shell('notifications')}</span>
+                <BellCount seed={bellSeed} />
               </button>
               <button
                 className="erp-mobile-action"
@@ -998,6 +978,7 @@ export function ErpShell({
               >
                 <Mail aria-hidden="true" />
                 <span>{shell('messages')}</span>
+                <ChatCount enabled={chatEnabled} />
               </button>
               <button className="erp-mobile-action" type="button" onClick={changeLocale}>
                 <Languages aria-hidden="true" />

@@ -1013,6 +1013,14 @@ async function returnInvoicedGoods(
   const pool = (await inventory.layersOf(tx, line.itemCode, line.warehouseCode)).filter(
     (layer) => layer.remainingQuantity > 0n && lineage.has(layer.id),
   );
+  // The invoice's own layer — and what was moved on from it — before the
+  // lineage's siblings, FIFO within each (a stable sort keeps `layersOf`'s
+  // order). Two imports of one item from one supplier at one price on one
+  // day are each other's siblings, and a shortage claimed on the second was
+  // leaving by the first's layer, so the first's board read short and the
+  // second's still in transit (2026-10-04).
+  const own = await descendantsOf(tx, originLayerId);
+  pool.sort((a, b) => Number(!own.has(a.id)) - Number(!own.has(b.id)));
 
   // REQ-FIX-001 FIX-4 — in the item's base unit, as the layers are.
   let outstanding = await units.toBaseQuantity(tx, line.itemCode, line.uomCode, parseQuantity(line.quantity));
@@ -1159,6 +1167,18 @@ async function lineageOf(
       select cl.id from cost_layer cl join lineage l on cl.origin_layer_id = l.id
     )
     select id from lineage`);
+  return new Set((result.rows as { id: string }[]).map((row) => row.id));
+}
+
+/** A layer and every layer that was carved from it, transfer by transfer. */
+async function descendantsOf(tx: Tx, originLayerId: string): Promise<Set<string>> {
+  const result = await tx.execute(sql`
+    with recursive own as (
+      select ${originLayerId}::uuid as id
+      union
+      select cl.id from cost_layer cl join own o on cl.origin_layer_id = o.id
+    )
+    select id from own`);
   return new Set((result.rows as { id: string }[]).map((row) => row.id));
 }
 

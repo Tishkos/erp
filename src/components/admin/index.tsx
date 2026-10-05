@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { ArrowLeft, CheckCircle2, ChevronRight, Search, TriangleAlert } from 'lucide-react';
+import { rowMatches } from '@domain/register-filters';
 import { PageHeader, Panel, Workspace } from '@/components/ui';
 import styles from './admin.module.css';
 import { Submit } from './submit';
@@ -333,6 +334,7 @@ export function Select({
   emptyLabel,
   multiple,
   size,
+  id: idOverride,
 }: {
   readonly label: string;
   readonly name: string;
@@ -355,8 +357,10 @@ export function Select({
   readonly emptyLabel?: string | undefined;
   readonly multiple?: boolean | undefined;
   readonly size?: number | undefined;
+  /** The element id, when the field name is not unique on the page (as `Field`'s). */
+  readonly id?: string | undefined;
 }) {
-  const id = `f-${name}`;
+  const id = idOverride ?? `f-${name}`;
   return (
     <div className={styles.field}>
       <label className={styles.label} htmlFor={id}>
@@ -423,15 +427,31 @@ export function LinkButton({
   label,
   tone = 'secondary',
   small,
+  download,
 }: {
   readonly href: string;
   readonly label: string;
   readonly tone?: 'primary' | 'secondary';
   readonly small?: boolean;
+  /**
+   * A file to download, not a screen to open: a plain anchor, as the export
+   * menu's. A `Link` to a route handler is prefetched the moment it is in
+   * view, which ran the export — reading, rendering and writing its
+   * `exported` audit row — on every visit to the Chart of Accounts, with
+   * nobody having pressed anything.
+   */
+  readonly download?: boolean;
 }) {
   const cls = [styles.button, tone === 'primary' ? styles.primary : '', small ? styles.small : '']
     .filter(Boolean)
     .join(' ');
+  if (download) {
+    return (
+      <a className={cls} download href={href}>
+        {label}
+      </a>
+    );
+  }
   return (
     <Link className={cls} href={href}>
       {label}
@@ -592,6 +612,7 @@ export function ListToolbar({
   countLabel,
   clearLabel,
   clearHref,
+  hidden,
   children,
 }: {
   readonly q: string;
@@ -600,11 +621,16 @@ export function ListToolbar({
   readonly countLabel: string;
   readonly clearLabel: string;
   readonly clearHref: string;
+  /** Query values the search keeps — a folder, a filter — so that searching does not leave the place it was started in. */
+  readonly hidden?: Readonly<Record<string, string>>;
   readonly children?: ReactNode;
 }) {
   return (
     <div className={styles.toolbar}>
       <form className={styles.toolbarSearch} method="get" role="search">
+        {hidden
+          ? Object.entries(hidden).map(([name, value]) => <input key={name} name={name} type="hidden" value={value} />)
+          : null}
         <input aria-label={searchLabel} defaultValue={q} name="q" placeholder={placeholder} type="search" />
         <button aria-label={searchLabel} type="submit">
           <Search aria-hidden="true" />
@@ -623,13 +649,10 @@ export function ListToolbar({
   );
 }
 
-/** Case-insensitive match of a search phrase against every value of a row. */
+/**
+ * Case-insensitive match of a search phrase against every value of a row. One
+ * rule with the pinned counts on Home (`rowMatches`, domain/register-filters).
+ */
 export function matches(row: Record<string, unknown>, q: string): boolean {
-  if (!q.trim()) return true;
-  const needle = q.trim().toLowerCase();
-  return Object.values(row).some((value) => {
-    if (value === null || value === undefined) return false;
-    if (value instanceof Date) return false;
-    return String(value).toLowerCase().includes(needle);
-  });
+  return rowMatches(row, q);
 }

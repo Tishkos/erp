@@ -7,7 +7,9 @@ parts have profiles."* AGENTS.md › *Every record wears the same four doors* an
 where every record page stands. The rows marked **owner module** were surveyed
 on `main` 81a5ede and are each module agent's to finish on its own branch; the
 orchestrator re-checks them at merge. Every other row is `feat/shared-module`'s
-and reads as it is on that branch.
+and reads as it is on that branch. **The merged branch was reviewed page by
+page on 2026-10-04: `docs/notes/doors-review-2026-10-04.md` is the table as the
+code is, and says where this one was behind or wrong.**
 
 Columns: **P** printer (`ExportIcon` in the title bar), **A** paperclip
 (`AttachmentsButton` / `RecordAttachmentsDoor`), **N** notes (`RecordNotesDoor`),
@@ -38,8 +40,8 @@ rule), `view` (a read-only rendering of another record's data: printer only).
 | `payables/goods-receipts/[receiptNo]` | ❌ | ❌ | ❌ | ❌ | none | order: link ✅; supplier, warehouse: text ❌ | payables | owner module |
 | `payables/contracts/[contractNo]` — recurring contract | ❌ | ❌ | ❌ | ❌ | none | supplier, department: text ❌ | payables | owner module |
 | `payables/[payableNo]` — import application | ✅ | ✅ | ✅ | ✅ | `import_application` | supplier: text ❌; B/L, container, PD, invoice, loan: links ✅ | payables | owner module |
-| `treasury/loans/[loanNo]` — bank loan (the party-link model) | ❌ | ✅ | ❌ | ✅ | **none** | bank account: link ✅; bank: text ❌ | payables | owner module |
-| `treasury/deposits/[depositNo]` | ❌ | ✅ | ❌ | ✅ | none | journal: link ✅; bank/cash account: text ❌ | payables | owner module |
+| `treasury/loans/[loanNo]` — bank loan (the party-link model) | ✅ | ✅ | ✅ | ✅ | `bank_loan` | bank, bank account: links ✅ | payables | done (notes door and print model 2026-10-04, e2e verification) |
+| `treasury/deposits/[depositNo]` | ✅ | ✅ | ✅ | ✅ | `bank_deposit` | journal, bank/cash account, credit account: links ✅ | payables | done (notes door and print model 2026-10-04, e2e verification) |
 | `finance/journals/[entryNo]` | ✅ | ✅ | ✅ | ✅ | `journal_entry` | G/L accounts, reversal journal: `ProfileLink` ✅; recurring template: link ✅ | accounting | done |
 | `treasury/transfers/[transferNo]` — internal transfer | ✅ | ✅ | ✅ | ✅ | `internal_transfer` | bank/cash accounts, G/L accounts, journals: `ProfileLink` ✅ | accounting | done |
 | `treasury/bank-reconciliation/[statementNo]` — statement + reconciliation | ✅ | ✅ | ✅ | ✅ | `bank_reconciliation` | account, G/L account, every journal: `ProfileLink` ✅ | accounting | done |
@@ -48,6 +50,8 @@ rule), `view` (a read-only rendering of another record's data: printer only).
 | `finance/closing` — the period's close (the period is the record) | ✅ | ✅ | ✅ | ✅ | `period_close` | — (checks link their screens) | accounting | done |
 | `inventory/opening-stock/[documentNo]` | ✅ | ✅ | ✅ | ✅ | `opening_stock` | warehouse, items: links ✅ | inventory | done (2026-10-04) |
 | `inventory/stock-count/[countNo]` — stock count (new) | ✅ | ✅ | ✅ | ✅ | `stock_count` | warehouse, items: links ✅ | inventory | done (2026-10-04) |
+| `inventory/transfers/[transferNo]` — transfer (new, inventory-finish) | ✅ | ✅ | ✅ | ✅ | `transfer` (layers, before/after per warehouse) | item, both warehouses, branch: links ✅ | inventory | done (2026-10-04) |
+| `inventory/stock-reconciliation/[reconNo]` — Item Reconciliation (new, inventory-finish) | ✅ | ✅ | ✅ | ✅ | `item_reconciliation` (layers, before/after, journal lines) | item, warehouse, branch, journal: links ✅ | inventory | done (2026-10-04) |
 
 ## Logistics documents
 
@@ -118,6 +122,59 @@ The employee link on an HR record is shown only to readers who hold `view` on
 | — | `carrier` | | missing — no carrier record exists (a B/L's shipping line is text) | logistics | not delivered |
 | — | `currency`, `fixed_asset`, `investment` | | missing — those modules have no delivered screens; nothing to link from yet | shared | not delivered |
 
+## Chat (platform phase, Agent 1)
+
+`/chat` is a workspace, not a record page: it has no four doors. The doors a
+record page wears are untouched; what chat adds to a record is a seam,
+`services/chat.openRecordConversation(tx, ctx, { recordType, recordId, label,
+href })` — a conversation about that record, offered only to people who could
+open it (`attachments.mayAccessParent`). A record page that wants a "discuss"
+door calls it from an action and sends the person to `/chat?c=<id>`; none does
+yet. A file sent in a conversation is an attachment of object type
+`chat_message` (member-only), so it appears in no record's attachments door.
+`docs/audits/CHAT-IMPLEMENTATION.md` has the rest.
+
+## Task Center (platform phase, Agent 3)
+
+| Record page | P | A | N | H | Print model | Parties → profile | Owner | Status |
+|---|---|---|---|---|---|---|---|---|
+| `tasks/[taskNo]` — task | ✅ | ✅ | ✅ | ✅ | `task` | assignee, assigner, raiser, watchers: `ProfileLink` to the employee when the reader may view employees, else the name; related record: link only if the reader may open it | tasks | done |
+
+`/tasks` is a list screen (My tasks, Assigned by me, Team) and has no doors. The
+task's files are attachments of object `task` filed under the task's id; its
+notes are `task.note_added` events under its number (as its history is); the
+kind `task` is registered for QS Cloud Files links and for Reply in Chat
+(`chat.openRecordConversation`, the same transaction).
+
+## Exception Center (platform phase, Agent 7)
+
+| Record page | P | A | N | H | Print model | Parties → profile | Owner | Status |
+|---|---|---|---|---|---|---|---|---|
+| `exceptions/[exceptionNo]` — exception | ✅ | ✅ | ✅ | ✅ | `exception` (the finding, its evidence and its road) | the affected record, the evidence rows: links, only to what the reader may open; the customer or supplier: `ProfileLink` | exceptions | done |
+
+`/exceptions` is a list screen and has no doors. An exception's files are
+attachments of object `exception` filed under its id (opened by the same rule as
+the finding itself, `exceptionParentAccess`); its notes are
+`record_note` events under its number; the kind `exception` is registered for QS
+Cloud Files links (`records/exceptions.ts`), is the target a notification
+opens, and is a record in Global Search. The record is never edited: the one
+verb on it is the acknowledgement (a note is required), and it clears by itself.
+
+## Workflow Automation (platform phase, Agent 10)
+
+| Record page | P | A | N | H | Print model | Parties → profile | Owner | Status |
+|---|---|---|---|---|---|---|---|---|
+| `administration/automation/[ruleNo]` — automation rule | ✅ | ✅ | ✅ | ✅ | `automation_rule` (what it listens for, checks and does, its versions, its latest runs) | owner, author, who enabled it: names (the Users screen is the administrator's, not a profile); recipients and assignees: names in the rule's own words | automation | done |
+| `administration/automation/runs/[runId]` — one run | ✅ | ✅ | ✅ | ✅ | `automation_run` (the event, the conditions as they stood, each step) | the record the event was about: link, only to what the reader may open; what the run made (task, approval, exception, notice): its number | automation | done |
+
+`/administration/automation` is a settings screen (it copies Numbering) and has
+no doors. A rule is never edited in place — a change is a new version, shown on
+the rule's page — and never deleted; a run is append-only. A rule's and a run's
+files are attachments of object `automation` and `automation_run` filed under
+the rule's and the run's id (`attachments-runtime.ts`), their notes are
+`record_note` events (`record-notes.ts` TARGETS), and the history door reads the
+same events. Neither kind is registered for QS Cloud Files links.
+
 ## Export keys added on `feat/shared-module`
 
 `project_certificate`, `project_budget`, `project_change_order`,
@@ -140,3 +197,19 @@ none of (HR's own).
   `warehouse`, `bank`, `bank_account`, `chart_of_account`) but not required.
 * Logistics fills `port` and `carrier` in `domain/profiles.ts` › `BASES` when
   their pages exist; `tests/unit/profiles.test.ts` then checks the page.
+
+## QS Cloud Files behind the paperclip (Platform phase, Agent 4, 2026-10-04)
+
+The paperclip is still the second door and still holds the ERP's own
+attachments. Under them, in the same window, `Attachments` now draws a
+**QS Cloud Files** section (`components/admin/record-cloud-files.tsx`) with the
+cloud files *linked* to the record. It appears on every record page that
+renders `Attachments` or `RecordAttachmentsDoor` **and** whose `objectType` is a
+kind registered with `registerCloudLinkTarget` (`server/records/cloud-links.ts`
+registers the 21 built-in kinds; the Task Center and others register theirs).
+It draws nothing while the integration is off, for a person without the
+`cloud_files` grant, for an unregistered kind, or for a record the person may
+not open. `RecordAttachmentsDoor` also adds the linked files to the count on the
+clip; pages that render `Attachments` directly (the journal, for one) keep their
+own count and gain the section only. A new record page needs no wiring beyond
+registering its kind and passing the id its attachments are filed under.

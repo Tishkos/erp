@@ -153,10 +153,20 @@ const KEPT_BY_A_FORMAT = new Set([
   'asset_category',
   'auth_account',
   'auth_verification',
+  // Platform phase, Agent 10: the kill switch and the pause threshold are the company's settings, which a format keeps
+  // (the rules, their versions, events, runs and provenance are documents and are cleared).
+  'automation_setting',
   'bank',
   'bank_cash_account',
   'business_line',
   'chart_of_account',
+  // Platform phase, Agent 4: the Document Center's connection state follows the
+  // users and the company's settings, which a format keeps. Only the links from
+  // cloud files to records (`cloud_file_link`) are documents.
+  'cloud_account',
+  'cloud_group_mapping',
+  'cloud_link_attempt',
+  'cloud_setting',
   'company',
   'container_status',
   'cost_centre',

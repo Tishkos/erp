@@ -9,6 +9,7 @@ import { withCurrentUser } from '@/server/session';
 import type { Tx } from '@/server/db/client';
 import * as attachments from '@/server/services/attachments';
 import { Submit, admin as s } from './index';
+import { RecordCloudFiles, type CloudSectionData } from './record-cloud-files';
 
 /**
  * The documents stapled to a record — §21.
@@ -44,6 +45,7 @@ export async function Attachments({
   hidden = {},
   preloaded,
   formExtra,
+  cloud,
 }: {
   readonly objectType: string;
   readonly objectId: string;
@@ -54,6 +56,8 @@ export async function Attachments({
   readonly preloaded?: AttachmentsRead;
   /** Anything else the upload form carries — the shared door's way back (2026-10-04). */
   readonly formExtra?: ReactNode;
+  /** The record's QS Cloud Files section, already read (the paperclip door does, for its count); omitted, it reads its own. */
+  readonly cloud?: CloudSectionData | null;
 }) {
   const [t, locale] = await Promise.all([getTranslations('admin'), getLocale()]);
 
@@ -68,6 +72,7 @@ export async function Attachments({
   }));
 
   return (
+    <>
     <Panel
       labelledBy={`attachments-${objectType}-${objectId}`}
       title={t('attachments.title')}
@@ -116,6 +121,8 @@ export async function Attachments({
         </form>
       ) : null}
     </Panel>
+    <RecordCloudFiles objectId={objectId} objectType={objectType} {...(cloud !== undefined ? { preloaded: cloud } : {})} />
+    </>
   );
 }
 

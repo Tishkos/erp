@@ -567,6 +567,243 @@ export async function adjustmentByNo(tx: Tx, adjustmentNo: string) {
 }
 
 // ---------------------------------------------------------------------------
+// The record pages and the print models
+// ---------------------------------------------------------------------------
+
+/**
+ * What a warehouse held of the item before and after one document, as the
+ * Stock Ledger carries it: `after` is the running balance at the document's
+ * last row in that warehouse (the ledger's own order — date, entry time, id),
+ * `moved` the document's net change there, and `before` is `after − moved`, so
+ * the three always add up.
+ */
+export interface DocumentPosition {
+  readonly warehouseCode: string;
+  readonly warehouseName: string;
+  readonly before: string;
+  /** Signed: positive into the warehouse, negative out of it. */
+  readonly moved: string;
+  readonly after: string;
+}
+
+/** A FIFO layer a document took stock out of, or put into the books. */
+export interface DocumentLayer {
+  readonly movementId: string;
+  readonly warehouseCode: string;
+  readonly layerDate: string;
+  readonly batchNumber: string | null;
+  readonly quantity: string;
+  readonly unitCostIqd: string;
+  readonly valueIqd: string;
+}
+
+const rowsOf = <T>(result: { rows: unknown[] }) => result.rows as T[];
+
+async function positionsOf(tx: Tx, documentType: string, documentId: string): Promise<DocumentPosition[]> {
+  const found = rowsOf<{ warehouseCode: string; warehouseName: string; moved: string; after: string | null }>(
+    await tx.execute(sql`
+      with doc as (
+        select m.item_code, m.warehouse_code, sum(m.quantity) as moved,
+               (array_agg(m.id order by m.movement_date desc, m.created_at desc, m.id desc))[1] as last_id
+          from inventory_movement m
+         where m.source_document_type = ${documentType} and m.source_document_id = ${documentId}
+         group by m.item_code, m.warehouse_code
+      )
+      select d.warehouse_code as "warehouseCode", w.name as "warehouseName", d.moved::text as moved,
+             (select sum(x.quantity)
+                from inventory_movement x
+                join inventory_movement z on z.id = d.last_id
+               where x.item_code = d.item_code and x.warehouse_code = d.warehouse_code
+                 and (x.movement_date, x.created_at, x.id) <= (z.movement_date, z.created_at, z.id))::text as after
+        from doc d
+        join warehouse w on w.code = d.warehouse_code
+       order by d.warehouse_code`),
+  );
+  return found.map((row) => {
+    const after = parseQuantity(row.after ?? '0');
+    const moved = parseQuantity(row.moved);
+    return {
+      warehouseCode: row.warehouseCode,
+      warehouseName: row.warehouseName,
+      before: formatQuantity(after - moved),
+      moved: formatQuantity(moved),
+      after: formatQuantity(after),
+    };
+  });
+}
+
+/**
+ * The layers a document worked on: for stock that went out, each layer the
+ * issue consumed (its date, batch, quantity and the cost it carried); for
+ * stock that came in, the layer the receipt created.
+ */
+async function layersOfDocument(
+  tx: Tx,
+  documentType: string,
+  documentId: string,
+  side: 'out' | 'in',
+): Promise<DocumentLayer[]> {
+  const found = rowsOf<DocumentLayer & { sequence: number }>(
+    side === 'out'
+      ? await tx.execute(sql`
+          select m.id as "movementId", m.warehouse_code as "warehouseCode", l.layer_date::text as "layerDate", l.sequence,
+                 m.batch_number as "batchNumber", c.quantity::text as quantity,
+                 c.unit_cost_iqd::text as "unitCostIqd", c.cost_iqd::text as "valueIqd"
+            from inventory_movement m
+            join cost_layer_consumption c on c.movement_id = m.id
+            join cost_layer l on l.id = c.layer_id
+           where m.source_document_type = ${documentType} and m.source_document_id = ${documentId}
+             and m.quantity < 0 and c.quantity > 0
+           order by l.layer_date, l.sequence, m.created_at, m.id`)
+      : await tx.execute(sql`
+          select m.id as "movementId", m.warehouse_code as "warehouseCode", l.layer_date::text as "layerDate", l.sequence,
+                 m.batch_number as "batchNumber", l.original_quantity::text as quantity,
+                 l.unit_cost_iqd::text as "unitCostIqd",
+                 round(l.original_quantity * l.unit_cost_iqd, 4)::text as "valueIqd"
+            from inventory_movement m
+            join cost_layer l on l.created_by_movement_id = m.id
+           where m.source_document_type = ${documentType} and m.source_document_id = ${documentId}
+             and m.quantity > 0
+           order by l.layer_date, l.sequence, m.created_at, m.id`),
+  );
+  return found.map(({ sequence: _sequence, ...layer }) => ({
+    ...layer,
+    quantity: formatQuantity(parseQuantity(layer.quantity)),
+  }));
+}
+
+/**
+ * One transfer as its record page and its printed copy show it: the header,
+ * the layers carried (each at the cost it carried), and what both warehouses
+ * held before and after. Null when no transfer has the number for this reader.
+ */
+export async function transferView(tx: Tx, transferNo: string) {
+  const [row] = rowsOf<{
+    id: string;
+    transferNo: string;
+    transferDate: string;
+    itemCode: string;
+    itemName: string;
+    uomCode: string;
+    fromWarehouseCode: string;
+    fromWarehouseName: string;
+    toWarehouseCode: string;
+    toWarehouseName: string;
+    quantity: string;
+    costIqd: string;
+    branchCode: string;
+    createdAt: string;
+    createdByName: string | null;
+    ledgerQuantity: string;
+  }>(
+    await tx.execute(sql`
+      select t.id, t.transfer_no as "transferNo", t.transfer_date::text as "transferDate",
+             t.item_code as "itemCode", i.name as "itemName", i.base_uom_code as "uomCode",
+             t.from_warehouse_code as "fromWarehouseCode", fw.name as "fromWarehouseName",
+             t.to_warehouse_code as "toWarehouseCode", tw.name as "toWarehouseName",
+             t.quantity::text as quantity, t.cost_iqd::text as "costIqd", t.branch_code as "branchCode",
+             to_char(t.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "createdAt",
+             coalesce(u.display_name, u.email) as "createdByName",
+             coalesce((select sum(-m.quantity) from inventory_movement m
+                        where m.source_document_type = 'stock_transfer' and m.source_document_id = t.id::text
+                          and m.kind = 'transfer_issue'), 0)::text as "ledgerQuantity"
+        from stock_transfer t
+        join item i on i.code = t.item_code
+        join warehouse fw on fw.code = t.from_warehouse_code
+        join warehouse tw on tw.code = t.to_warehouse_code
+        left join app_user u on u.id = t.created_by
+       where t.transfer_no = ${transferNo}
+       limit 1`),
+  );
+  if (!row) return null;
+  const positions = await positionsOf(tx, 'stock_transfer', row.id);
+  return {
+    ...row,
+    quantity: formatQuantity(parseQuantity(row.quantity)),
+    /** The Stock Movement ledger holds what the document says it moved. */
+    ledgerRecorded: parseQuantity(row.ledgerQuantity) === parseQuantity(row.quantity),
+    layers: await layersOfDocument(tx, 'stock_transfer', row.id, 'out'),
+    // The source first, then the destination, whatever their codes sort to.
+    positions: [
+      ...positions.filter((position) => position.warehouseCode === row.fromWarehouseCode),
+      ...positions.filter((position) => position.warehouseCode === row.toWarehouseCode),
+    ],
+  };
+}
+
+export type TransferView = NonNullable<Awaited<ReturnType<typeof transferView>>>;
+
+/**
+ * One Item Reconciliation as its record page and its printed copy show it: the
+ * header, the layers it took out or brought in, the warehouse's quantity before
+ * and after, and the journal it posted with its lines. Null when no
+ * reconciliation has the number for this reader.
+ */
+export async function adjustmentView(tx: Tx, adjustmentNo: string) {
+  const [row] = rowsOf<{
+    id: string;
+    adjustmentNo: string;
+    adjustmentDate: string;
+    itemCode: string;
+    itemName: string;
+    uomCode: string;
+    warehouseCode: string;
+    warehouseName: string;
+    direction: AdjustmentDirection;
+    quantity: string;
+    costIqd: string;
+    branchCode: string;
+    journalEntryId: string | null;
+    journalEntryNo: string | null;
+    journalStatus: string | null;
+    createdAt: string;
+    createdByName: string | null;
+    ledgerQuantity: string;
+  }>(
+    await tx.execute(sql`
+      select a.id, a.adjustment_no as "adjustmentNo", a.adjustment_date::text as "adjustmentDate",
+             a.item_code as "itemCode", i.name as "itemName", i.base_uom_code as "uomCode",
+             a.warehouse_code as "warehouseCode", w.name as "warehouseName",
+             a.direction, a.quantity::text as quantity, a.cost_iqd::text as "costIqd", a.branch_code as "branchCode",
+             a.journal_entry_id as "journalEntryId", j.entry_no as "journalEntryNo", j.status::text as "journalStatus",
+             to_char(a.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "createdAt",
+             coalesce(u.display_name, u.email) as "createdByName",
+             coalesce((select sum(abs(m.quantity)) from inventory_movement m
+                        where m.source_document_type = 'stock_adjustment' and m.source_document_id = a.id::text), 0)::text
+               as "ledgerQuantity"
+        from stock_adjustment a
+        join item i on i.code = a.item_code
+        join warehouse w on w.code = a.warehouse_code
+        left join journal_entry j on j.id = a.journal_entry_id
+        left join app_user u on u.id = a.created_by
+       where a.adjustment_no = ${adjustmentNo}
+       limit 1`),
+  );
+  if (!row) return null;
+  const journalLines = row.journalEntryId
+    ? rowsOf<{ lineNo: number; accountCode: string; accountName: string; debitIqd: string; creditIqd: string }>(
+        await tx.execute(sql`
+          select l.line_no as "lineNo", c.code as "accountCode", c.name as "accountName",
+                 l.debit_iqd::text as "debitIqd", l.credit_iqd::text as "creditIqd"
+            from journal_line l
+            join chart_of_account c on c.id = l.account_id
+           where l.journal_entry_id = ${row.journalEntryId}
+           order by l.line_no`),
+      )
+    : [];
+  return {
+    ...row,
+    quantity: formatQuantity(parseQuantity(row.quantity)),
+    ledgerRecorded: parseQuantity(row.ledgerQuantity) === parseQuantity(row.quantity),
+    layers: await layersOfDocument(tx, 'stock_adjustment', row.id, row.direction === 'in' ? 'in' : 'out'),
+    positions: await positionsOf(tx, 'stock_adjustment', row.id),
+    journalLines,
+  };
+}
+
+export type AdjustmentView = NonNullable<Awaited<ReturnType<typeof adjustmentView>>>;
+
+// ---------------------------------------------------------------------------
 // Stock Movement
 // ---------------------------------------------------------------------------
 

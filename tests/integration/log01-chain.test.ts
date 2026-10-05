@@ -55,8 +55,8 @@ describe('log01 · 500 shipped, 300 received, 200 in transit, 200 received later
     const { payableId, invoiceNo } = await importOf(world, '500', { reference: 'CHAIN-500' });
     expect(await ledgerBalance(IN_PROCESS)).toBe('500.000000');
     expect(await ledgerBalance(WAREHOUSE)).toBe('0.000000');
-    // The view says the transit warehouse "has" 500 on hand with nothing available — that is the ledger's
-    // sum, and it is why the In-Transit read must label it in transit, never on hand (REQ-LOG-001 §2).
+    // The view holds the 500 in the transit warehouse (`held`) with nothing on hand and nothing available
+    // (0287) — the ledger's sum, which the In-Transit read labels in transit, never on hand (REQ-LOG-001 §2).
     expect(await available(IN_PROCESS)).toBe('0.000000');
 
     let row = await inTransitRow(payableId);
@@ -73,7 +73,7 @@ describe('log01 · 500 shipped, 300 received, 200 in transit, 200 received later
 
     const shipmentsRegister = await withScope(scope(world.clerk), (tx) => views.shipmentsRegister(tx, { view: 'open' }));
     expect(shipmentsRegister.rows.map((r) => [r.blNos, r.containerCount, r.received, r.open])).toEqual([[bl.blNo, 2, 0, 2]]);
-    const tracking = await withScope(scope(world.clerk), (tx) => views.shipmentTracking(tx, { asOf: '2026-10-01' }));
+    const tracking = await withScope(scope(world.clerk), (tx) => views.shipmentTracking(tx, { asOf: '2026-08-01' }));
     expect(tracking.rows.map((r) => [r.containerNo, r.statusCode, r.nextAction, r.delayDays])).toEqual([
       [FIRST, 'not_loaded', 'load', 0],
       [SECOND_BOX, 'not_loaded', 'load', 0],
@@ -81,12 +81,12 @@ describe('log01 · 500 shipped, 300 received, 200 in transit, 200 received later
 
     // ── PD, and the declaration against it: Draft → Submitted → Accepted → Assessed → Cleared.
     const pd = await registerPd(world, payableId, '9330');
-    await pdTo(world, pd.id, 'validated', '2026-09-05');
+    await pdTo(world, pd.id, 'validated', '2026-07-05');
     const declared = await withScope(scope(world.clerk), (tx) =>
       declarations.create(tx, world.clerk, {
         payableId,
         pdId: pd.id,
-        declarationDate: '2026-10-20',
+        declarationDate: '2026-08-20',
         currency: 'IQD',
         declaredValue: iqd('5000000'),
         declaredDuty: iqd('250000'),
@@ -97,14 +97,14 @@ describe('log01 · 500 shipped, 300 received, 200 in transit, 200 received later
     );
     expect(declared.declarationNo).toMatch(/^CDN-BGW-2026-\d{6}$/);
     const move = (to: string, extra: Partial<declarations.MoveInput> = {}) =>
-      withScope(scope(world.clerk), (tx) => declarations.move(tx, world.clerk, declared.id, { to, on: '2026-10-21', ...extra }));
+      withScope(scope(world.clerk), (tx) => declarations.move(tx, world.clerk, declared.id, { to, on: '2026-08-21', ...extra }));
     // Forward only, one step at a time, and Accepted needs customs' own number.
     expect(await rejection(move('cleared'))).toMatch(/from there it goes to submitted, cancelled/);
     await move('submitted');
     expect(await rejection(move('accepted'))).toMatch(/Customs gives its own number/);
     await move('accepted', { customsRef: 'BG-2026-77881' });
     await move('assessed');
-    await move('cleared', { on: '2026-10-22' });
+    await move('cleared', { on: '2026-08-22' });
     const view = await withScope(scope(world.clerk), (tx) => declarations.viewByNo(tx, declared.declarationNo));
     expect(view.declaration.status).toBe('cleared');
     expect(view.isFinal).toBe(true);
@@ -125,7 +125,7 @@ describe('log01 · 500 shipped, 300 received, 200 in transit, 200 received later
     expect(freight.rows.map((r) => [r.chargeTypeCode, r.amountIqd, r.state])).toEqual([['freight', '200000.0000', 'unlocked']]);
 
     // ── Goods receipt 1: the first container, 300 — 300 on hand, 200 still in transit.
-    const first = await receive(world, bl.containerIds[0]!, { on: '2026-10-28' });
+    const first = await receive(world, bl.containerIds[0]!, { on: '2026-08-28' });
     expect(first.receiptNo).toMatch(/^CREC-BGW-2026-\d{6}$/);
     expect(await ledgerBalance(IN_PROCESS)).toBe('200.000000');
     expect(await ledgerBalance(WAREHOUSE)).toBe('300.000000');
@@ -149,13 +149,13 @@ describe('log01 · 500 shipped, 300 received, 200 in transit, 200 received later
     expect(register.rows.map((r) => [r.payableNo, r.state, r.allocation, r.unlockedIqd, r.containersReceived, r.containerCount])).toEqual([
       [expect.any(String), 'waiting_pds', 'none', '500000.0000', 1, 2],
     ]);
-    await pdTo(world, pd.id, 'totally_written_off', '2026-10-29');
+    await pdTo(world, pd.id, 'totally_written_off', '2026-08-29');
     register = await withScope(scope(world.clerk), (tx) => views.landedCostsRegister(tx, {}));
     expect(register.rows[0]!.state).toBe('waiting_containers');
     expect(await rejection(lock(world, payableId))).toMatch(/container|received/i);
 
     // ── Goods receipt 2: the remaining 200, later — nothing left in transit.
-    await receive(world, bl.containerIds[1]!, { on: '2026-11-10' });
+    await receive(world, bl.containerIds[1]!, { on: '2026-09-10' });
     expect(await ledgerBalance(IN_PROCESS)).toBe('0.000000');
     expect(await ledgerBalance(WAREHOUSE)).toBe('500.000000');
     row = await inTransitRow(payableId);
@@ -169,7 +169,7 @@ describe('log01 · 500 shipped, 300 received, 200 in transit, 200 received later
     // ── Landed cost locked: 500,000 over 500 panels — every layer restated to 11,000.
     register = await withScope(scope(world.clerk), (tx) => views.landedCostsRegister(tx, { view: 'ready' }));
     expect(register.rows.map((r) => r.state)).toEqual(['ready']);
-    const done = await lock(world, payableId, { basisCode: 'by_quantity', lockDate: '2026-11-12' });
+    const done = await lock(world, payableId, { basisCode: 'by_quantity', lockDate: '2026-09-12' });
     expect([done.totalIqd, done.inventoryIqd, done.cogsIqd]).toEqual(['500000.0000', '500000.0000', '0.0000']);
 
     // ── Inventory: the final cost the warehouse holds, and the registers say locked and allocated.

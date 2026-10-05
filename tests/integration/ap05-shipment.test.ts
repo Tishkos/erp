@@ -147,12 +147,13 @@ describe('A15 · goods at sea are owned, not available', () => {
     expect(lines).toEqual([{ warehouse_code: IN_PROCESS }]);
     await postInvoice();
 
+    // IMPROVEMENT-002 (0287): goods in a transit warehouse are held there and in
+    // transit — never on hand, never available.
     const { rows: position } = await ownerPool.query(
-      `select warehouse_code, on_hand::text, in_transit::text, held::text, available::text from stock_position where item_code = $1 order by warehouse_code`,
+      `select warehouse_code, on_hand::text, available::text, in_transit::text, held::text from stock_position where item_code = $1 order by warehouse_code`,
       [PANEL],
     );
-    // 0287 — goods in a transit warehouse are in transit, not on hand: held there, sellable nowhere.
-    expect(position).toEqual([{ warehouse_code: IN_PROCESS, on_hand: '0', in_transit: '1000.000000', held: '1000.000000', available: '0' }]);
+    expect(position).toEqual([{ warehouse_code: IN_PROCESS, on_hand: '0', available: '0', in_transit: '1000.000000', held: '1000.000000' }]);
     const { rows: shipment } = await ownerPool.query(`select count(*)::int as n from supplier_shipment where ap_invoice_id = $1`, [invoiceId]);
     expect(shipment[0].n).toBe(0);
     const { rows: order } = await ownerPool.query(
@@ -332,12 +333,12 @@ describe('A13 / A14 · container by container into the warehouse', () => {
     expect(facts).toMatchObject({ containerCount: 4, containersReceived: 4, receivedQuantityMatches: true });
 
     const { rows: position } = await ownerPool.query(
-      `select warehouse_code, on_hand::text, available::text from stock_position where item_code = $1 order by warehouse_code`,
+      `select warehouse_code, on_hand::text, available::text, held::text from stock_position where item_code = $1 order by warehouse_code`,
       [PANEL],
     );
     expect(position).toEqual([
-      { warehouse_code: IN_PROCESS, on_hand: '0', available: '0' },
-      { warehouse_code: WAREHOUSE, on_hand: '1000.000000', available: '1000.000000' },
+      { warehouse_code: IN_PROCESS, on_hand: '0', available: '0', held: '0.000000' },
+      { warehouse_code: WAREHOUSE, on_hand: '1000.000000', available: '1000.000000', held: '1000.000000' },
     ]);
 
     // The ledger and its documents agree.
@@ -367,11 +368,11 @@ describe('A13 / A14 · container by container into the warehouse', () => {
     expect(facts.receivedQuantityMatches).toBe(false);
     // Ten stay in transit, owned and not available, until the claim is settled.
     const { rows: position } = await ownerPool.query(
-      `select on_hand::text, held::text from stock_position where item_code = $1 and warehouse_code = $2`,
+      `select on_hand::text, in_transit::text, held::text from stock_position where item_code = $1 and warehouse_code = $2`,
       [PANEL, IN_PROCESS],
     );
     // What was short stays in the transit warehouse: held there, and (0287) not on hand.
-    expect(position[0]).toEqual({ on_hand: '0', held: '10.000000' });
+    expect(position[0]).toEqual({ on_hand: '0', in_transit: '10.000000', held: '10.000000' });
   });
 
   it('refuses before the invoice posts, into another branch, or into transit', async () => {

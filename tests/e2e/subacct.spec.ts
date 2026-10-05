@@ -68,14 +68,14 @@ async function press(page: Page, name: string, expected: string) {
     await expect(button).toBeEnabled({ timeout: 20_000 });
     await button.click();
     try {
-      await expect(page.getByText(expected, { exact: true }).first()).toBeVisible({ timeout: 25_000 });
+      await expect(page.getByText(expected, { exact: true }).filter({ visible: true }).first()).toBeVisible({ timeout: 25_000 });
       return;
     } catch {
       await page.reload();
       await page.waitForTimeout(2_000);
     }
   }
-  await expect(page.getByText(expected, { exact: true }).first()).toBeVisible({ timeout: 25_000 });
+  await expect(page.getByText(expected, { exact: true }).filter({ visible: true }).first()).toBeVisible({ timeout: 25_000 });
 }
 
 test.describe.configure({ mode: 'serial' });
@@ -99,7 +99,7 @@ test('an account is given sub-accounts, and one hangs beneath it', async ({ page
   await press(page, 'Approve', 'Approved');
 
   // It holds nothing yet — and now it may.
-  await expect(page.getByText('Sub-accounts', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Sub-accounts', { exact: true }).filter({ visible: true }).first()).toBeVisible();
   await allowSubAccounts(page, parent);
 
   // A sub-account hangs under it, inheriting its type. Raised by the officer so
@@ -107,7 +107,7 @@ test('an account is given sub-accounts, and one hangs beneath it', async ({ page
   await signIn(page, OFFICER);
   const child = await raiseAccount(page, parent, `Bank ${run} — current`);
   expect(child).not.toBe(parent);
-  await expect(page.getByText(parent).first()).toBeVisible();
+  await expect(page.getByText(parent).filter({ visible: true }).first()).toBeVisible();
 
   // And the sub-account can hold sub-accounts of its own: the chart goes as
   // deep as a real one needs to, not one level.
@@ -123,5 +123,5 @@ test('an account is given sub-accounts, and one hangs beneath it', async ({ page
 
   const grandchild = await raiseAccount(page, child, `Bank ${run} — current, IQD`);
   expect(grandchild).not.toBe(child);
-  await expect(page.getByText(child).first()).toBeVisible();
+  await expect(page.getByText(child).filter({ visible: true }).first()).toBeVisible();
 });

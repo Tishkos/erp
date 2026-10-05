@@ -345,7 +345,7 @@ function bucketed(
 }
 
 /** What customers still owe — `net − allocated`, the invoice's own arithmetic. */
-async function receivableAgeing(
+export async function receivableAgeing(
   tx: Tx,
   branchCode: string,
   asOf: string,
@@ -375,7 +375,7 @@ async function receivableAgeing(
 }
 
 /** What the company still owes — `total − settled`. */
-async function payableAgeing(
+export async function payableAgeing(
   tx: Tx,
   branchCode: string,
   asOf: string,
@@ -419,7 +419,7 @@ export interface AccountBalance {
  * zero — a zero is a figure, and "we do not know" is not zero. It surfaces in
  * the attention band instead, which is where somebody can fix it.
  */
-async function balances(tx: Tx, asOf: string): Promise<readonly AccountBalance[]> {
+export async function balances(tx: Tx, asOf: string): Promise<readonly AccountBalance[]> {
   const accounts = [
     ...(await banks.listOfKind(tx, 'bank')).map((row) => ({ ...row, kind: 'bank' as const })),
     ...(await banks.listOfKind(tx, 'cash')).map((row) => ({ ...row, kind: 'cash' as const })),
@@ -452,7 +452,7 @@ export interface Attention {
  * The things that are wrong. Each is a line somebody can act on, or it does not
  * belong here.
  */
-async function attentionFor(tx: Tx, principal: Principal, branchCode: string): Promise<Attention> {
+export async function attentionFor(tx: Tx, principal: Principal, branchCode: string): Promise<Attention> {
   const mayReadStock = can(principal, 'view', 'inventory_movement');
   const mayReadReceipts = can(principal, 'view', 'customer_receipt');
   const mayReadAccounts = can(principal, 'view', 'bank_account');
@@ -515,7 +515,7 @@ export interface MonthResult {
  * the month nobody trusts either. The same function the statement calls,
  * twelve times, cannot disagree with it.
  */
-async function monthlyResult(
+export async function monthlyResult(
   tx: Tx,
   branchCode: string,
   asOf: string,
@@ -575,7 +575,7 @@ function stockValue(value: string): bigint {
 }
 
 /** What is in each warehouse, at FIFO cost — the Warehouses Report, summed. */
-async function stockByWarehouse(tx: Tx, principal: Principal): Promise<readonly NamedAmount[]> {
+export async function stockByWarehouse(tx: Tx, principal: Principal): Promise<readonly NamedAmount[]> {
   const rows = await inventoryReports.valuation(tx, principal, { allPermittedBranches: false });
   const byHouse = new Map<string, { label: string; total: bigint }>();
   for (const row of rows) {
@@ -598,7 +598,7 @@ async function stockByWarehouse(tx: Tx, principal: Principal): Promise<readonly 
  * list stops being readable; everything past it is the Sales Invoice register's
  * job, which this links to.
  */
-async function topCustomers(tx: Tx, branchCode: string, from: string, to: string): Promise<readonly NamedAmount[]> {
+export async function topCustomers(tx: Tx, branchCode: string, from: string, to: string): Promise<readonly NamedAmount[]> {
   const rows = await tx
     .select({
       code: businessPartner.code,

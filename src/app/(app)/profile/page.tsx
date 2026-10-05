@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
 import {
@@ -16,6 +17,7 @@ import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { formatTimestamp, type Locale } from '@/i18n/config';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as users from '@/server/services/users';
+import { listRouteViews } from '@/server/services/saved-views';
 import { ACCENTS, PALETTES, accentOrDefault, paletteOrDefault } from '@domain/appearance';
 import { changePassword, saveAvatar, saveMyAppearance, saveProfile } from './actions';
 
@@ -31,8 +33,9 @@ import { changePassword, saveAvatar, saveMyAppearance, saveProfile } from './act
 export const dynamic = 'force-dynamic';
 
 export default async function ProfilePage({ searchParams }: { searchParams: SearchParams }) {
-  const [t, admin, locale, context, outcome, params] = await Promise.all([
+  const [t, sv, admin, locale, context, outcome, params] = await Promise.all([
     getTranslations('profile'),
+    getTranslations('savedViews'),
     getTranslations('admin'),
     getLocale(),
     requireContext(),
@@ -44,6 +47,8 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
   const { user, roles, branches, departments, sessions } = await withCurrentUser((tx) =>
     users.detail(tx, context.principal.userId),
   );
+  // The person's own saved views of screens (/profile/views): how many, and the way in.
+  const viewCount = (await withCurrentUser((tx, c) => listRouteViews(tx, c.principal))).length;
   const own = { palette: paletteOrDefault(user.uiPalette), accent: accentOrDefault(user.uiAccent) };
   const fmt = (d: Date | null) => (d ? formatTimestamp(d.toISOString(), locale as Locale) : admin('none'));
   const live = sessions.filter((x) => !x.revokedAt && x.expiresAt > new Date()).length;
@@ -128,6 +133,12 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
                     : departments.map((d) => (
                         <Pill key={d.code} label={`${d.code}${d.isManager ? ` · ${admin('users.manager_flag')}` : ''}`} on={null} />
                       ))}
+                </span>
+              </li>
+              <li>
+                <span>{sv('profile_link')}</span>
+                <span>
+                  <Link href="/profile/views">{sv('profile_count', { count: viewCount })}</Link>
                 </span>
               </li>
               <li>

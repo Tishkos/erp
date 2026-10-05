@@ -49,6 +49,15 @@ export const savedView = pgTable(
      * necessarily the author.
      */
     query: jsonb('query').notNull(),
+    /**
+     * `list` — the list framework's question (the rows above 0360); `route` — a
+     * screen's filters, owned by one person and never shared (0360). For a
+     * route view `listKey` is the registry key (`payables.invoices`) and
+     * `query` is `{ v: 1, params, dates? }`.
+     */
+    kind: text('kind').notNull().default('list'),
+    /** Pinned to Home when set: the Dashboard runs the view again as its owner. */
+    pinnedAt: timestamp('pinned_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -61,5 +70,11 @@ export const savedView = pgTable(
       .on(t.ownerUserId, t.listKey)
       .where(sql`${t.isDefault}`),
     check('saved_view_name_present', sql`btrim(${t.name}) <> ''`),
+    check('saved_view_kind_known', sql`${t.kind} in ('list', 'route')`),
+    check('saved_view_route_private', sql`${t.kind} <> 'route' or not ${t.isShared}`),
+    check('saved_view_pin_is_route', sql`${t.pinnedAt} is null or ${t.kind} = 'route'`),
+    index('saved_view_pinned_idx')
+      .on(t.ownerUserId, t.pinnedAt)
+      .where(sql`${t.pinnedAt} is not null`),
   ],
 );

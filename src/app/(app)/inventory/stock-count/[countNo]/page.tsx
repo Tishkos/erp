@@ -13,6 +13,7 @@ import { ExportIcon } from '@/components/print/export-menu';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatQuantity as formatLocaleQuantity, formatTimestamp, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
+import { parseQuantity } from '@domain/uom';
 import { businessToday } from '@/server/domain/business-date';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
@@ -78,7 +79,7 @@ export default async function StockCountRecordPage({ params, searchParams }: { p
   const mayApproveVariance = mayApprove && count.status === 'counted';
   const mayAdjust = mayExecute && count.status === 'pending_approval';
   const mayCancel = mayExecute && count.status !== 'adjusted' && count.status !== 'cancelled';
-  const variances = lines.filter((line) => line.variance !== null && line.variance !== '0' && Number(line.variance) !== 0).length;
+  const variances = lines.filter((line) => line.variance !== null && parseQuantity(line.variance) !== 0n).length;
 
   const fields: DocumentField[] = [
     { label: column('document_no'), value: <bdi dir="ltr">{count.countNo}</bdi> },

@@ -1,33 +1,53 @@
 'use server';
 
-import { runAdminAndReturn, text } from '@/server/admin-action';
-import * as approvals from '@/server/services/approvals';
+import { runAdminAndReturn, text, withQuery } from '@/server/admin-action';
+import * as approvalCenter from '@/server/services/approval-center';
 
+/**
+ * Deciding from My Approvals.
+ *
+ * Nothing is decided here. `approval-center.decide` calls the service that owns
+ * the document — `journal.approve`, `business-partner.approveBankAccount`, the
+ * chart of accounts' own maker-checker — exactly as that document's page does,
+ * so the role, the department and the four-eyes rule are the service's, and a
+ * refusal comes back in the service's own sentence. The list says "Saved" only
+ * after the service returned.
+ *
+ * The page's filter travels as plain fields and the address is rebuilt here: a
+ * return address is never taken from the form.
+ */
 const BACK = '/approvals';
 
-export async function approveFromInbox(formData: FormData): Promise<void> {
+function returnTo(formData: FormData): string {
+  let target = BACK;
+  for (const key of ['documentTypeFilter', 'q', 'page'] as const) {
+    const value = text(formData, key).trim();
+    if (value) target = withQuery(target, key === 'documentTypeFilter' ? 'documentType' : key, value);
+  }
+  return target;
+}
+
+export async function approveItem(formData: FormData): Promise<void> {
   await runAdminAndReturn(
     (tx, ctx) =>
-      approvals.decide(tx, ctx.principal, {
-        documentTypeCode: text(formData, 'documentTypeCode'),
-        documentId: text(formData, 'recordId'),
+      approvalCenter.decide(tx, ctx, {
+        documentType: text(formData, 'documentType'),
+        documentId: text(formData, 'documentId'),
         decision: 'approve',
-        branchCode: ctx.branchCode,
       }),
-    BACK,
+    returnTo(formData),
   );
 }
 
-export async function rejectFromInbox(formData: FormData): Promise<void> {
+export async function rejectItem(formData: FormData): Promise<void> {
   await runAdminAndReturn(
     (tx, ctx) =>
-      approvals.decide(tx, ctx.principal, {
-        documentTypeCode: text(formData, 'documentTypeCode'),
-        documentId: text(formData, 'recordId'),
+      approvalCenter.decide(tx, ctx, {
+        documentType: text(formData, 'documentType'),
+        documentId: text(formData, 'documentId'),
         decision: 'reject',
         reason: text(formData, 'reason'),
-        branchCode: ctx.branchCode,
       }),
-    BACK,
+    returnTo(formData),
   );
 }

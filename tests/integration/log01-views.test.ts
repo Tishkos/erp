@@ -44,7 +44,7 @@ beforeEach(async () => {
   bl = await blWith(world, payableId, [
     { no: BOX_A, qty: '250' },
     { no: BOX_B, qty: '150' },
-  ], { eta: '2026-10-10' });
+  ], { eta: '2026-08-10' });
   pdId = (await registerPd(world, payableId, '8100')).id;
 });
 
@@ -84,24 +84,24 @@ describe('tracking and shipments · where every container is', () => {
   it('says the stage, the delay and the next action, and one row per import with its B/Ls', async () => {
     const moveTo = (id: string, statusCode: string, statusDate: string) =>
       withScope(scope(world.clerk), (tx) => shipments.changeStatus(tx, world.clerk, id, { statusCode, date: statusDate }));
-    await moveTo(bl.containerIds[0]!, 'on_sea', '2026-09-22');
-    await moveTo(bl.containerIds[0]!, 'at_port', '2026-10-12');
-    await moveTo(bl.containerIds[0]!, 'customs_cleared', '2026-10-14');
-    await moveTo(bl.containerIds[1]!, 'on_sea', '2026-09-22');
+    await moveTo(bl.containerIds[0]!, 'on_sea', '2026-07-22');
+    await moveTo(bl.containerIds[0]!, 'at_port', '2026-08-12');
+    await moveTo(bl.containerIds[0]!, 'customs_cleared', '2026-08-14');
+    await moveTo(bl.containerIds[1]!, 'on_sea', '2026-07-22');
 
-    const onTime = await withScope(scope(world.clerk), (tx) => views.shipmentTracking(tx, { asOf: '2026-10-05' }));
+    const onTime = await withScope(scope(world.clerk), (tx) => views.shipmentTracking(tx, { asOf: '2026-08-05' }));
     expect(onTime.rows.map((r) => [r.containerNo, r.statusCode, r.delayDays, r.nextAction])).toEqual([
       [BOX_A, 'customs_cleared', 0, 'send_port_file'],
       [BOX_B, 'on_sea', 0, 'await_arrival'],
     ]);
-    const late = await withScope(scope(world.clerk), (tx) => views.shipmentTracking(tx, { asOf: '2026-10-17' }));
+    const late = await withScope(scope(world.clerk), (tx) => views.shipmentTracking(tx, { asOf: '2026-08-17' }));
     expect(late.rows.map((r) => [r.containerNo, r.delayDays, r.pdSummary, r.customsClearedOn])).toEqual([
-      [BOX_A, 7, '8100 · Submitted', '2026-10-14'],
+      [BOX_A, 7, '8100 · Submitted', '2026-08-14'],
       [BOX_B, 7, '8100 · Submitted', null],
     ]);
-    await withScope(scope(world.clerk), (tx) => shipments.portFileSent(tx, world.clerk, bl.containerIds[0]!, '2026-10-15'));
+    await withScope(scope(world.clerk), (tx) => shipments.portFileSent(tx, world.clerk, bl.containerIds[0]!, '2026-08-15'));
     expect((await withScope(scope(world.clerk), (tx) => views.shipmentTracking(tx, { view: 'cleared' }))).rows.map((r) => r.nextAction)).toEqual(['receive']);
-    await receive(world, bl.containerIds[0]!, { on: '2026-10-16' });
+    await receive(world, bl.containerIds[0]!, { on: '2026-08-16' });
     const open = await withScope(scope(world.clerk), (tx) => views.shipmentTracking(tx, { view: 'open' }));
     expect(open.rows.map((r) => r.containerNo)).toEqual([BOX_B]);
     const all = await withScope(scope(world.clerk), (tx) => views.shipmentTracking(tx, { view: 'all' }));
@@ -138,10 +138,10 @@ describe('charges and allocation · the import’s money, by state', () => {
     // Lock: both containers in, the PD written off.
     await receive(world, bl.containerIds[0]!);
     await receive(world, bl.containerIds[1]!);
-    await pdTo(world, pdId, 'totally_written_off', '2026-10-29');
+    await pdTo(world, pdId, 'totally_written_off', '2026-08-29');
     const done = await lock(world, payableId, { basisCode: 'by_quantity' });
     duties = await withScope(scope(world.clerk), (tx) => views.dutiesRegister(tx, {}));
-    expect(duties.rows[0]).toMatchObject({ state: 'locked', lockSequence: 1, lockDate: '2026-10-30' });
+    expect(duties.rows[0]).toMatchObject({ state: 'locked', lockSequence: 1, lockDate: '2026-08-30' });
     expect(duties.rows[0]!.entryNo).toMatch(/^JE-/);
     expect((await withScope(scope(world.clerk), (tx) => views.chargeTotals(tx, ['customs_asycuda']))).lockedIqd).toBe('120000.0000');
 
@@ -164,7 +164,7 @@ describe('charges and allocation · the import’s money, by state', () => {
 
 describe('print · the four doors’ printer', () => {
   it('builds the PD, the container, its receipt, the declaration and the port from the reader’s scope', async () => {
-    const receipt = await receive(world, bl.containerIds[0]!, { on: '2026-10-16' });
+    const receipt = await receive(world, bl.containerIds[0]!, { on: '2026-08-16' });
     const declared = await withScope(scope(world.clerk), (tx) => declarations.create(tx, world.clerk, { payableId, pdId, declaredValue: iqd('4000000'), declaredDuty: iqd('200000') }));
     await charge(world, payableId, 'customs_asycuda', '210000');
 
@@ -172,7 +172,7 @@ describe('print · the four doors’ printer', () => {
     const pd = await withScope(scope(world.manager), (tx) => docs.customsPd({ ...ctx, tx }, '8100'));
     expect(pd?.model).toMatchObject({ kind: 'document', number: '8100', title: 'Customs Pre-Declaration' });
     expect(pd?.model.tables[1]?.rows.map((r) => [r.cells.bl, r.cells.container, r.cells.received])).toEqual([
-      [bl.blNo, BOX_A, '2026-10-16'],
+      [bl.blNo, BOX_A, '2026-08-16'],
       [bl.blNo, BOX_B, null],
     ]);
     const container = await withScope(scope(world.manager), (tx) => docs.shipmentContainer({ ...ctx, tx }, BOX_B));

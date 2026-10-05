@@ -43,8 +43,8 @@ export async function depositOther(formData: FormData): Promise<void> {
     (tx, ctx) =>
       deposits.depositOther(tx, ctx, {
         intoAccountId: text(formData, 'other_into_account_id'),
-        creditAccountId: text(formData, 'credit_account_id'),
-        payer: text(formData, 'payer'),
+        creditAccountId: text(formData, 'other_credit_account_id'),
+        payer: text(formData, 'other_payer'),
         depositDate: text(formData, 'other_deposit_date'),
         amount: amountOf(formData, 'other_amount'),
         reference: text(formData, 'other_reference') || null,
@@ -60,10 +60,12 @@ export async function depositOther(formData: FormData): Promise<void> {
 /**
  * The slip the bank gave for a deposit — by direction, 2026-10-04.
  *
- * A deposit is not its own table: the cash one is a `bank_transfer` and the
- * bank one an `other_receipt`, so the file hangs on whichever it is. The
- * attachment rules are registered lazily, so a cold process is told about them
- * before it is handed the first file.
+ * A deposit is not its own table: the cash-to-bank transfer is a
+ * `bank_transfer` and every other deposit (into the cash or into the bank) an
+ * `other_receipt` — `deposits.byNo` says which by `source` — so the file hangs
+ * on whichever it is, where the record page reads it back. The attachment
+ * rules are registered lazily, so a cold process is told about them before it
+ * is handed the first file.
  */
 export async function attachToDeposit(formData: FormData): Promise<void> {
   const no = text(formData, 'deposit_no');
@@ -77,7 +79,7 @@ export async function attachToDeposit(formData: FormData): Promise<void> {
   await runAdminAndReturn(async (tx, ctx) => {
     const deposit = await deposits.byNo(tx, no);
     await attachments.upload(tx, ctx, {
-      objectType: deposit.source === 'cash' ? 'bank_transfer' : 'other_receipt',
+      objectType: deposit.source === 'transfer' ? 'bank_transfer' : 'other_receipt',
       objectId: deposit.id,
       fileName: upload.name,
       content,

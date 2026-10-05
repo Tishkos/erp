@@ -10,16 +10,19 @@
 import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import {
   apInvoice,
   applicant,
   arInvoice,
   asycudaRun,
+  automationRule,
+  automationRun,
   bankLoan,
   bankStatement,
   bankTransfer,
   billOfLading,
+  chatMessage,
   customerCreditMemo,
   customerNote,
   customerReceipt,
@@ -28,6 +31,7 @@ import {
   employeeAdvance,
   employeeDocument,
   employeeRequest,
+  exception,
   fiscalPeriod,
   goodsReceipt,
   goodsReturn,
@@ -51,6 +55,7 @@ import {
   supplierAdvance,
   supplierCreditMemo,
   supplierPayment,
+  task,
   taxCode,
   vacancy,
 } from './db/schema';
@@ -475,6 +480,74 @@ const inventoryRecordParentAccess =
     return false;
   };
 
+/**
+ * Internal chat — a file sent in a conversation hangs on its message. Read and
+ * written by the conversation's members and nobody else: the message row's own
+ * policy is membership (and not before the person was let in), so the select
+ * below finds it for a member and returns nothing for anyone else. A withdrawn
+ * message hands out no files.
+ */
+const chatMessageParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'chat')) return false;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(objectId)) return false;
+  const [row] = await tx
+    .select({ id: chatMessage.id })
+    .from(chatMessage)
+    .where(and(eq(chatMessage.id, objectId), isNull(chatMessage.retractedAt)))
+    .limit(1);
+  return Boolean(row);
+};
+
+/**
+ * The Task Center (platform phase, Agent 3) — a task's files and notes are
+ * for the people the task is for: the grant to view tasks, and the task's own
+ * row policy (its creator, assigner, assignee and watchers; a section's
+ * manager, whoever the assignee reports to, an administrator in the branch)
+ * answers which tasks exist for the reader. A draft is its creator's alone.
+ */
+const taskParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'task')) return false;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(objectId)) return false;
+  const [row] = await tx.select({ id: task.id }).from(task).where(eq(task.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+/**
+ * The Exception Center (platform phase, Agent 7) — an exception's files and notes
+ * are for whoever may open it: the grant to view exceptions, the row policy
+ * (the grant on the object it is about, and the branch), and the one question
+ * SQL cannot answer, whether this person may open the affected record itself
+ * (a task is its parties' alone). The service is loaded when asked: it
+ * imports the record registry, which imports this file.
+ */
+const exceptionParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'exception')) return false;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(objectId)) return false;
+  const [row] = await tx.select().from(exception).where(eq(exception.id, objectId)).limit(1);
+  if (!row) return false;
+  const { recordVisible } = await import('./services/exceptions');
+  return recordVisible(tx, principal, row);
+};
+
+/**
+ * Automation (platform phase, Agent 10) — a rule's files and notes are for whoever
+ * may open the rule: the grant to view automation, and the rule's own row policy.
+ * A run is addressed by its number (the log's id); both are administrators' reading.
+ */
+const automationParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'automation')) return false;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(objectId)) return false;
+  const [row] = await tx.select({ id: automationRule.id }).from(automationRule).where(eq(automationRule.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+const automationRunParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'automation')) return false;
+  if (!/^\d{1,15}$/.test(objectId)) return false;
+  const [row] = await tx.select({ id: automationRun.id }).from(automationRun).where(eq(automationRun.id, BigInt(objectId))).limit(1);
+  return Boolean(row);
+};
+
 let registered = false;
 
 /** Idempotent: every entry point may call it, and the first one wins. */
@@ -516,6 +589,11 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('performance_review', performanceReviewParentAccess);
   attachments.registerParentAccessCheck('vacancy', vacancyParentAccess);
   attachments.registerParentAccessCheck('payroll_run', payrollRunParentAccess);
+  attachments.registerParentAccessCheck('chat_message', chatMessageParentAccess);
+  attachments.registerParentAccessCheck('task', taskParentAccess);
+  attachments.registerParentAccessCheck('exception', exceptionParentAccess);
+  attachments.registerParentAccessCheck('automation', automationParentAccess);
+  attachments.registerParentAccessCheck('automation_run', automationRunParentAccess);
   for (const [object, table] of PURCHASE_PARENTS) {
     attachments.registerParentAccessCheck(object, purchaseParentAccess(object, table));
   }

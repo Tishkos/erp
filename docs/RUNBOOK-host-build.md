@@ -77,6 +77,7 @@ in escrow:
 | `NODE_ENV` | `production` |
 | `APP_ENV` | `production` / `staging` |
 | `ERP_TIMEZONE` | `Asia/Baghdad` — the business date |
+| `ERP_SECRET_KEY` | at least 32 random characters (`openssl rand -base64 48`); seals each person's QS Cloud Files app password (AES-256-GCM). Unset, Cloud Files cannot be switched on; changed, every linked person must link again. Keep it with the escrowed keys |
 | `ATTACHMENT_DIR` | `/var/lib/qs-erp/attachments` — **must be set**: unset, the store is `cwd/var/attachments`, and the standalone server's cwd is inside `.next`, which every deploy replaces (OP-3) |
 | `LOG_LEVEL` | `info` |
 | `EXPORT_ROW_CAP` | optional; 20000 unless set (OP-9) |

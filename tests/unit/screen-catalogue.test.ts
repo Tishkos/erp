@@ -118,8 +118,11 @@ describe('the screen catalogue covers the approved tree', () => {
     // Stock Issues, Stock Count, Inventory Checks and Inventory Valuation in,
     // the unbuilt Quarantine, Returns, Damaged Goods, Serial / Batch,
     // Reports and Settings placeholders out.
-    expect(allMenuItems()).toHaveLength(248);
-    expect(Object.keys(SCREENS)).toHaveLength(248);
+    // Plus Chat (platform phase, Agent 1): one workspace screen; Cloud Files Settings (Agent 4): one;
+    // Exceptions (Agent 7): one document screen; the ERP Control Center (Agent 9): one report screen.
+    // + Automation (Agent 10): one settings screen; its rule and run pages sit behind it.
+    expect(allMenuItems()).toHaveLength(253);
+    expect(Object.keys(SCREENS)).toHaveLength(253);
   });
 
   it('uses only declared archetypes', () => {
@@ -145,7 +148,11 @@ describe('the screen catalogue covers the approved tree', () => {
     // Ledger, Advances, Payments, Allocations, Ageing), + 1 in (Supplier Credits).
     // REQ-LOG-001: + 2 + 2 (declarations, ports) + 8 (the registers).
     // IMPROVEMENT-002 inventory: + 1 + 1 + 2 + 1 + 1 in, − 1 − 2 − 2 − 1 − 1 − 1 out.
-    expect(total).toBe(362);
+    // Platform phase: + 1 (Chat, a workspace) + 1 (Cloud Files Settings) + 1 (My Tasks, an inbox that became a document).
+    // + 2 (Exceptions, a document: the register and the record).
+    // + 1 (the ERP Control Center, a report; its Related records page is a drill-down of the screens it reads, not a menu item).
+    // + 1 (Automation, a settings screen; the rule and run pages behind it are not menu items).
+    expect(total).toBe(369);
   });
 });
 
@@ -198,7 +205,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(248);
+    expect(screenRoutes().size).toBe(253);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -206,7 +213,10 @@ describe('every screen has one address', () => {
     expect(wired.map((screen) => screen.route).sort()).toEqual([
       '/',
       '/administration/audit',
+      // Automation (platform phase, Agent 10).
+      '/administration/automation',
       '/administration/backup-health',
+      '/administration/cloud-files',
       '/administration/company',
       '/administration/hr-settings',
       '/administration/jobs',
@@ -224,7 +234,13 @@ describe('every screen has one address', () => {
       // REQ-WA-001 — the WhatsApp bridge.
       '/administration/whatsapp',
       '/approvals',
+      // Internal chat (platform phase, Agent 1).
+      '/chat',
+      // The ERP Control Center (platform phase, Agent 9).
+      '/control-center',
       '/documents',
+      // The Exception Center (platform phase, Agent 7).
+      '/exceptions',
       // REQ-ACC-001 Part D — Account Reconciliation.
       '/finance/account-reconciliation',
       // The accounting core.
@@ -316,6 +332,7 @@ describe('every screen has one address', () => {
       '/monitoring/customer-list',
       '/monitoring/history',
       '/monitoring/reports',
+      '/notifications',
       // REQ-AP-001 Stage 1 — the Payables workbench.
       '/payables',
       // REQ-AP-001 Stage 3 — the advances' register.
@@ -381,6 +398,10 @@ describe('every screen has one address', () => {
       '/sales/receivables',
       // Block 9 — Sales Returns.
       '/sales/sales-returns',
+      // Global Search — the results page behind the palette.
+      '/search',
+      // The Task Center (platform phase, Agent 3).
+      '/tasks',
       // REQ-ACC-001 Part D — Bank Reconciliation, the Cash Forecast.
       '/treasury/bank-reconciliation',
       '/treasury/cash-forecast',

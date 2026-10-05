@@ -73,7 +73,7 @@ async function addNoteThroughTheDoor(page: Page, record: string, body: string) {
   await expect(page.getByRole('dialog', { name: 'Notes' }).getByRole('cell', { name: body })).toBeVisible();
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Audit log' }).click();
-  await expect(page.getByRole('dialog', { name: 'Audit log' }).getByText(/note added/i).first()).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Audit log' }).getByText(/note added/i).filter({ visible: true }).first()).toBeVisible();
   await page.keyboard.press('Escape');
 }
 
@@ -164,7 +164,7 @@ test.describe('shared · the four doors and profile links', () => {
 
     // And on the clock, the note is an event of the certificate.
     await page.getByRole('button', { name: 'Audit log' }).click();
-    await expect(page.getByRole('dialog', { name: 'Audit log' }).getByText(/note added/i).first()).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Audit log' }).getByText(/note added/i).filter({ visible: true }).first()).toBeVisible();
     await page.keyboard.press('Escape');
 
     // The screenshots: the certificate beside the purchase invoice it copies.

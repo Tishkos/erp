@@ -126,6 +126,29 @@ export function clearParentAccessChecks(): void {
   parentAccessChecks.clear();
 }
 
+/**
+ * May this person open the record a file (or a conversation) would hang on? The same
+ * question the paperclip asks, put without the throw: `null` when no module has
+ * registered how to answer it for that kind of record (the caller decides what
+ * that means — the Document Center's links fall back to the record's own
+ * permission object; chat and search treat it as no), `true`/`false` otherwise.
+ */
+export async function mayAccessParent(
+  tx: Tx,
+  principal: Principal,
+  objectType: string,
+  objectId: string,
+): Promise<boolean | null> {
+  const check = parentAccessChecks.get(objectType);
+  if (!check) return null;
+  try {
+    return Boolean(await check(tx, principal, objectId));
+  } catch {
+    // A check that throws is no: a listing never shows what it could not vouch for.
+    return false;
+  }
+}
+
 async function assertParentAccess(
   tx: Tx,
   principal: Principal,

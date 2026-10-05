@@ -153,7 +153,7 @@ test.describe('REQ-HR-001 Stage HR-5 · recruitment and performance', () => {
     await officer.page.waitForURL(/saved=1/);
     await officer.page.goto(`/hr/performance/${encodeURIComponent(reviewNo)}`);
     await expect(officer.page.locator('[data-status="submitted"]').first()).toBeVisible();
-    await expect(officer.page.getByText('3.60').first()).toBeVisible();
+    await expect(officer.page.getByText('3.60').filter({ visible: true }).first()).toBeVisible();
     // The reviewer does not sign their own review off.
     await expect(officer.page.getByRole('button', { name: 'Sign off' })).toHaveCount(0);
     await officer.close();
@@ -166,6 +166,7 @@ test.describe('REQ-HR-001 Stage HR-5 · recruitment and performance', () => {
     await page.waitForURL(/saved=1/);
     await page.goto(`/hr/performance/${encodeURIComponent(reviewNo)}`);
     await expect(page.locator('[data-status="posted"]').first()).toBeVisible();
-    await expect(page.locator('#review-document').getByText(`Agreed ${RUN}`)).toBeVisible();
+    // The note is on the document and in its history door; the document's copy is asked for.
+    await expect(page.locator('#review-document').getByText(`Agreed ${RUN}`).filter({ visible: true }).first()).toBeVisible();
   });
 });

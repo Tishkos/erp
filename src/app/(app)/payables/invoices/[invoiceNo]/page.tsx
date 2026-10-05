@@ -193,13 +193,19 @@ export default async function ApInvoicePage({
    * mapping decides. It must never be shown for a document that did choose
    * one, and it used to be shown for every posted invoice.
    */
+  // The account named opens its own profile (the shared `ProfileLink`, 2026-10-04);
+  // the default and a broken link are said in words.
   const accountLabel = (id: string | null) => {
-    if (!id) return t('invoices.account_default');
+    if (!id) return <bdi dir="auto">{t('invoices.account_default')}</bdi>;
     const account =
       accounts.find((row) => row.id === id) ??
       found.chosenAccounts.find((row) => row?.id === id);
     // An id naming nothing at all is a broken link, not a default.
-    return account ? `${account.code} · ${account.name}` : t('invoices.account_missing');
+    return account ? (
+      <ProfileLink code={account.code} dir="auto" kind="gl_account" name={account.name} />
+    ) : (
+      <bdi dir="auto">{t('invoices.account_missing')}</bdi>
+    );
   };
   const accountField = (
     label: string,
@@ -219,7 +225,7 @@ export default async function ApInvoicePage({
         ))}
       </select>
     ) : (
-      <bdi dir="auto">{accountLabel(current)}</bdi>
+      accountLabel(current)
     ),
   });
   const mayPost =
@@ -571,8 +577,9 @@ export default async function ApInvoicePage({
                   <td>
                     <bdi dir="ltr">{line.lineNo}</bdi>
                   </td>
+                  {/* The item and the warehouse open their own profiles (the shared `ProfileLink`, 2026-10-04). */}
                   <td className={s.sapAccountCell}>
-                    <bdi dir="ltr">{line.itemCode ?? '—'}</bdi>
+                    <ProfileLink code={line.itemCode} kind="item" />
                   </td>
                   <td>
                     <bdi dir="auto">{line.description}</bdi>
@@ -590,7 +597,7 @@ export default async function ApInvoicePage({
                     <bdi dir="ltr">{money(toDecimalString(lineTotal(line), MONEY_SCALE))}</bdi>
                   </td>
                   <td>
-                    <bdi dir="ltr">{line.warehouseCode ?? '—'}</bdi>
+                    <ProfileLink code={line.warehouseCode} kind="warehouse" />
                   </td>
                 </tr>
               ))}

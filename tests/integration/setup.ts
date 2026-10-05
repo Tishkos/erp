@@ -510,7 +510,26 @@ export async function resetTestData(): Promise<void> {
     // REQ-WA-001 — the bridge's log, allow-list and pairing; the seeded
     // settings are restored, the bridge's heartbeat keys go.
     await client.query('truncate whatsapp_message, whatsapp_contact restart identity cascade');
+    // Platform phase, Agent 4 — the Document Center: a person's linked cloud account and its
+    // pending sign-in, the links from cloud files to records (never deleted in production), the
+    // role -> group mappings; the one settings row goes back to its seed (switched off).
+    await client.query('truncate cloud_file_link, cloud_link_attempt, cloud_account');
+    await client.query('delete from cloud_group_mapping');
+    await client.query(`update cloud_setting set enabled = false, base_url = 'https://files.qs-groups.com', root_path = '/', record_root = '/Qimah', updated_by = null, updated_at = now() where id = 1`);
     await client.query('delete from whatsapp_session');
+    // Internal chat (platform phase): a conversation, its messages and receipts are never deleted by
+    // the application (triggers), so a reset truncates them together; presence is a heartbeat.
+    await client.query('truncate chat_reaction, chat_receipt, chat_message, chat_participant, chat_conversation, chat_presence');
+    // The Task Center (platform phase, Agent 3): a task is never deleted by the application (trigger), so a reset truncates.
+    await client.query('truncate task');
+    // The Exception Center (platform phase, Agent 7): a finding, its history and the sweep log are never deleted by the
+    // application (triggers), so a reset truncates them together. The series EXCEPTION is kept below.
+    await client.query('truncate exception_history, exception_sweep_run, exception');
+    // Workflow Automation (platform phase, Agent 10): a rule, its versions, the outbox and the runs are never deleted by the
+    // application (triggers), so a reset truncates them together; the switch and the pause threshold go back to their seed.
+    // The series AUTOMATION_RULE is kept below.
+    await client.query('truncate automation_made, automation_run, automation_event, automation_rule_version, automation_rule');
+    await client.query(`update automation_setting set value = case key when 'enabled' then 'on' when 'pause_after_failures' then '3' else value end, updated_by = null, updated_at = now()`);
     await client.query(`delete from whatsapp_setting where key like 'bridge_%'`);
     /*
      * Every seeded key, not some of them.
@@ -959,6 +978,12 @@ export async function resetTestData(): Promise<void> {
                          'LOAN',
                          -- REQ-HR-001 Stage HR-1, migration 0241.
                          'EMPLOYEE', 'POSITION_CODE', 'LEAVE_REQUEST', 'PAYROLL_RUN', 'PAYSLIP', 'EMPLOYEE_ADVANCE', 'VACANCY', 'APPLICANT', 'PERFORMANCE_REVIEW', 'EXPENSE_CLAIM', 'TRAVEL_REQUEST', 'HR_LETTER', 'EMPLOYEE_REQUEST', 'EMPLOYEE_DOCUMENT', 'PROJECT', 'PROJECT_BUDGET', 'PROJECT_VARIATION', 'PROJECT_ISSUE', 'PROJECT_SETTLEMENT',
+                         -- Platform phase, Agent 3 — the Task Center, migration 0340.
+                         'TASK',
+                         -- Platform phase, Agent 7 — the Exception Center, migration 0380.
+                         'EXCEPTION',
+                         -- Platform phase, Agent 10 — Workflow Automation, migration 0400.
+                         'AUTOMATION_RULE',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',

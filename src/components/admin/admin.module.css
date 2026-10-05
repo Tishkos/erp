@@ -1047,6 +1047,10 @@
  * ---------------------------------------------------------------------- */
 .reportStack {
   display: grid;
+  /* One column that may shrink: a grid item's automatic minimum is its
+     content's width, and a register's table is wider than a phone, so the
+     stack grew past the screen and the page scrolled sideways (2026-10-04). */
+  grid-template-columns: minmax(0, 1fr);
   gap: 1.1rem;
 }
 
@@ -5565,6 +5569,13 @@
 
 .mapStack > section {
   margin-block-end: 0;
+}
+
+/* A grid item (each document's form) is as wide as its content unless told
+   otherwise: the table's 46rem minimum reached through the panel and widened
+   the page on a phone instead of scrolling inside the table's own frame. */
+.mapStack > * {
+  min-inline-size: 0;
 }
 
 /* Fixed columns, so the seven documents line up as one page rather than seven

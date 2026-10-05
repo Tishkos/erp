@@ -17,12 +17,32 @@ import * as subledger from '../services/account-reconciliation';
 import * as taxCodes from '../services/tax-codes';
 import * as recurring from '../services/recurring-journals';
 import * as periods from '../services/periods';
+import * as deposits from '../services/bank-deposits';
+import * as loans from '../services/loans';
 import { businessToday } from '../domain/business-date';
 import { addDays } from '../domain/dates';
 import type { BuildContext, Built } from './documents';
 import { EXPORT_ROW_CAP, type Fact, type PrintModel } from './model';
 
 const day = (value: string | null | undefined, locale: Locale) => (value ? formatBusinessDate(value, locale) : '—');
+
+/**
+ * A document in its own currency. The model's money columns are read in the
+ * model's currency, which the renderers know as dinars or dollars; a record
+ * held in anything else keeps its figures as the words the screen shows.
+ */
+const inCurrency = (currency: string, locale: Locale) => {
+  const model: PrintModel['currency'] = currency === 'USD' ? 'USD' : 'IQD';
+  const native = currency === 'IQD' || currency === 'USD';
+  return {
+    currency: model,
+    kind: (native ? 'money' : 'text') as 'money' | 'text',
+    cell: (value: string | bigint): string => {
+      const text = typeof value === 'bigint' ? toDecimalString(value, 4n) : value;
+      return native ? text : formatMoney(text, currency, locale);
+    },
+  };
+};
 
 const base = (
   input: Pick<PrintModel, 'title' | 'fields' | 'tables'> &
@@ -700,5 +720,183 @@ export async function periodClose(ctx: BuildContext, periodId: string): Promise<
     // A period is the company's, not a branch's: the reader's letterhead.
     branchCode,
     objectId: period.id,
+  };
+}
+
+/**
+ * A manual deposit — the register's row, in the words its record page uses:
+ * the one line the money is, into the account it landed in, from whoever
+ * paid it or the cash it came out of (REQ-FIX-001 FIX-1; the printer door,
+ * 2026-10-04). Read through the register's own reader, so a deposit of
+ * another branch is not found rather than refused.
+ */
+export async function bankDeposit(ctx: BuildContext, depositNo: string): Promise<Built | null> {
+  const { tx, m, locale } = ctx;
+  let deposit: deposits.DepositRow;
+  try {
+    deposit = await deposits.byNo(tx, depositNo);
+  } catch {
+    return null;
+  }
+  const t = (key: string) => m.admin(`bank_deposits.${key}`);
+  const own = inCurrency(deposit.currency, locale);
+  const into = `${deposit.intoName} (${deposit.intoCode}) · ${deposit.currency}`;
+  const from = deposit.payer ?? `${deposit.fromName} (${deposit.fromCode})`;
+  const fields: Fact[] = [
+    { label: t('col_no'), value: deposit.no, ltr: true },
+    { label: t('col_status'), value: m.status(deposit.status) },
+    { label: t('date'), value: day(deposit.depositDate, locale), ltr: true },
+    { label: t('source'), value: t(`source_${deposit.source}`) },
+    { label: t('into'), value: into },
+    { label: t('from'), value: from },
+    ...(deposit.source !== 'transfer' ? [{ label: t('credit_account'), value: `${deposit.fromCode} · ${deposit.fromName}` }] : []),
+    { label: t('reference'), value: deposit.reference ?? '—' },
+    { label: t('journal'), value: deposit.journalEntryNo ?? '—', ltr: true },
+    ...(deposit.note ? [{ label: t('note'), value: deposit.note }] : []),
+  ];
+  return {
+    model: {
+      ...base({
+        title: m.print('titles.bank_deposit'),
+        number: deposit.no,
+        status: m.status(deposit.status),
+        posted: deposit.status === 'posted',
+        fields,
+        tables: [
+          {
+            title: t('lines'),
+            columns: [
+              { key: 'into', label: t('into'), kind: 'text', weight: 2 },
+              { key: 'from', label: t('from'), kind: 'text', weight: 2 },
+              { key: 'amount', label: t('amount'), kind: own.kind },
+            ],
+            rows: [{ cells: { into: `${deposit.intoName} (${deposit.intoCode})`, from, amount: own.cell(deposit.amount) } }],
+            empty: '—',
+            totals: { label: t('amount'), cells: { amount: own.cell(deposit.amount) }, sum: ['amount'] },
+          },
+        ],
+        signatures: true,
+        fileName: deposit.no,
+      }),
+      currency: own.currency,
+    },
+    branchCode: deposit.branchCode,
+    objectId: deposit.id,
+  };
+}
+
+/**
+ * A bank loan — its boxes and its repayment schedule as the record page shows
+ * them, each instalment with how it stands and when it was paid, the foot
+ * holding what is outstanding, repaid and still to allocate (REQ-AP-001
+ * §15.7; the printer door, 2026-10-04). The figures are in the loan's own
+ * currency, as the page's are.
+ */
+export async function bankLoan(ctx: BuildContext, loanNo: string): Promise<Built | null> {
+  const { tx, m, locale } = ctx;
+  let found: Awaited<ReturnType<typeof loans.view>>;
+  try {
+    found = await loans.view(tx, loanNo);
+  } catch {
+    return null;
+  }
+  const { loan, treatment, schedule, totals } = found;
+  const position = await loans.positionOf(tx, loan.id);
+  const t = (key: string) => m.admin(`loans.${key}`);
+  const own = inCurrency(loan.currency, locale);
+  const money = (value: string | bigint) =>
+    formatMoney(typeof value === 'bigint' ? toDecimalString(value, 4n) : value, loan.currency, locale);
+  const pct = (value: string | null) => (value ? `${Number(value).toString()}%` : '—');
+  const commissionOnItsOwn = !treatment.deducted && !treatment.spread && Number(loan.commissionTxn) > 0;
+  // Master names are held in English; Arabic reads the seeded code's
+  // translation, as the page does (a code the catalogue does not know keeps
+  // its English name).
+  const SEEDED_TREATMENTS = ['deducted_at_disbursement', 'paid_separately', 'spread_over_instalments'];
+  const treatmentName = locale !== 'en' && SEEDED_TREATMENTS.includes(treatment.code) ? t(`tr.${treatment.code}`) : treatment.name;
+  const fields: Fact[] = [
+    { label: t('col_no'), value: loan.loanNo, ltr: true },
+    { label: t('col_status'), value: t(`status_${loan.status}`) },
+    {
+      label: t('bank'),
+      value: found.bank ? `${found.bank.name}${found.bank.swiftBic ? ` · ${found.bank.swiftBic}` : ''}` : loan.bankCode,
+    },
+    { label: t('account'), value: `${found.account.code} · ${found.account.name}` },
+    { label: t('principal'), value: money(loan.principalTxn), ltr: true },
+    { label: t('commission'), value: `${pct(loan.commissionPct)} · ${money(loan.commissionTxn)} · ${treatmentName}` },
+    { label: t('net_proceeds'), value: money(loan.netProceedsTxn), ltr: true },
+    { label: t('commission_booked'), value: loan.commissionCapitalised ? t('capitalised_yes') : t('capitalised_no') },
+    { label: t('interest'), value: pct(loan.interestPctPa) },
+    { label: t('allocation_method'), value: t(`method_${loan.allocationMethod}`) },
+    { label: t('frequency'), value: `${t(`freq_${loan.frequency}`)} · ${loan.instalmentCount}` },
+    { label: t('maturity'), value: day(loan.maturityDate, locale), ltr: true },
+    {
+      label: t('disbursed'),
+      value: loan.disbursementDate ? `${day(loan.disbursementDate, locale)} · ${loan.disbursementReference ?? ''}`.trim() : t('not_yet'),
+      ltr: Boolean(loan.disbursementDate),
+    },
+    ...(commissionOnItsOwn
+      ? [
+          {
+            label: t('commission_paid'),
+            value: loan.commissionPaidOn ? `${day(loan.commissionPaidOn, locale)} · ${loan.commissionReference ?? ''}`.trim() : t('not_yet'),
+            ltr: Boolean(loan.commissionPaidOn),
+          },
+        ]
+      : []),
+    { label: t('entered_by'), value: found.people.createdBy ?? '—' },
+    { label: t('approved_by'), value: found.people.approvedBy ?? '—' },
+    ...(loan.purpose ? [{ label: t('purpose'), value: loan.purpose }] : []),
+    ...(loan.closedReason ? [{ label: t('cancel_reason'), value: loan.closedReason }] : []),
+  ];
+  const rows = schedule.map((row) => ({
+    cells: {
+      seq: String(row.sequence),
+      due: row.dueDate,
+      principal: own.cell(row.principalTxn),
+      commission: own.cell(row.commissionTxn),
+      interest: own.cell(row.interestTxn),
+      total: own.cell(row.totalTxn),
+      status: t(`inst_${row.state}`),
+      paid: row.paidDate ? `${day(row.paidDate, locale)}${row.paidReference ? ` · ${row.paidReference}` : ''}` : '—',
+    },
+  }));
+  return {
+    model: {
+      ...base({
+        title: m.print('titles.bank_loan'),
+        number: loan.loanNo,
+        status: t(`status_${loan.status}`),
+        posted: loan.status === 'active' || loan.status === 'closed',
+        fields,
+        tables: [
+          {
+            title: t('schedule'),
+            columns: [
+              { key: 'seq', label: '#', kind: 'code' },
+              { key: 'due', label: t('due_date'), kind: 'date' },
+              { key: 'principal', label: t('principal_part'), kind: own.kind },
+              { key: 'commission', label: t('commission_part'), kind: own.kind },
+              { key: 'interest', label: t('interest_part'), kind: own.kind },
+              { key: 'total', label: t('total'), kind: own.kind },
+              { key: 'status', label: t('col_status'), kind: 'text' },
+              { key: 'paid', label: t('paid'), kind: 'text', weight: 2 },
+            ],
+            rows,
+            empty: '—',
+          },
+        ],
+        summary: [
+          { label: t('outstanding'), value: money(position.outstanding), ltr: true },
+          { label: t('repaid'), value: money(position.principalRepaid), ltr: true },
+          { label: t('unallocated'), value: money(totals.unallocated), ltr: true },
+        ],
+        signatures: true,
+        orientation: 'landscape',
+        fileName: loan.loanNo,
+      }),
+      currency: own.currency,
+    },
+    branchCode: loan.branchCode,
+    objectId: loan.id,
   };
 }

@@ -15,6 +15,9 @@ import * as hrReports from './hr-reports';
 import * as accountingDocuments from './accounting-documents';
 import * as projectDocuments from './project-documents';
 import * as hrDocuments from './hr-documents';
+import * as taskDocuments from './task-documents';
+import * as exceptionDocuments from './exception-documents';
+import * as automationDocuments from './automation-documents';
 
 export type { ExportKey } from './access';
 
@@ -52,16 +55,18 @@ const BUILDERS = {
   customer_note: byId(documents.customerNote),
   sales_return: byId(documents.salesReturn),
   purchase_return: byId(documents.purchaseReturn),
-  transfer: byId(documents.transfer),
+  transfer: byId(inventoryDocuments.transfer),
   opening_stock: byId(documents.openingStock),
   journal_entry: byId(documents.journalEntry),
-  item_reconciliation: byId(documents.itemReconciliation),
+  item_reconciliation: byId(inventoryDocuments.itemReconciliation),
   stock_count: byId(inventoryDocuments.stockCount),
   bill_of_lading: byId(shipmentDocuments.billOfLading),
   asycuda_reading: byId(customsDocuments.asycudaReading),
   import_application: byId(importDocuments.importApplication),
   internal_transfer: byId(accountingDocuments.internalTransfer),
   bank_reconciliation: byId(accountingDocuments.bankReconciliation),
+  bank_deposit: byId(accountingDocuments.bankDeposit),
+  bank_loan: byId(accountingDocuments.bankLoan),
   payments_receipts: (ctx, input) => accountingDocuments.paymentsReceipts(ctx, input.query),
   cash_forecast: (ctx, input) => accountingDocuments.cashForecast(ctx, input.query),
   account_reconciliation: (ctx, input) => accountingDocuments.accountReconciliation(ctx, input.query),
@@ -122,6 +127,10 @@ const BUILDERS = {
   vacancy: byId(hrDocuments.vacancy),
   applicant: byId(hrDocuments.applicant),
   employee_request: byId(hrDocuments.employeeRequest),
+  task: byId(taskDocuments.task),
+  exception: byId(exceptionDocuments.exception),
+  automation_rule: byId(automationDocuments.automationRule),
+  automation_run: byId(automationDocuments.automationRun),
 } satisfies Record<ExportKey, Builder>;
 
 export function exportable(key: ExportKey): Exportable {

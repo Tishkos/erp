@@ -95,13 +95,14 @@ test.describe('FX2 · the module dropdowns', () => {
     await nav.getByRole('button', { name: 'Accounting' }).click();
     await expect(nav.getByRole('heading', { name: 'Treasury & Banking', exact: true })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Bank Loans', exact: true })).toHaveAttribute('href', '/treasury/loans');
-    await expect(nav.getByRole('link', { name: 'Bank Deposits', exact: true })).toHaveAttribute('href', '/treasury/deposits');
+    // Renamed Manual Deposits on 2026-10-04 (cdc9c86); the route stays.
+    await expect(nav.getByRole('link', { name: 'Manual Deposits', exact: true })).toHaveAttribute('href', '/treasury/deposits');
   });
 
   test('the loans and the declarations show their new neighbours as tabs', async ({ page }) => {
     await page.goto('/treasury/loans');
     const tabs = page.getByRole('navigation', { name: 'Bank Loans' });
-    await expect(tabs.getByRole('link', { name: 'Bank Deposits' })).toBeVisible();
+    await expect(tabs.getByRole('link', { name: 'Manual Deposits' })).toBeVisible();
     await expect(tabs.getByRole('link', { name: 'Purchase Invoices' })).toHaveCount(0);
     await page.goto('/payables/pd');
     const pdTabs = page.getByRole('navigation', { name: 'Customs Pre-Declarations' });
@@ -109,12 +110,13 @@ test.describe('FX2 · the module dropdowns', () => {
   });
 });
 
-test('FX3 · a deposit from another source is raised on the Bank Deposits screen and opens as its record', async ({ page }) => {
+test('FX3 · a deposit from another source is raised on the Manual Deposits screen and opens as its record', async ({ page }) => {
   await signIn(page);
   await page.goto('/treasury/deposits');
-  await expect(page.getByRole('heading', { name: 'Bank Deposits', level: 1 })).toBeVisible();
-  await page.getByRole('button', { name: 'Other deposit' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Other deposit' });
+  await expect(page.getByRole('heading', { name: 'Manual Deposits', level: 1 })).toBeVisible();
+  // The two buttons are "Cash deposit" and "Bank deposit" (2026-10-04).
+  await page.getByRole('button', { name: 'Bank deposit', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Bank deposit', exact: true });
   await dialog.getByLabel('Into bank account').selectOption({ index: 0 });
   const credit = dialog.getByLabel('Credit account');
   // An income account — the seeded chart's revenue accounts start with R.
@@ -126,7 +128,8 @@ test('FX3 · a deposit from another source is raised on the Bank Deposits screen
   await dialog.getByRole('button', { name: 'Create deposit' }).click();
 
   // The record: the document type, the status chip, and the register lists it.
-  await expect(page.getByText('Bank deposit — other source')).toBeVisible({ timeout: 30_000 });
+  // (First: the printer door's window is headed the same way, 2026-10-04.)
+  await expect(page.getByText('Bank deposit — other source').first()).toBeVisible({ timeout: 30_000 });
   const number = (await page.getByRole('heading', { level: 1 }).textContent())!.trim();
   expect(number).toMatch(/^ORC-/);
   await page.goto(`/treasury/deposits?q=${encodeURIComponent(number)}`);

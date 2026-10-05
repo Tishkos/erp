@@ -41,8 +41,8 @@ test.describe('REQ-PM-001 Stage PM-1 · structure and the master screens', () =>
     expect(code).toMatch(/^PRJ-HQ-2026-\d{6}$/);
     await expect(page.getByRole('heading', { name: new RegExp(`${code} · Warehouse fit-out ${RUN}`) })).toBeVisible();
     // The level-1 element exists with the project's name; the chip says Created.
-    await expect(page.getByText(`${code}-1`).first()).toBeVisible();
-    await expect(page.getByText('Created', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText(`${code}-1`).filter({ visible: true }).first()).toBeVisible();
+    await expect(page.getByText('Created', { exact: true }).filter({ visible: true }).first()).toBeVisible();
 
     // A child element from the record, coded by the mask.
     await page.getByRole('button', { name: 'Add element' }).first().click();
@@ -62,7 +62,7 @@ test.describe('REQ-PM-001 Stage PM-1 · structure and the master screens', () =>
     await adminPage.goto(`/projects/${encodeURIComponent(code)}`);
     await adminPage.getByRole('button', { name: 'Release' }).click();
     await adminPage.waitForURL(/saved=1/);
-    await expect(adminPage.getByText('Released', { exact: true }).first()).toBeVisible();
+    await expect(adminPage.getByText('Released', { exact: true }).filter({ visible: true }).first()).toBeVisible();
     await other.close();
 
     // The WBS workspace shows the same tree, rolled up.
