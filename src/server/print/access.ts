@@ -126,6 +126,9 @@ export const EXPORT_ACCESS = {
   task: { kind: 'document', route: '/tasks', object: 'task' },
   // The Exception Center (platform phase): an exception prints from its own page, to whoever can open it.
   exception: { kind: 'document', route: '/exceptions', object: 'exception' },
+  // Automation (platform phase, Agent 10): a rule and a run print from their own pages, to whoever may view automation.
+  automation_rule: { kind: 'document', route: '/administration/automation', object: 'automation' },
+  automation_run: { kind: 'document', route: '/administration/automation', object: 'automation' },
 } as const satisfies Record<
   string,
   { readonly kind: 'document' | 'report'; readonly route: string; readonly object: string; readonly selfService?: boolean }

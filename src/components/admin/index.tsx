@@ -334,6 +334,7 @@ export function Select({
   emptyLabel,
   multiple,
   size,
+  id: idOverride,
 }: {
   readonly label: string;
   readonly name: string;
@@ -356,8 +357,10 @@ export function Select({
   readonly emptyLabel?: string | undefined;
   readonly multiple?: boolean | undefined;
   readonly size?: number | undefined;
+  /** The element id, when the field name is not unique on the page (as `Field`'s). */
+  readonly id?: string | undefined;
 }) {
-  const id = `f-${name}`;
+  const id = idOverride ?? `f-${name}`;
   return (
     <div className={styles.field}>
       <label className={styles.label} htmlFor={id}>

@@ -120,8 +120,9 @@ describe('the screen catalogue covers the approved tree', () => {
     // Reports and Settings placeholders out.
     // Plus Chat (platform phase, Agent 1): one workspace screen; Cloud Files Settings (Agent 4): one;
     // Exceptions (Agent 7): one document screen; the ERP Control Center (Agent 9): one report screen.
-    expect(allMenuItems()).toHaveLength(252);
-    expect(Object.keys(SCREENS)).toHaveLength(252);
+    // + Automation (Agent 10): one settings screen; its rule and run pages sit behind it.
+    expect(allMenuItems()).toHaveLength(253);
+    expect(Object.keys(SCREENS)).toHaveLength(253);
   });
 
   it('uses only declared archetypes', () => {
@@ -150,7 +151,8 @@ describe('the screen catalogue covers the approved tree', () => {
     // Platform phase: + 1 (Chat, a workspace) + 1 (Cloud Files Settings) + 1 (My Tasks, an inbox that became a document).
     // + 2 (Exceptions, a document: the register and the record).
     // + 1 (the ERP Control Center, a report; its Related records page is a drill-down of the screens it reads, not a menu item).
-    expect(total).toBe(368);
+    // + 1 (Automation, a settings screen; the rule and run pages behind it are not menu items).
+    expect(total).toBe(369);
   });
 });
 
@@ -203,7 +205,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(252);
+    expect(screenRoutes().size).toBe(253);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -211,6 +213,8 @@ describe('every screen has one address', () => {
     expect(wired.map((screen) => screen.route).sort()).toEqual([
       '/',
       '/administration/audit',
+      // Automation (platform phase, Agent 10).
+      '/administration/automation',
       '/administration/backup-health',
       '/administration/cloud-files',
       '/administration/company',

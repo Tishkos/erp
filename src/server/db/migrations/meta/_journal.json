@@ -1674,6 +1674,13 @@
       "when": 1795900000212,
       "tag": "0402_automation_provenance",
       "breakpoints": true
+    },
+    {
+      "idx": 239,
+      "version": "7",
+      "when": 1795900000213,
+      "tag": "0403_automation_print",
+      "breakpoints": true
     }
   ]
 }

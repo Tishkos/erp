@@ -868,18 +868,127 @@ describe('AU9 · a rule does only what its owner could do by hand', () => {
 });
 
 // ---------------------------------------------------------------------------
+describe('AU11 · no storm: a rule never acts on what it made, and a chain stops after two steps', () => {
+  /** A rule the templates do not offer, written straight into the versions table (the database's own guard still holds the vocabulary): a late task makes a follow-up task. */
+  async function followUpRule(name: string): Promise<string> {
+    const made = await create(owner, 'task_overdue', name, { daysLate: '1', notifyAssignee: 'on' });
+    const actions = [{ kind: 'create_task', assignee: { kind: 'user', userId: clerk.id }, departmentCode: 'FIN', title: `Follow up (${name})`, priority: 'normal', dueInDays: 0 }];
+    await ownerPool.query(
+      `insert into automation_rule_version (rule_id, version, event_key, name, template_code, params, conditions, actions, changed_by)
+       select rule_id, 2, event_key, name, template_code, params, conditions, $2::jsonb, changed_by from automation_rule_version where rule_id = (select id from automation_rule where rule_no = $1) and version = 1`,
+      [made.ruleNo, JSON.stringify(actions)],
+    );
+    await ownerPool.query(`update automation_rule set current_version = 2 where rule_no = $1`, [made.ruleNo]);
+    await enable(owner, made.ruleNo);
+    return made.ruleNo;
+  }
+  const madeBy = async (ruleNo: string) =>
+    (await ownerPool.query(`select m.record_label, m.record_id, m.depth from automation_made m join automation_rule r on r.id = m.rule_id where r.rule_no = $1 and m.record_type = 'task' order by m.made_at, m.record_label`, [ruleNo])).rows as { record_label: string; record_id: string; depth: number }[];
+  const day = (n: number) => addBusinessDays(today, n);
+
+  it('two rules that each make a task when a task is late stop where the guard says, whatever the number of mornings', async () => {
+    await quiesce();
+    // Nothing else of the file is late, so the only thing in play is the chain below.
+    await ownerPool.query(`update task set due_date = $1 where status in ('assigned','accepted','in_progress','blocked')`, [day(400)]);
+    const rootNo = await tasks_(owner, 'The task the chain starts from');
+    const rootId = (await ownerPool.query(`select id::text from task where task_no = $1`, [rootNo])).rows[0].id as string;
+    const first = await followUpRule('Follow-up L');
+    const second = await followUpRule('Follow-up M');
+
+    // Morning 1: the root is late. Each rule makes one task, one step from a person's.
+    await sweepDay(day(1), ['task.overdue']);
+    await drain();
+    const l1 = await madeBy(first);
+    const m1 = await madeBy(second);
+    expect([l1.length, m1.length]).toEqual([1, 1]);
+    expect([l1[0]!.depth, m1[0]!.depth]).toEqual([1, 1]);
+
+    // Morning 2: both follow-ups are late. Each rule skips the one it made, and acts on the other's: a second step.
+    await sweepDay(day(2), ['task.overdue']);
+    await drain();
+    const l2 = await madeBy(first);
+    const m2 = await madeBy(second);
+    expect([l2.length, m2.length]).toEqual([2, 2]);
+    expect([l2.map((r) => r.depth), m2.map((r) => r.depth)]).toEqual([[1, 2], [1, 2]]);
+    const ownOnes = (await runsOf(first)).filter((r) => r.subject_key === `task:${l1[0]!.record_id}`);
+    expect(ownOnes).toHaveLength(1);
+    expect(ownOnes[0]).toMatchObject({ outcome: 'skipped' });
+    expect(ownOnes[0]!.reason).toMatch(/made by this rule itself \(AUT-\d+\)/);
+    expect(ownOnes[0]!.results).toEqual([]);
+
+    // Mornings 3 and 4: the second-step tasks are late too. The chain has used its two steps; nothing more is made, however often it is looked at.
+    const tasksNow = await count('task');
+    await sweepDay(day(3), ['task.overdue']);
+    await drain();
+    const logged = await count('automation_run');
+    const ended = (await runsOf(first)).filter((r) => r.reason.includes('stops after 2 steps'));
+    expect(ended.length).toBeGreaterThan(0);
+    await sweepDay(day(4), ['task.overdue']);
+    await drain();
+    expect(await count('task')).toBe(tasksNow);
+    expect((await madeBy(first)).length + (await madeBy(second)).length).toBe(4);
+    // Looked at again, a skip that says what it said before adds nothing to the log.
+    expect(await count('automation_run')).toBe(logged);
+    // The root was never made by a rule, and a rule's own run on it was done once.
+    expect(await count('automation_made', `record_id = '${rootId}'`)).toBe(0);
+    expect((await runsOf(first)).filter((r) => r.subject_key === `task:${rootId}` && r.outcome === 'done')).toHaveLength(1);
+    await quiesce();
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe('AU12 · a step refused for good is recorded once and is not tried again', () => {
+  it('a follow-up task for somebody the owner may not assign to fails with the Task Center\'s reason, keeps the steps that worked, makes no task and counts toward pausing', async () => {
+    await quiesce();
+    const late = await importOf(world, '10', { reference: 'AU-LATE-3' });
+    const bl = await blWith(world, late.payableId, [{ no: containerNo('MSCU', 760007), qty: '10' }], { eta: '2026-09-12' });
+    const made = await create(owner, 'container_eta_exceeded', 'Task for another branch', {
+      daysLate: '1',
+      severity: 'low',
+      notifyRole: 'accounting_manager',
+      followUp: 'on',
+      taskAssignee: elsewhere.id,
+      taskDepartment: 'FIN',
+      taskTitle: 'Never made',
+      taskPriority: 'low',
+      taskDueInDays: '1',
+    });
+    await enable(owner, made.ruleNo);
+    await sweepDay(today, ['container.eta_exceeded']);
+    const tasksBefore = await count('task');
+    const run = await drain();
+    expect(run.retrying).toBe(0);
+    const runs = (await runsOf(made.ruleNo)).filter((r) => r.subject_key === `shipment_container:${bl.containerIds[0]}`);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({ outcome: 'failed', attempt: 1 });
+    expect(runs[0]!.results.map((r) => `${r.kind}:${r.status}`)).toEqual(['create_exception:done', 'create_notification:done', 'create_task:failed']);
+    expect(runs[0]!.results[2]).toMatchObject({ permanent: true });
+    expect(runs[0]!.reason).toMatch(/The Task Center refused the task: .*outside the people you may assign to.*trying again would change nothing/);
+    expect(await count('task')).toBe(tasksBefore);
+    const [event] = (await eventsOf('container.eta_exceeded')).filter((e) => e.subject_key === `shipment_container:${bl.containerIds[0]}`);
+    expect(event).toMatchObject({ status: 'failed', attempts: 1 });
+    expect(event!.last_error).toMatch(/The Task Center refused the task/);
+    expect((await ruleRow(made.ruleNo)).consecutive_failures).toBeGreaterThanOrEqual(1);
+    // Nothing is waiting for a retry, and a second pass finds nothing to do.
+    expect((await drain()).events).toBe(0);
+    await quiesce();
+  });
+});
+
+// ---------------------------------------------------------------------------
 describe('AU10 · nothing automation does touches the ledger or the stock', () => {
-  it('after every scenario above, the journals, the sub-ledgers, the stock and the payments are exactly what the documents themselves made', async () => {
-    // The documents posted in this file (invoices, the sale, receipts) moved the books; what must not have moved is anything
-    // *because of* a rule. The runner's own tables are the only ones that changed for it: compare the run log with the audit trail.
-    const ran = await auditOf('automation.ran');
-    expect(ran.length).toBeGreaterThan(5);
-    const posted = await ownerPool.query(`select count(*)::int as n from audit_event where actor_user_id = any($1::uuid[]) and action in ('journal_entry.posted','ap_invoice.posted','payment_application.posted','supplier_payment.posted','inventory.moved')`, [[owner.id, sysadmin.id, limited.id]]);
-    // The owner posted invoices by hand in AU2 (their own act); automation did none of it: no audit row names a rule as the reason of a posting.
+  it('after every scenario above, the books, the stock and the payments are exactly what the documents themselves made, and every step a rule took is one of the five', async () => {
+    // `drain` showed, run by run, that the runner moved nothing in the books; here the whole file is looked at once.
+    const steps = await ownerPool.query(`select distinct split_part(s, ':', 1) as kind from audit_event e, jsonb_array_elements_text(e.after_value->'steps') s where e.action = 'automation.ran'`);
+    expect(steps.rows.map((r) => r.kind).sort()).toEqual(['create_exception', 'create_notification', 'create_task', 'open_workflow', 'request_approval']);
+    // The rule ran many times, and none of it is a posting: no journal, stock movement or payment names a rule as its reason.
+    expect((await auditOf('automation.ran')).length).toBeGreaterThan(20);
     const byRule = await ownerPool.query(`select count(*)::int as n from audit_event where reason like 'Automation %' and action not in ('ap_invoice.review_requested')`);
     expect(byRule.rows[0].n).toBe(0);
-    expect(posted.rows[0].n).toBeGreaterThanOrEqual(0);
+    // The tables a rule may write are the ones its actions declare; the ledger tables are the ones the documents wrote.
     const after = await ledgerDigest();
     expect(Object.keys(after)).toEqual(Object.keys(before));
+    expect(after.journal_entry).not.toBe(before.journal_entry); // the file's own invoices and sale did post: the guard is not a blind spot
+    expect(await count('journal_entry', `source_module like 'automation%'`)).toBe(0);
   });
 });

@@ -654,6 +654,8 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('hr_settings', 'hr_setting', '/administration/hr-settings'),
       // REQ-WA-001 §6 — the bridge, the allow-list, the rules, the log.
       page('whatsapp', 'whatsapp', '/administration/whatsapp'),
+      // Platform phase, Agent 10 — the first controlled automation layer: rules from templates, their runs, the kill switch.
+      page('automation', 'automation', '/administration/automation'),
       // REQ-PM-001 R4 — project types, tolerance profiles, cost codes.
       page('project_settings', 'project_setting', '/administration/project-settings'),
       // REQ-AP-001 §21.11 — payable types, stages, time limits, reason codes,

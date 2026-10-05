@@ -22,6 +22,7 @@ import { automationRule, automationRuleVersion, automationSetting } from '../db/
 import {
   AutomationError,
   PAUSE_AFTER_DEFAULT,
+  evaluate,
   PAUSE_AFTER_MAX,
   REASON_MAX,
   RULE_SERIES,
@@ -576,3 +577,140 @@ export async function peopleChoices(tx: Tx): Promise<{ id: string; name: string 
   return result.rows;
 }
 
+
+/** A name for every code and person a set of definitions names, so a rule reads as sentences. */
+export interface NameBook {
+  readonly roles: Readonly<Record<string, string>>;
+  readonly sections: Readonly<Record<string, string>>;
+  readonly users: Readonly<Record<string, string>>;
+}
+
+export async function nameBook(tx: Tx, userIds: readonly string[] = []): Promise<NameBook> {
+  const roles = (await tx.execute(sql`select code, name from role`)) as unknown as Rows<{ code: string; name: string }>;
+  const sections = (await tx.execute(sql`select code, name from department`)) as unknown as Rows<{ code: string; name: string }>;
+  const ids = [...new Set(userIds.filter((id) => /^[0-9a-f-]{36}$/i.test(id)))];
+  const users =
+    ids.length === 0
+      ? { rows: [] as { id: string; name: string }[] }
+      : ((await tx.execute(sql`select id::text, display_name as name from app_user where id in (${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})`)) as unknown as Rows<{ id: string; name: string }>);
+  return {
+    roles: Object.fromEntries(roles.rows.map((r) => [r.code, r.name])),
+    sections: Object.fromEntries(sections.rows.map((r) => [r.code, r.name])),
+    users: Object.fromEntries(users.rows.map((r) => [r.id, r.name])),
+  };
+}
+
+/** The people a definition's actions name by id (a task's assignee, a recipient). */
+export function peopleIn(actions: readonly Action[]): string[] {
+  const ids: string[] = [];
+  for (const action of actions) {
+    if (action.kind === 'create_task') {
+      if (action.assignee.kind === 'user') ids.push(action.assignee.userId);
+    } else if (action.kind === 'create_notification' || action.kind === 'open_workflow') {
+      for (const r of action.recipients) if (r.kind === 'user') ids.push(r.userId);
+    }
+  }
+  return ids;
+}
+
+/** The rules a run log can be narrowed to (number and name). */
+export async function ruleOptions(tx: Tx, principal: Principal): Promise<{ ruleNo: string; name: string }[]> {
+  if (!can(principal, 'view', PERMISSION_OBJECT)) return [];
+  const result = (await tx.execute(sql`select rule_no as "ruleNo", name from automation_rule order by rule_no desc limit 200`)) as unknown as Rows<{ ruleNo: string; name: string }>;
+  return result.rows;
+}
+
+export interface ConditionCheck {
+  readonly condition: Condition;
+  readonly actual: string | null;
+  readonly met: boolean;
+}
+
+export interface RunDetail {
+  readonly id: string;
+  readonly ruleNo: string;
+  readonly ruleName: string;
+  readonly ruleVersion: number;
+  readonly eventKey: EventKey;
+  readonly eventId: string;
+  readonly subjectKey: string;
+  readonly reference: string;
+  readonly recordHref: string;
+  readonly attempt: number;
+  readonly ownerName: string;
+  readonly outcome: 'done' | 'skipped' | 'failed';
+  readonly reason: string;
+  readonly startedAt: string;
+  readonly branchCode: string | null;
+  readonly payload: Readonly<Record<string, unknown>>;
+  readonly checks: readonly ConditionCheck[];
+  readonly planned: readonly Action[];
+  readonly results: readonly { index: number; kind: string; status: string; detail: string; ref?: string }[];
+}
+
+/** One run with the event it answered and the conditions as they stood: the rule's version of that day is re-read, never today's. */
+export async function runById(tx: Tx, principal: Principal, id: string): Promise<RunDetail | null> {
+  if (!can(principal, 'view', PERMISSION_OBJECT) || !/^\d{1,15}$/.test(id)) return null;
+  const result = (await tx.execute(sql`
+    select x.id::text, r.rule_no as "ruleNo", r.name as "ruleName", x.rule_version as "ruleVersion", x.event_key as "eventKey",
+           x.event_id::text as "eventId", x.subject_key as "subjectKey", x.attempt, u.display_name as "ownerName", x.outcome, x.reason,
+           x.planned, x.results, x.started_at as "startedAt", e.payload, e.branch_code as "branchCode", v.conditions
+      from automation_run x
+      join automation_rule r on r.id = x.rule_id
+      join app_user u on u.id = x.owner_user_id
+      join automation_event e on e.id = x.event_id
+      join automation_rule_version v on v.rule_id = x.rule_id and v.version = x.rule_version
+     where x.id = ${id}::bigint`)) as unknown as Rows<Record<string, unknown>>;
+  const row = result.rows[0];
+  if (!row) return null;
+  const eventKey = row.eventKey as EventKey;
+  const payload = row.payload as Record<string, unknown>;
+  const conditions = row.conditions as Condition[];
+  const checks = conditions.map((condition): ConditionCheck => {
+    const one = evaluate({ eventKey, conditions: [condition], actions: [] }, payload);
+    const actual = payload[condition.field];
+    return { condition, actual: actual === undefined || actual === null ? null : String(actual), met: one.matched };
+  });
+  return {
+    id: row.id as string,
+    ruleNo: row.ruleNo as string,
+    ruleName: row.ruleName as string,
+    ruleVersion: row.ruleVersion as number,
+    eventKey,
+    eventId: row.eventId as string,
+    subjectKey: row.subjectKey as string,
+    reference: typeof payload.reference === 'string' ? payload.reference : (row.subjectKey as string),
+    recordHref: EVENTS[eventKey].href(payload),
+    attempt: row.attempt as number,
+    ownerName: row.ownerName as string,
+    outcome: row.outcome as RunDetail['outcome'],
+    reason: row.reason as string,
+    startedAt: iso(row.startedAt as Date | string)!,
+    branchCode: (row.branchCode as string | null) ?? null,
+    payload,
+    checks,
+    planned: row.planned as Action[],
+    results: row.results as RunDetail['results'],
+  };
+}
+
+export const fieldType = (eventKey: EventKey, field: string): string | undefined => EVENTS[eventKey].fields[field]?.type;
+
+export interface PayloadLine {
+  readonly field: string;
+  readonly type: string;
+  readonly value: string;
+}
+
+/** The event's payload as lines a person reads, in the event's own field order; the record's id is not one of them, and a person is their name. */
+export function payloadLines(eventKey: EventKey, payload: Readonly<Record<string, unknown>>, users: Readonly<Record<string, string>>): PayloadLine[] {
+  const lines: PayloadLine[] = [];
+  for (const [field, def] of Object.entries(EVENTS[eventKey].fields)) {
+    if (field === 'subjectId') continue;
+    const raw = payload[field];
+    if (raw === undefined || raw === null || raw === '') continue;
+    const value = def.type === 'user' ? (users[String(raw)] ?? '—') : String(raw);
+    lines.push({ field, type: def.type, value });
+  }
+  return lines;
+}

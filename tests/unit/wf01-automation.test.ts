@@ -42,6 +42,13 @@ import {
   subjectKeyOf,
 } from '../../src/server/domain/automation-events';
 import { TEMPLATES, TEMPLATE_CODES, buildDefinition, parseParams } from '../../src/server/domain/automation-templates';
+import { actionText, conditionText, labelKeys, wordsOf } from '../../src/server/domain/automation-text';
+import { EXPORT_ACCESS } from '../../src/server/print/access';
+import { messagesFor } from '../../src/server/print/i18n';
+import { SCREENS } from '../../src/server/domain/screens';
+import { MENU } from '../../src/server/domain/menu';
+import en from '../../messages/en.json';
+import ar from '../../messages/ar.json';
 
 const read = (path: string) => readFileSync(path, 'utf8');
 const money = (value: string) => value;
@@ -409,6 +416,123 @@ describe('what automation is not allowed to touch (no financial posting, ever)',
       const code = strip(read(file));
       expect(code, file).not.toMatch(/\b(insert\s+into|update|delete\s+from)\s+"?(journal_entry|journal_line|inventory_movement|cost_layer|stock_position|supplier_payment|customer_receipt|payment_application|bank_statement|ap_invoice|ar_invoice|goods_receipt|payable)\b/i);
       expect(code, file).not.toMatch(/\.(insert|update|delete)\((journalEntry|journalLine|inventoryMovement|costLayer|supplierPayment|customerReceipt|apInvoice|arInvoice|goodsReceipt|payable)\b/);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// In words: no raw code on a screen
+// ---------------------------------------------------------------------------
+
+describe('automation in words, in both languages', () => {
+  const CATALOGUES = { en, ar } as unknown as Record<'en' | 'ar', { admin: { automation: Record<string, string> } }>;
+
+  it('has a message for every event, field, operator, action, recipient, template, parameter, outcome and step', () => {
+    for (const locale of ['en', 'ar'] as const) {
+      const messages = CATALOGUES[locale].admin.automation;
+      for (const key of labelKeys()) {
+        expect(typeof messages[key], `${locale} admin.automation.${key}`).toBe('string');
+        expect(messages[key]!.trim().length, `${locale} ${key}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('says the same thing in Arabic: every English message has an Arabic one, with the same placeholders', () => {
+    const english = CATALOGUES.en.admin.automation;
+    const arabic = CATALOGUES.ar.admin.automation;
+    expect(Object.keys(arabic).sort()).toEqual(Object.keys(english).sort());
+    const holes = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+    for (const key of Object.keys(english)) expect(holes(arabic[key]!), key).toEqual(holes(english[key]!));
+    // Not a copy of the English: a sentence written in the other language (a bare placeholder is the same in both).
+    for (const key of Object.keys(english)) {
+      if (/^\{\w+\}$/.test(english[key]!) || english[key] === '{field} {op} {value}') continue;
+      expect(arabic[key], key).not.toBe(english[key]);
+    }
+  });
+
+  it('every message the three screens ask for by name exists in both locales', () => {
+    const FILES = [
+      'src/app/(app)/administration/automation/page.tsx',
+      'src/app/(app)/administration/automation/rule-form.tsx',
+      'src/app/(app)/administration/automation/[ruleNo]/page.tsx',
+      'src/app/(app)/administration/automation/runs/[runId]/page.tsx',
+      'src/server/print/automation-documents.ts',
+    ];
+    for (const file of FILES) {
+      const source = read(file);
+      for (const match of source.matchAll(/\bx\('([A-Za-z_]+)'/g)) {
+        for (const locale of ['en', 'ar'] as const) expect(CATALOGUES[locale].admin.automation[match[1]!], `${file}: ${match[1]} (${locale})`).toBeTypeOf('string');
+      }
+    }
+    // The ones named by a template literal: each state, outcome, step and action kind.
+    for (const locale of ['en', 'ar'] as const) {
+      const messages = CATALOGUES[locale].admin.automation;
+      for (const key of ['state_on', 'state_off', 'state_paused', 'state_failing', 'pill_on', 'pill_off', 'pill_paused', 'outcome_done', 'outcome_skipped', 'outcome_failed', 'step_done', 'step_skipped', 'step_failed', 'step_carried']) {
+        expect(messages[key], `${locale} ${key}`).toBeTypeOf('string');
+      }
+    }
+  });
+
+  it('reads a rule as sentences: the condition and each action, with names from the book', () => {
+    const say = messagesFor('en').admin;
+    const book = { roles: { accounting_manager: 'Accounting Manager' }, sections: { FIN: 'Finance' }, users: { '11111111-1111-4111-8111-111111111111': 'Rita Reviewer' } };
+    const words = wordsOf({
+      say: (key, values) => say(`automation.${key}`, values),
+      book,
+      money: (decimal) => `IQD ${decimal}`,
+      date: (iso) => iso,
+      priority: (code) => say(`tasks.priority_${code}`),
+      severity: (code) => say(`exceptions.severity_${code}`),
+    });
+    const def = buildDefinition('container_eta_exceeded', parseParams('container_eta_exceeded', { daysLate: '3', severity: 'high', notifyRole: 'accounting_manager', followUp: 'on', taskAssignee: '11111111-1111-4111-8111-111111111111', taskDepartment: 'FIN', taskTitle: 'Chase', taskPriority: 'high', taskDueInDays: '2' }));
+    expect(conditionText('container.eta_exceeded', def.conditions[0]!, words)).toBe('Days late is at least 3');
+    expect(def.actions.map((a) => actionText(a, words))).toEqual([
+      'Raise an exception in the Exception Center, severity High',
+      'Tell everyone with the role Accounting Manager',
+      'Raise a task “Chase” for Rita Reviewer in Finance, priority High, due in 2 days',
+    ]);
+    const money = buildDefinition('invoice_over_threshold', parseParams('invoice_over_threshold', { thresholdIqd: '1,000,000', notifyRole: 'accounting_manager' }));
+    expect(conditionText('ap_invoice.submitted', money.conditions[0]!, words)).toBe('Invoice amount (IQD) is at least IQD 1000000.0000');
+    expect(actionText(money.actions[0]!, words)).toBe('Ask for a second person’s review before the invoice can be posted');
+    // A person who is no longer listed is not a raw id.
+    const gone = actionText({ kind: 'create_notification', recipients: [{ kind: 'user', userId: '22222222-2222-4222-8222-222222222222' }], note: '' }, words);
+    expect(gone).toBe('Tell someone who is no longer listed');
+  });
+});
+
+describe('the registrations', () => {
+  it('is on the menu and the catalogue as one settings screen, with a print model for the rule and the run', () => {
+    const section = MENU.find((m) => m.key === 'administration')!;
+    expect(section.items.find((i) => i.key === 'automation')).toEqual({ key: 'automation', object: 'automation', href: '/administration/automation' });
+    expect(SCREENS.automation).toBe('settings');
+    expect(EXPORT_ACCESS.automation_rule).toEqual({ kind: 'document', route: '/administration/automation', object: 'automation' });
+    expect(EXPORT_ACCESS.automation_run).toEqual({ kind: 'document', route: '/administration/automation', object: 'automation' });
+    const registry = read('src/server/print/registry.ts');
+    expect(registry).toContain('automation_rule: byId(automationDocuments.automationRule)');
+    expect(registry).toContain('automation_run: byId(automationDocuments.automationRun)');
+    for (const locale of ['en', 'ar'] as const) {
+      const catalogue = { en, ar }[locale] as unknown as { page: Record<string, string>; print: { titles: Record<string, string> } };
+      expect(typeof catalogue.page.automation).toBe('string');
+      expect(typeof catalogue.print.titles.automation_rule).toBe('string');
+      expect(typeof catalogue.print.titles.automation_run).toBe('string');
+    }
+  });
+
+  it('keeps a rule\'s and a run\'s notes and files for the people who administer automation', () => {
+    const notes = read('src/server/services/record-notes.ts');
+    expect(notes).toMatch(/\['automation', target\('automation', 'administer'/);
+    expect(notes).toMatch(/\['automation_run', target\('automation', 'administer'/);
+    const runtime = read('src/server/attachments-runtime.ts');
+    expect(runtime).toContain("registerParentAccessCheck('automation', automationParentAccess)");
+    expect(runtime).toContain("registerParentAccessCheck('automation_run', automationRunParentAccess)");
+  });
+
+  it('wears the four doors on both record pages, in the standing order', () => {
+    for (const file of ['src/app/(app)/administration/automation/[ruleNo]/page.tsx', 'src/app/(app)/administration/automation/runs/[runId]/page.tsx']) {
+      const source = read(file);
+      const order = ['<ExportIcon', '<RecordAttachmentsDoor', '<RecordNotesDoor', '<HistoryButton'].map((door) => source.indexOf(door));
+      expect(order.every((i) => i > 0), file).toBe(true);
+      expect([...order].sort((a, b) => a - b), file).toEqual(order);
     }
   });
 });

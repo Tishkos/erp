@@ -17,6 +17,7 @@ import * as projectDocuments from './project-documents';
 import * as hrDocuments from './hr-documents';
 import * as taskDocuments from './task-documents';
 import * as exceptionDocuments from './exception-documents';
+import * as automationDocuments from './automation-documents';
 
 export type { ExportKey } from './access';
 
@@ -128,6 +129,8 @@ const BUILDERS = {
   employee_request: byId(hrDocuments.employeeRequest),
   task: byId(taskDocuments.task),
   exception: byId(exceptionDocuments.exception),
+  automation_rule: byId(automationDocuments.automationRule),
+  automation_run: byId(automationDocuments.automationRun),
 } satisfies Record<ExportKey, Builder>;
 
 export function exportable(key: ExportKey): Exportable {
