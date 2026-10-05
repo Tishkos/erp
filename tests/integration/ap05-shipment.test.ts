@@ -148,10 +148,11 @@ describe('A15 · goods at sea are owned, not available', () => {
     await postInvoice();
 
     const { rows: position } = await ownerPool.query(
-      `select warehouse_code, on_hand::text, available::text from stock_position where item_code = $1 order by warehouse_code`,
+      `select warehouse_code, on_hand::text, in_transit::text, held::text, available::text from stock_position where item_code = $1 order by warehouse_code`,
       [PANEL],
     );
-    expect(position).toEqual([{ warehouse_code: IN_PROCESS, on_hand: '1000.000000', available: '0' }]);
+    // 0287 — goods in a transit warehouse are in transit, not on hand: held there, sellable nowhere.
+    expect(position).toEqual([{ warehouse_code: IN_PROCESS, on_hand: '0', in_transit: '1000.000000', held: '1000.000000', available: '0' }]);
     const { rows: shipment } = await ownerPool.query(`select count(*)::int as n from supplier_shipment where ap_invoice_id = $1`, [invoiceId]);
     expect(shipment[0].n).toBe(0);
     const { rows: order } = await ownerPool.query(
@@ -180,6 +181,14 @@ describe('§17.1 · B/Ls and containers', () => {
     ]);
     expect(await codes()).toEqual(expect.arrayContaining(['BL_ISSUED', 'CONTAINER_ADDED']));
     expect(await stageOf()).toBe('shipped');
+  });
+
+  it('the one size/type of a paste is the standard: capitals kept, anything else refused before a B/L is written', async () => {
+    expect(await rejection(createBl({ sizeType: '99XX' }))).toMatch(/'99XX' is not a container size\/type/);
+    expect((await ownerPool.query(`select 1 from bill_of_lading where payable_id = $1`, [payableId])).rowCount).toBe(0);
+    await createBl({ sizeType: ' 40hc ' });
+    const { rows } = await ownerPool.query(`select distinct size_type from shipment_container where payable_id = $1`, [payableId]);
+    expect(rows.map((r) => r.size_type)).toEqual(['40HC']);
   });
 
   it('refuses what is not a container number, and a number still on a live B/L', async () => {
@@ -327,7 +336,7 @@ describe('A13 / A14 · container by container into the warehouse', () => {
       [PANEL],
     );
     expect(position).toEqual([
-      { warehouse_code: IN_PROCESS, on_hand: '0.000000', available: '0' },
+      { warehouse_code: IN_PROCESS, on_hand: '0', available: '0' },
       { warehouse_code: WAREHOUSE, on_hand: '1000.000000', available: '1000.000000' },
     ]);
 
@@ -358,10 +367,11 @@ describe('A13 / A14 · container by container into the warehouse', () => {
     expect(facts.receivedQuantityMatches).toBe(false);
     // Ten stay in transit, owned and not available, until the claim is settled.
     const { rows: position } = await ownerPool.query(
-      `select on_hand::text from stock_position where item_code = $1 and warehouse_code = $2`,
+      `select on_hand::text, held::text from stock_position where item_code = $1 and warehouse_code = $2`,
       [PANEL, IN_PROCESS],
     );
-    expect(position[0].on_hand).toBe('10.000000');
+    // What was short stays in the transit warehouse: held there, and (0287) not on hand.
+    expect(position[0]).toEqual({ on_hand: '0', held: '10.000000' });
   });
 
   it('refuses before the invoice posts, into another branch, or into transit', async () => {

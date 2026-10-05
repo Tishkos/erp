@@ -89,7 +89,7 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Se
                 />
                 <Field label={t('bl_no')} name="bl_no" required />
                 <Field defaultValue={today} label={t('bl_date')} name="bl_date" required type="date" />
-                <Field label={t('eta')} name="eta" type="date" />
+                <Field hint={t('eta_hint')} label={t('eta')} name="eta" required type="date" />
                 <Field label={t('vessel')} name="vessel" />
                 <Field label={t('voyage')} name="voyage" />
                 <Field label={t('shipping_line')} name="shipping_line" />
