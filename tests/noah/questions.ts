@@ -920,6 +920,35 @@ export const CASES: readonly EvalCase[] = [
     why: 'asked for live data in plain words, the picture is of the real screen and he says so',
   },
 
+  {
+    id: 'howto-default-live-en',
+    area: 'howto',
+    ask: 'how do I add a new supplier? show me step by step with pictures',
+    expect: {
+      tools: ['show_screen'],
+      says: ['real|live|your own', 'training|sample', 'New supplier'],
+      pictures: 3,
+      noProposal: true,
+      script: 'latin',
+      maxSeconds: 180,
+    },
+    why: 'with live how-to pictures switched on, a plain how-to shows the asker their own screen — he does not choose the training copy for them — and says which picture is which',
+  },
+  {
+    id: 'howto-training-asked-en',
+    area: 'howto',
+    ask: 'show me the suppliers screen, the sample training picture please, not my real data',
+    expect: {
+      tools: ['show_screen'],
+      says: ['training|sample'],
+      neverSays: ['this is your (real|own|live) screen'],
+      pictures: 1,
+      script: 'latin',
+      maxSeconds: 180,
+    },
+    why: 'the training copy is the person\'s to ask for, and when they do they get it',
+  },
+
   // ── what a step would do, and several steps on one yes (2026-10-05) ───────
   {
     id: 'preview-reverse-en',

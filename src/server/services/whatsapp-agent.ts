@@ -23,6 +23,7 @@ import * as notes from './whatsapp-notes';
 import { correctionFor, isClean, unsupportedIn } from '../domain/whatsapp-selfcheck';
 import * as liveShots from './live-screenshot';
 import * as howTo from './howto-live';
+import { asksForTrainingPicture } from '../domain/whatsapp-pictures';
 import * as review from './whatsapp-review';
 import * as sqlService from './whatsapp-sql';
 import * as systemGuide from './system-guide';
@@ -88,6 +89,8 @@ export interface AskerMeta {
   readonly chat?: string | null;
   /** The exchange before this one — what an "that was wrong" is about. */
   readonly lastExchange?: { readonly question: string; readonly answer: string } | null;
+  /** The person's own words this time: what they asked for decides some things the model may not decide for them. */
+  readonly question?: string | null;
 }
 
 export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?: ActionHooks, meta?: AskerMeta) {
@@ -502,7 +505,9 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
          * system as the asker. Everything else, and whatever a live picture
          * could not be taken of, is the ready-made picture.
          */
-        const wantsLive = args.data === 'live' ? liveShots.liveShotsReady().ok : args.data === 'training' ? false : howTo.howToLiveReady().ok;
+        // "training" is the person's to ask for, not the model's to choose: with their words in hand it counts only when they said so.
+        const trainingAsked = args.data === 'training' && (meta?.question == null || asksForTrainingPicture(meta.question));
+        const wantsLive = args.data === 'live' ? liveShots.liveShotsReady().ok : trainingAsked ? false : howTo.howToLiveReady().ok;
         const live: Partial<Record<'screen' | 'record', systemGuide.LivePicture>> = {};
         const notTaken: string[] = [];
         if (wantsLive && (view === 'all' || view === 'screen' || view === 'record')) {
@@ -786,7 +791,7 @@ export async function runAgentFor(input: {
       const found = unsupportedIn(answer, sources);
       return isClean(found) ? null : correctionFor(found);
     },
-    runTool: toolRunnerFor(input.ctx, input.files ?? [], input.actions, { userName: input.userName, chat: input.chat ?? input.actions?.chat ?? null, lastExchange }),
+    runTool: toolRunnerFor(input.ctx, input.files ?? [], input.actions, { userName: input.userName, chat: input.chat ?? input.actions?.chat ?? null, lastExchange, question: input.question }),
   });
   // What they asked and how he began to answer, for "continue" another day. Never a reason to lose the answer.
   notes.noteExchange({ userId: input.ctx.principal.userId, question: input.question, answer: result.text, tools: result.used });

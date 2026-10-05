@@ -16,6 +16,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { asksForTrainingPicture } from '@/server/domain/whatsapp-pictures';
 import { howToLiveReady, liveHowToPicture } from '@/server/services/howto-live';
 import type { LiveShotResult } from '@/server/services/live-screenshot';
 
@@ -276,5 +277,44 @@ describe('finding a record on a list is still only looking', () => {
     expect(howTo).toMatch(/import \{ checkPath, liveScreenshot, liveShotsReady, type LiveShotResult \} from '\.\/live-screenshot';/);
     expect(howTo).not.toMatch(/playwright|chromium|auth_session|authSession|page\.goto/);
     expect(howTo).not.toMatch(/email|impersonat/i);
+  });
+});
+
+describe('whose data a how-to shows is the owner\'s setting — the training copy is the person\'s to ask for', () => {
+  it('hears the person ask for the sample picture, in the languages they write in', () => {
+    for (const asked of [
+      'show me the suppliers screen, the sample one',
+      'the training picture please, not my real data',
+      'an example screenshot is enough',
+      'without our data please',
+      'اريد صورة تجريبية مو بياناتي',
+      'مثال فقط',
+    ]) {
+      expect(asksForTrainingPicture(asked), asked).toBe(true);
+    }
+  });
+
+  it('a plain how-to is not a request for the training copy', () => {
+    for (const asked of [
+      'how do I add a new supplier? show me step by step with pictures',
+      'where do I post a purchase invoice',
+      'show me the suppliers screen live',
+      'شلون اضيف مورد جديد؟ وريني بالصور',
+      '',
+      null,
+    ]) {
+      expect(asksForTrainingPicture(asked), String(asked)).toBe(false);
+    }
+  });
+
+  it('the model\'s own "training" counts only with those words: the tool is handed what the person wrote', () => {
+    const service = readFileSync(join(process.cwd(), 'src/server/services/whatsapp-agent.ts'), 'utf8');
+    expect(service).toMatch(/const trainingAsked = args\.data === 'training' && \(meta\?\.question == null \|\| asksForTrainingPicture\(meta\.question\)\);/);
+    expect(service).toMatch(/args\.data === 'live' \? liveShots\.liveShotsReady\(\)\.ok : trainingAsked \? false : howTo\.howToLiveReady\(\)\.ok/);
+    expect(service).toMatch(/lastExchange, question: input\.question \}/);
+    // And he is told to leave the choice alone.
+    const prompt = readFileSync(join(process.cwd(), 'src/server/domain/whatsapp-agent.ts'), 'utf8');
+    expect(prompt).toMatch(/LEAVE `data` OUT of show_screen and the server decides/);
+    expect(prompt).toMatch(/A plain "how do I …" is NOT a request for the training copy/);
   });
 });

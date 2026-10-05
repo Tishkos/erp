@@ -124,6 +124,8 @@ async function main(): Promise<number> {
   process.env.ERP_ISSUES_FILE = join(scratch, 'issues.md');
   // The same for what he keeps — requests, feedback, memory, walkthroughs: a test run must not teach him anything or file anything.
   process.env.NOAH_NOTES_DIR = join(scratch, 'notes');
+  // As the live bridge runs (option B, the owner's setting): a how-to shows the asker's own screen.
+  process.env.NOAH_HOWTO_LIVE ??= 'on';
 
   const client = await readerFor();
   if (!client) throw new Error('no brain is usable here: the claude CLI is not signed in and there is no ANTHROPIC_API_KEY');
