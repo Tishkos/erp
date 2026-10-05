@@ -872,7 +872,7 @@ export interface AgentOutcome {
   readonly exportObject?: string;
   readonly exportKey?: string;
   /** Pictures a tool attached: files on this host, each with its caption. */
-  readonly images?: ReadonlyArray<{ readonly file: string; readonly caption: string }>;
+  readonly images?: ReadonlyArray<{ readonly file: string; readonly caption: string; readonly kind?: 'training' | 'live' }>;
   readonly used: readonly string[];
   /** Each tool call: what it was asked, how long it took, what it said when it failed. */
   readonly trace?: ReadonlyArray<{ readonly tool: string; readonly args: string; readonly ms: number; readonly ok: boolean; readonly said?: string }>;

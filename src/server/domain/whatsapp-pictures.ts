@@ -23,6 +23,12 @@ export interface Picture {
   readonly file: string;
   /** What it shows, in the asker's language — the caption when he writes none. */
   readonly caption: string;
+  /**
+   * Whose data it shows: `training` — made ahead of time from the training
+   * copy, sample data; `live` — the real system as the asker sees it, taken
+   * now. A picture that says which it is cannot be taken for the other.
+   */
+  readonly kind?: 'training' | 'live';
 }
 
 export interface AnswerPart {
@@ -42,6 +48,45 @@ export const CAPTION_MAX = 900;
  * first live question after it was switched on he chose "training" by
  * himself, for a plain "how do I add a supplier", and the setting did nothing.
  */
+/**
+ * The language a picture is shown in. A person who writes "show me in arabic"
+ * has written in English, so the language of their message is not the
+ * language they asked for (2026-10-05: an Arabic explanation arrived under an
+ * English picture, with advice to switch the language oneself). Their own
+ * words decide first, then what the model asked for — the language he is
+ * answering in — then the language of the conversation.
+ */
+export function pictureLanguage(asked: unknown, question: string | null | undefined, fallback: 'en' | 'ar'): 'en' | 'ar' {
+  const said = (question ?? '').toLowerCase();
+  const wantsArabic = /\b(in|into|to)\s+arabic\b|\barabic\s+(version|picture|pictures|screen|screenshot|one|please)\b|بالعربي|باللغة العربية|عربي/.test(said);
+  const wantsEnglish = /\b(in|into|to)\s+english\b|\benglish\s+(version|picture|pictures|screen|screenshot|one|please)\b|ب?ال[اإ]ن[كج]ليزي|باللغة ال[اإ]ن[كج]ليزية|[اإ]ن[كج]ليزي/.test(said);
+  if (wantsArabic !== wantsEnglish) return wantsArabic ? 'ar' : 'en';
+  if (asked === 'ar' || asked === 'en') return asked;
+  return fallback;
+}
+
+/** Is this written mostly in the Arabic script? Field names quoted in English inside an Arabic answer do not make it English. */
+function mostlyArabic(text: string): boolean {
+  const arabic = (text.match(/[\u0600-\u06ff]/g) ?? []).length;
+  const latin = (text.match(/[a-z]/gi) ?? []).length;
+  return arabic > 0 && arabic * 2 >= latin;
+}
+
+/**
+ * The small line under a picture that says whose data it shows — by
+ * direction, 2026-10-05: "if the image comes from training, say that little
+ * note: this image came during the training session, not real current data".
+ * It is added to the caption here, not left to the model to remember.
+ */
+export function kindNote(kind: 'training' | 'live', arabic: boolean): string {
+  if (kind === 'training') {
+    return arabic
+      ? 'ℹ️ _صورة تدريبية: أُخذت أثناء التدريب ببيانات نموذجية — ليست بياناتكم الحقيقية الحالية._'
+      : 'ℹ️ _Training picture: taken during the training session with sample data — not your real, current data._';
+  }
+  return arabic ? '🟢 _صورة حيّة: شاشتكم الحقيقية كما هي الآن._' : '🟢 _Live picture: your real screen as it is right now._';
+}
+
 export function asksForTrainingPicture(text: string | null | undefined): boolean {
   const said = (text ?? '').toLowerCase();
   if (/\b(sample|training|demo|dummy|example|fake|test data|not (my|our|the) real|without (my|our|the) (real )?data)\b/.test(said)) return true;
@@ -93,6 +138,10 @@ export function layOutAnswer(answer: string, pictures: readonly Picture[]): { re
     parts.push({ lines: [], picture });
   }
 
+  // The note under a picture is in the language the answer is written in.
+  const arabic = mostlyArabic(tidy(kept));
+  const under = (words: string, picture: Picture) => (picture.kind ? `${words}\n\n${kindNote(picture.kind, words.trim() === '' ? arabic : arabic || mostlyArabic(words))}` : words);
+
   const out: AnswerPart[] = [];
   for (const part of parts) {
     const text = tidy(part.lines);
@@ -101,16 +150,16 @@ export function layOutAnswer(answer: string, pictures: readonly Picture[]): { re
       continue;
     }
     if (!text) {
-      out.push({ text: part.picture.caption, picture: part.picture });
+      out.push({ text: under(part.picture.caption, part.picture), picture: part.picture });
     } else if (text.length <= CAPTION_MAX) {
-      out.push({ text, picture: part.picture });
+      out.push({ text: under(text, part.picture), picture: part.picture });
     } else {
       // Too long to sit under a picture: the picture with what it shows, then the words.
-      out.push({ text: part.picture.caption, picture: part.picture });
+      out.push({ text: under(part.picture.caption, part.picture), picture: part.picture });
       out.push({ text, picture: null });
     }
   }
-  for (const picture of waiting.values()) out.push({ text: picture.caption, picture });
+  for (const picture of waiting.values()) out.push({ text: under(picture.caption, picture), picture });
 
   return { text: tidy(kept), parts: out };
 }

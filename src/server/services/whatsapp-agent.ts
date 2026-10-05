@@ -23,7 +23,7 @@ import * as notes from './whatsapp-notes';
 import { correctionFor, isClean, unsupportedIn } from '../domain/whatsapp-selfcheck';
 import * as liveShots from './live-screenshot';
 import * as howTo from './howto-live';
-import { asksForTrainingPicture } from '../domain/whatsapp-pictures';
+import { asksForTrainingPicture, pictureLanguage } from '../domain/whatsapp-pictures';
 import * as review from './whatsapp-review';
 import * as sqlService from './whatsapp-sql';
 import * as systemGuide from './system-guide';
@@ -498,6 +498,8 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
       case 'show_screen': {
         const view = ['menu', 'screen', 'form', 'record', 'dialog', 'all'].includes(String(args.view)) ? (args.view as systemGuide.ShotView | 'all') : 'all';
         const asked = String(args.screen ?? '');
+        // The language asked for, not the language the asking was written in: "show me in arabic" is an English sentence.
+        const shownIn = pictureLanguage(args.language, meta?.question, ctx.locale);
         /*
          * Whose data (2026-10-05, option B): with live data on — the server's
          * default once the owner switched it on, or because the person asked
@@ -511,12 +513,12 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         const live: Partial<Record<'screen' | 'record', systemGuide.LivePicture>> = {};
         const notTaken: string[] = [];
         if (wantsLive && (view === 'all' || view === 'screen' || view === 'record')) {
-          const which = systemGuide.screenFor(ctx.principal, ctx.locale, asked);
+          const which = systemGuide.screenFor(ctx.principal, shownIn, asked);
           if (which && which.menuScreen && which.allowed) {
             for (const one of view === 'record' ? (['record'] as const) : (['screen'] as const)) {
               const taken = await howTo.liveHowToPicture({
                 userId: ctx.principal.userId,
-                locale: ctx.locale,
+                locale: shownIn,
                 route: which.route,
                 view: one,
                 ...(one === 'screen' && which.newButton ? { pointAt: [which.newButton] } : {}),
@@ -528,7 +530,7 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         } else if (args.data === 'live' && !wantsLive) {
           notTaken.push(liveShots.liveShotsReady().reason ?? 'live pictures are not available on this server');
         }
-        const shown = systemGuide.screenPictures(ctx.principal, ctx.locale, asked, view, typeof args.dialog === 'string' ? args.dialog : null, live);
+        const shown = systemGuide.screenPictures(ctx.principal, shownIn, asked, view, typeof args.dialog === 'string' ? args.dialog : null, live);
         const note = notTaken.length > 0 && args.data === 'live' ? `${chr10()}A live picture could not be taken (${notTaken[0]}), so this is the training picture: say so.` : '';
         return { text: `${shown.text}${note}`, ...(shown.images.length > 0 ? { images: shown.images } : {}) };
       }
@@ -540,13 +542,14 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         const given = String(args.address ?? '').trim();
         const path = given.toLowerCase().startsWith(base.toLowerCase()) ? given.slice(base.length) || '/' : given;
         const pointAt = Array.isArray(args.pointAt) ? args.pointAt.filter((one): one is string => typeof one === 'string' && one.trim() !== '').slice(0, 4) : [];
-        const taken = await liveShots.liveScreenshot({ userId: ctx.principal.userId, path, locale: ctx.locale, ...(pointAt.length > 0 ? { pointAt } : {}) });
+        const shownIn = pictureLanguage(args.language, meta?.question, ctx.locale);
+        const taken = await liveShots.liveScreenshot({ userId: ctx.principal.userId, path, locale: shownIn, ...(pointAt.length > 0 ? { pointAt } : {}) });
         if (!taken.ok) return { text: `No live picture: ${taken.reason} Say in words what you would have pointed at.` };
         const { shot } = taken;
         const numbers = systemGuide.marksLine(shot.marks);
         const tag = shot.file.replace(/^.*[\\/]/, '').replace(/\.[a-z0-9]+$/i, '').toLowerCase();
         const caption =
-          ctx.locale === 'ar' ? `${shot.title || shot.path} — الشاشة كما هي الآن${numbers ? '، والأرقام الحمراء مشروحة في الرسالة' : ''}` : `${shot.title || shot.path} — the screen as it is now${numbers ? '; the red numbers are explained in the message' : ''}`;
+          shownIn === 'ar' ? `${shot.title || shot.path} — الشاشة كما هي الآن${numbers ? '، والأرقام الحمراء مشروحة في الرسالة' : ''}` : `${shot.title || shot.path} — the screen as it is now${numbers ? '; the red numbers are explained in the message' : ''}`;
         return {
           text: [
             `1 LIVE picture of ${shot.title || shot.path} (${shot.path}) is attached to your answer — the real screen as this person sees it now. Place it at its step: write its tag on a line of its own, and what you write under it is sent as its caption.`,
@@ -559,7 +562,7 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
             .filter((line) => line !== '')
             .join(chr10()),
           // One live picture per page: a retake replaces the first.
-          images: [{ file: shot.file, caption, group: `live:${shot.path}` }],
+          images: [{ file: shot.file, caption, group: `live:${shot.path}`, kind: 'live' }],
         };
       }
       case 'screens':

@@ -72,7 +72,7 @@ export interface ToolOutcome {
    * group: a live picture taken again (the arrow was at the wrong thing the
    * first time) is one picture, not two.
    */
-  readonly images?: ReadonlyArray<{ readonly file: string; readonly caption: string; readonly group?: string }>;
+  readonly images?: ReadonlyArray<{ readonly file: string; readonly caption: string; readonly group?: string; readonly kind?: 'training' | 'live' }>;
   readonly attachment?: {
     readonly model: unknown;
     readonly format?: 'pdf' | 'xlsx';
@@ -371,6 +371,11 @@ export const AGENT_TOOLS = [
       type: 'object',
       properties: {
         screen: { ...string, description: 'The screen: its English name, or its address (/payables/invoices).' },
+        language: {
+          ...string,
+          enum: ['en', 'ar'],
+          description: 'The language the pictures are in: the language you are ANSWERING in ("ar" for an Arabic or Kurdish answer, "en" for English). Asked to "show it in Arabic" → "ar". Every picture exists in both.',
+        },
         data: {
           ...string,
           enum: ['live', 'training'],
@@ -397,6 +402,7 @@ export const AGENT_TOOLS = [
       type: 'object',
       properties: {
         address: { ...string, description: 'The page: a path inside the ERP (/payables/invoices/API-HQ-2026-000005) or its full address.' },
+        language: { ...string, enum: ['en', 'ar'], description: 'The language the screen is shown in: the language you are answering in.' },
         pointAt: {
           type: 'array',
           items: string,
@@ -753,6 +759,8 @@ export function systemPrompt(input: {
     '• When explaining a field or a whole form, go through every field in the order the form shows them. Nobody should have to ask twice.',
     '• Send the pictures — a how-to without them is half an answer: call show_screen for the screen you are explaining ("all" for a how-to, "menu" when they only asked where it is; "sign in", "top bar", "account menu" and "change password" have pictures too). It hands you a tag for each picture. Write your answer as STEPS, and put each picture at its step: the tag alone on a line, and under it that step\'s words — "*Step 2* — in this picture the button ringed in red is *New supplier*: press it." What you write under a tag is sent as the caption of that picture, so keep each step short (a few lines) and complete in itself. Start to finish: where to go, what to press, what to type in which field, what happens when they save.',
     '• TWO KINDS OF PICTURE. show_screen is the training copy: every screen, its form, a record and its windows, with sample data — for "how do I…" and "where is…". screenshot is the LIVE system as this person sees it now, taken in about ten seconds, with an arrow at what you name — for THEIR document: after you have read it (document_story, review_document), take one picture of its page with pointAt set to the button to press or the field that is wrong, and say "in the picture the arrow is at *Post*". A picture has a box and a number on each part; refer to a part by its number and its name. If screenshot says it cannot take one, say what you would have pointed at in words — never promise a picture you were not given.',
+    '• A PICTURE SPEAKS THE LANGUAGE OF YOUR ANSWER. Every picture exists in English and in Arabic: pass `language` to show_screen and screenshot — "ar" when you are answering in Arabic or Kurdish, "en" in English. "Show me in Arabic", "بالعربي" means the words AND the pictures: call show_screen again with language "ar" for the same screen (and the same dialog) and explain it in Arabic. Never put an English picture under an Arabic explanation, and never tell somebody to change the language of their own screen in order to follow you.',
+    '• EVERY PICTURE IS LABELLED FOR YOU. Under each picture the system itself adds one small line: a training picture says it was taken during the training session with sample data and is not their real, current data; a live one says it is their real screen now. So do not write that on every picture — say it once where it helps, and never say the opposite of the label.',
     '• WHOSE DATA A PICTURE SHOWS. That is the owner\'s setting, not your choice: LEAVE `data` OUT of show_screen and the server decides — where the owner has switched live pictures on, a how-to shows this person their own real screen and one of their own records, and the result tells you which pictures are LIVE. A plain "how do I …" is NOT a request for the training copy. Set `data` only on the person\'s own words: "live" when they say "live", "real", "my data", "حقيقي", "مباشر" (it works even where the setting is off); "training" only when THEY ask for the sample — "sample", "example", "training copy", "تجريبي", "مثال". Sign-in, the top bar, the menus, empty forms and the windows that open are always the ready-made ones — there is no data in them, and they stay. Say which kind each picture is, as the result says: "this is your real screen" or "this is the training copy" — never call a LIVE picture sample data, nor a training one theirs. Anybody can ask in plain words: *!ai show me the suppliers screen live*, *!ai screenshot INV-…*.',
     '• The pictures carry red numbers on what matters — every field of a form, the buttons, the tabs, the search and filters, the table, a record\'s status and its printer / paperclip / notes / history icons — and the tool tells you which number is which. Use them: "Look at *1* — *Customer name*: …". For every numbered thing the person has to use, in order: what it is for; why the system needs it; what to put there, with an example from this company where you can look one up; whether it may be left empty; and what it changes elsewhere (the due date, the ageing, the stock, the journal). Explain a term the first time it appears, right beside its step. Never invent a number or a field the tool did not list; if a picture has no numbers, describe the control by its label.',
     '• A task that crosses several screens is several pictures in order — *Step 1* where to go (the menu picture), *Step 2* what to press (the screen picture), *Step 3* what to fill in (the form picture), *Step 4* what to do with the saved record (the record picture) — each step under its own picture, and nothing described that the picture at that step does not show.',
@@ -827,7 +835,7 @@ export interface AgentResult {
   readonly exportObject?: string;
   readonly exportKey?: string;
   /** Pictures to send after the words. */
-  readonly images?: ReadonlyArray<{ readonly file: string; readonly caption: string }>;
+  readonly images?: ReadonlyArray<{ readonly file: string; readonly caption: string; readonly kind?: 'training' | 'live' }>;
   /** For the log: which tools it used, in order. */
   readonly used: readonly string[];
   /**
@@ -931,7 +939,7 @@ export async function runAgent(input: {
   let checked = false;
   let lastAttachment: ToolOutcome['attachment'] = null;
   // The pictures the tools attached, in order, each once, and no more than three.
-  const images: { file: string; caption: string; group?: string }[] = [];
+  const images: { file: string; caption: string; group?: string; kind?: 'training' | 'live' }[] = [];
 
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
     const reply = await input.client.create({
@@ -990,7 +998,7 @@ export async function runAgent(input: {
         trace.push({ tool: name, args: asked, ms: Date.now() - started, ok: !refused, ...(refused ? { said: outcome.text.slice(0, 240) } : {}) });
         if (outcome.attachment?.model) lastAttachment = outcome.attachment;
         for (const image of outcome.images ?? []) {
-          const kept = { file: image.file, caption: image.caption, ...(image.group ? { group: image.group } : {}) };
+          const kept = { file: image.file, caption: image.caption, ...(image.group ? { group: image.group } : {}), ...(image.kind ? { kind: image.kind } : {}) };
           const earlier = image.group ? images.findIndex((one) => one.group === image.group) : -1;
           if (earlier >= 0) images[earlier] = kept;
           else if (images.length < MAX_IMAGES && !images.some((one) => one.file === image.file)) images.push(kept);

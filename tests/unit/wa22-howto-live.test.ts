@@ -16,7 +16,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { asksForTrainingPicture } from '@/server/domain/whatsapp-pictures';
+import { CAPTION_MAX, asksForTrainingPicture, kindNote, layOutAnswer, pictureLanguage } from '@/server/domain/whatsapp-pictures';
 import { howToLiveReady, liveHowToPicture } from '@/server/services/howto-live';
 import type { LiveShotResult } from '@/server/services/live-screenshot';
 
@@ -316,5 +316,65 @@ describe('whose data a how-to shows is the owner\'s setting — the training cop
     const prompt = readFileSync(join(process.cwd(), 'src/server/domain/whatsapp-agent.ts'), 'utf8');
     expect(prompt).toMatch(/LEAVE `data` OUT of show_screen and the server decides/);
     expect(prompt).toMatch(/A plain "how do I …" is NOT a request for the training copy/);
+  });
+});
+
+describe('a picture speaks the language that was asked for, and says whose data it shows', () => {
+  it('"show me in arabic" is an English sentence asking for Arabic pictures', () => {
+    // 2026-10-05: an Arabic explanation arrived under the English picture.
+    expect(pictureLanguage(undefined, 'show me in arabic', 'en')).toBe('ar');
+    expect(pictureLanguage('en', 'show me in arabic', 'en')).toBe('ar');
+    expect(pictureLanguage(undefined, 'the arabic version please', 'en')).toBe('ar');
+    expect(pictureLanguage(undefined, 'وريني بالانكليزي', 'ar')).toBe('en');
+    expect(pictureLanguage(undefined, 'show it in English', 'ar')).toBe('en');
+  });
+
+  it('otherwise the language he is answering in, and failing that the conversation\'s', () => {
+    expect(pictureLanguage('ar', 'how do I add a bank account to a supplier?', 'en')).toBe('ar');
+    expect(pictureLanguage(undefined, 'how do I add a bank account to a supplier?', 'en')).toBe('en');
+    expect(pictureLanguage(undefined, 'شلون اضيف حساب مصرفي للمورد؟', 'ar')).toBe('ar');
+    expect(pictureLanguage('fr', null, 'en')).toBe('en');
+    // Asked for both at once says nothing: his own choice stands.
+    expect(pictureLanguage('ar', 'in english and in arabic', 'en')).toBe('ar');
+  });
+
+  it('every training picture carries the note, in the language of the answer; a live one says it is real', () => {
+    const training = { file: '/shots/en/payables_suppliers-form.jpg', caption: 'Suppliers: the form', kind: 'training' as const };
+    const live = { file: '/shots/live/abc123.jpg', caption: 'Suppliers: your real screen', kind: 'live' as const };
+    const english = layOutAnswer(['[picture: abc123]', '*Step 1*: press New supplier.', '[picture: payables_suppliers-form]', '*Step 2*: fill in the form.'].join('\n'), [live, training]);
+    expect(english.parts.map((part) => part.text)).toEqual([
+      `*Step 1*: press New supplier.\n\n${kindNote('live', false)}`,
+      `*Step 2*: fill in the form.\n\n${kindNote('training', false)}`,
+    ]);
+    expect(kindNote('training', false)).toMatch(/Training picture: taken during the training session with sample data — not your real, current data/);
+    expect(kindNote('live', false)).toMatch(/Live picture: your real screen/);
+
+    // An Arabic answer full of English field names is still an Arabic answer.
+    const arabic = layOutAnswer(['[picture: payables_suppliers-form]', 'املي الحقول: 1 Bank (البنك) اختاره من القائمة، 2 Bank name (اسم البنك) اكتبه مثل ما مكتوب بالرسالة.'].join('\n'), [training]);
+    expect(arabic.parts[0]!.text.endsWith(kindNote('training', true))).toBe(true);
+    expect(kindNote('training', true)).toMatch(/صورة تدريبية/);
+
+    // A picture he did not place, and one whose words are too long to sit under it, are labelled too.
+    const unplaced = layOutAnswer('Here it is.', [training]);
+    expect(unplaced.parts.at(-1)!.text).toBe(`Suppliers: the form\n\n${kindNote('training', false)}`);
+    const long = layOutAnswer(['[picture: payables_suppliers-form]', 'x'.repeat(CAPTION_MAX + 1)].join('\n'), [training]);
+    expect(long.parts[0]!.text).toBe(`Suppliers: the form\n\n${kindNote('training', false)}`);
+    expect(long.parts[0]!.text.length).toBeLessThan(1024);
+
+    // A picture of no kind (a chart, a file's page) gets no note; the whole answer's text never carries one.
+    expect(layOutAnswer('[picture: x]\nwords', [{ file: '/a/x.jpg', caption: 'c' }]).parts[0]!.text).toBe('words');
+    expect(english.text).not.toMatch(/Training picture|Live picture/);
+  });
+
+  it('the tools hand over the kind and the language: ready-made pictures are training, a screenshot is live', () => {
+    const service = readFileSync(join(process.cwd(), 'src/server/services/whatsapp-agent.ts'), 'utf8');
+    expect(service).toMatch(/const shownIn = pictureLanguage\(args\.language, meta\?\.question, ctx\.locale\);/);
+    expect(service).toMatch(/systemGuide\.screenPictures\(ctx\.principal, shownIn, asked, view,/);
+    expect(service).toMatch(/group: `live:\$\{shot\.path\}`, kind: 'live' \}/);
+    const guide = readFileSync(join(process.cwd(), 'src/server/services/system-guide.ts'), 'utf8');
+    expect(guide).toMatch(/kind: isLive \? \('live' as const\) : \('training' as const\)/);
+    // …and so is a window that opens: no picture leaves the guide without saying whose data it shows.
+    expect(guide).toMatch(/images: \[\{ file, caption, kind: 'training' as const \}\]/);
+    expect(guide).not.toMatch(/images: \[\{ file, caption \}\]/);
   });
 });

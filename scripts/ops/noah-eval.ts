@@ -190,6 +190,7 @@ async function main(): Promise<number> {
       pictures = reply.images.map((image) => image.fileName);
       seen = {
         answer: reply.text,
+        sent: reply.parts.map((part) => part.text).join('\n\n'),
         tools: (reply.detail.tools as readonly string[] | undefined) ?? [],
         locale: reply.locale,
         pictures: reply.images.length,

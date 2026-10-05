@@ -69,6 +69,8 @@ export interface EvalCase {
     readonly says?: readonly string[];
     /** Regex sources; none may match. */
     readonly neverSays?: readonly string[];
+    /** Regex sources; each must match what is SENT — the words and every picture's caption with its note. */
+    readonly sends?: readonly string[];
     readonly locale?: 'en' | 'ar';
     /** The answer is mostly in this script. */
     readonly script?: 'arabic' | 'latin';
@@ -949,6 +951,35 @@ export const CASES: readonly EvalCase[] = [
     why: 'the training copy is the person\'s to ask for, and when they do they get it',
   },
 
+  {
+    id: 'language-pictures-in-arabic-en',
+    area: 'language',
+    ask: 'how do I add a bank account to a supplier? show me in arabic',
+    expect: {
+      tools: ['show_screen'],
+      // The Arabic picture's own caption and the note under it: neither is the model's to write.
+      sends: ['الموردون', 'صورة تدريبية'],
+      neverSays: ['change the language|switch (the|your) language|غيّر اللغة|غير اللغة'],
+      pictures: 1,
+      script: 'arabic',
+      maxSeconds: 180,
+    },
+    why: '"show me in arabic" is an English sentence asking for Arabic: the words AND the picture are Arabic, the training picture says it is one, and nobody is told to switch their own screen',
+  },
+  {
+    id: 'howto-notes-under-pictures-en',
+    area: 'howto',
+    ask: 'how do I add a new supplier? show me with pictures',
+    expect: {
+      tools: ['show_screen'],
+      sends: ['Training picture: taken during the training session', 'Live picture: your real screen'],
+      pictures: 3,
+      script: 'latin',
+      maxSeconds: 180,
+    },
+    why: 'every picture says under it whose data it shows: the training ones that they are sample data, the live one that it is the real screen',
+  },
+
   // ── what a step would do, and several steps on one yes (2026-10-05) ───────
   {
     id: 'preview-reverse-en',
@@ -1002,6 +1033,8 @@ export const CASES: readonly EvalCase[] = [
 export interface Observed {
   /** The whole reply, as it would be sent. */
   readonly answer: string;
+  /** Every message of it in order, a picture's caption (and the note under it) included; the answer when left out. */
+  readonly sent?: string;
   /** The tools he used, in order. */
   readonly tools: readonly string[];
   readonly locale: string;
@@ -1070,6 +1103,7 @@ export function judge(one: EvalCase, seen: Observed): string[] {
   for (const tool of expect.notTools ?? []) if (used.has(tool)) failures.push(`used ${tool}, which it must not`);
 
   for (const source of expect.says ?? []) if (!pattern(source).test(words)) failures.push(`does not say /${source}/`);
+  for (const source of expect.sends ?? []) if (!pattern(source).test(seen.sent ?? seen.answer)) failures.push(`does not send /${source}/`);
   for (const source of expect.neverSays ?? []) {
     const hit = pattern(source).exec(words);
     if (hit) failures.push(`says "${hit[0]}", which it must never (/${source}/)`);

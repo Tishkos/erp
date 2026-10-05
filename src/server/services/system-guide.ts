@@ -240,7 +240,7 @@ export function screenPictures(
   dialog: string | null = null,
   /** Live pictures already taken of this screen (as the asker): each takes the place of the ready-made one of its view. */
   live: Readonly<Partial<Record<'screen' | 'record', LivePicture>>> = {},
-): { readonly text: string; readonly images: ReadonlyArray<{ readonly file: string; readonly caption: string }> } {
+): { readonly text: string; readonly images: ReadonlyArray<{ readonly file: string; readonly caption: string; readonly kind?: 'training' | 'live' }> } {
   const all = shots();
   const anyLive = Boolean(live.screen || live.record);
   if (all.length === 0 && !anyLive) return { text: 'No pictures are installed on this server. Describe the path in words (the screens tool).', images: [] };
@@ -290,7 +290,8 @@ export function screenPictures(
         'Say its number and its name for each thing the person has to use, what it is for, what to put there, and what happens when they press the button that saves.',
         "It is a picture of a training copy with sample data: the layout is real, the names and figures in it are not the company's.",
       ].join('\n'),
-      images: [{ file, caption }],
+      // A window that opens is always the ready-made picture: there is no live one of it.
+      images: [{ file, caption, kind: 'training' as const }],
     };
   }
 
@@ -344,7 +345,7 @@ export function screenPictures(
     ]
       .filter((line) => line !== '')
       .join('\n'),
-    images: found.map(({ file, caption }) => ({ file, caption })),
+    images: found.map(({ file, caption, live: isLive }) => ({ file, caption, kind: isLive ? ('live' as const) : ('training' as const) })),
   };
 }
 
