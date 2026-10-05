@@ -65,7 +65,7 @@ import * as audit from '../../src/server/services/audit';
 import * as runner from '../../src/server/services/notification-runner';
 import * as wa from '../../src/server/services/whatsapp';
 import * as alerts from '../../src/server/services/whatsapp-alerts';
-import { alertMessage, briefHour, byRecipient, hasSomething, morningBrief, quietNow, type DayCounts } from '../../src/server/domain/whatsapp-alerts';
+import { alertMessage, briefHour, byRecipient, hasSomething, morningBrief, quietNow, splitShared, teamMessage, type DayCounts } from '../../src/server/domain/whatsapp-alerts';
 import { businessToday } from '../../src/server/domain/business-date';
 import { appUrl } from '../../src/server/services/system-guide';
 import * as actions from '../../src/server/services/whatsapp-actions';
@@ -1144,9 +1144,33 @@ async function sendAlerts(
     const group = await members(settings.groupJid);
     const locale = settings.digestLocale === 'ar' ? 'ar' : 'en';
     const words = alerts.kindWords(locale);
-    const notices = byRecipient(batch.rows);
+    // What was raised for several people at once is the team's: said once, everybody tagged.
+    const { personal, shared } = splitShared(batch.rows);
+    const notices = byRecipient(personal);
     const decisions = byRecipient(decided.rows);
     let told = 0;
+    if (shared.length > 0) {
+      const concerned = new Set(shared.flatMap((one) => one.recipients));
+      const tagged = batch.rows
+        .filter((row, index, all) => concerned.has(row.recipientUserId) && all.findIndex((other) => other.recipientUserId === row.recipientUserId) === index)
+        .map((row) => group.find((one) => one.e164 === row.e164))
+        .filter((member): member is Member => Boolean(member));
+      if (tagged.length > 0) {
+        const text = teamMessage({ tags: tagged.slice(0, 20).map((member) => `@${member.tag.replace(/[:@].*$/, '')}`), rows: shared.map((one) => one.row), words, locale, appUrl: appUrl() });
+        const e164 = tagged[0]!.e164 ?? batch.rows[0]!.e164;
+        const outId = await withScope(scope, (tx) =>
+          wa.recordOutbound(tx, { e164, groupJid: settings.groupJid, body: text, intent: 'alert.team', detail: { notificationIds: shared.map((one) => one.row.id), kinds: [...new Set(shared.map((one) => one.row.kind))], people: tagged.length } }),
+        );
+        try {
+          const { waMessageId } = await alerting.run({ groupJid: settings.groupJid }, () => send({ e164, groupJid: settings.groupJid }, { text, quote: false }));
+          await withScope(scope, (tx) => wa.markOutbound(tx, outId, { status: 'sent', waMessageId }));
+          told += tagged.length;
+        } catch (error) {
+          await withScope(scope, (tx) => wa.markOutbound(tx, outId, { status: 'failed', errorMessage: error instanceof Error ? error.message : String(error) }));
+          log(`alerts: the team's could not be sent (${error instanceof Error ? error.message : String(error)})`);
+        }
+      }
+    }
     for (const userId of new Set([...notices.keys(), ...decisions.keys()])) {
       const rows = notices.get(userId) ?? [];
       const theirs = decisions.get(userId) ?? [];

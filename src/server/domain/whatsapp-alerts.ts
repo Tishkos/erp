@@ -303,6 +303,50 @@ export function alertMessage(input: {
   ].join('\n');
 }
 
+/** The same notice raised for this many people or more is the team's, said once — not once per person. */
+export const SHARED_MIN = 3;
+
+/**
+ * A batch, divided: what is one person's own, and what was raised for several
+ * people at once (the day's system-health notice, an overdue invoice told to
+ * every accountant). The second kind is said ONCE in the group with
+ * everybody it concerns tagged — four people do not need four copies.
+ */
+export function splitShared<T extends AlertRow & { readonly recipientUserId: string }>(
+  rows: readonly T[],
+  min: number = SHARED_MIN,
+): { readonly personal: T[]; readonly shared: Array<{ readonly row: T; readonly recipients: string[] }> } {
+  const keyOf = (row: T) => [row.kind, row.objectId, row.subject].join('\u0001');
+  const groups = new Map<string, T[]>();
+  for (const row of rows) groups.set(keyOf(row), [...(groups.get(keyOf(row)) ?? []), row]);
+  const personal: T[] = [];
+  const shared: Array<{ row: T; recipients: string[] }> = [];
+  for (const group of groups.values()) {
+    const recipients = [...new Set(group.map((row) => row.recipientUserId))];
+    if (recipients.length >= min) shared.push({ row: group[0]!, recipients });
+    else personal.push(...group);
+  }
+  return { personal, shared };
+}
+
+/**
+ * What was raised for several people at once, as one message: everybody it
+ * concerns tagged on one line, then each notice once.
+ */
+export function teamMessage(input: { readonly tags: readonly string[]; readonly rows: readonly AlertRow[]; readonly words: KindWords; readonly locale: 'en' | 'ar'; readonly appUrl: string }): string {
+  const ar = input.locale === 'ar';
+  const shown = input.rows.slice(-ALERT_MAX_LINES);
+  const more = input.rows.length - shown.length;
+  return [
+    ar ? '📣 *للفريق — جديد في النظام*' : '📣 *For the team — new in the ERP*',
+    input.tags.join(' '),
+    ...(more > 0 ? [ar ? `… و${more} قبلها` : `… ${more} earlier, and:`] : []),
+    ...shown.map((row) => `• ${alertLine(row, input.words, input.locale)}`),
+    `${ar ? 'افتحها' : 'Open them'}: ${input.appUrl}/notifications`,
+    ar ? '_تنبيه تلقائي من النظام._' : '_Automatic alert from the ERP._',
+  ].join('\n');
+}
+
 /** What one person has on their plate this morning. */
 export interface DayCounts {
   /** Tasks given to them that are due today. */

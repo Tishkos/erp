@@ -36,6 +36,8 @@ import {
   morningBrief,
   quietNow,
   referenceOf,
+  splitShared,
+  teamMessage,
   type AlertRow,
   type DecisionRow,
   type KindWords,
@@ -204,6 +206,48 @@ describe('the alert for one person', () => {
   });
 });
 
+describe('what was raised for several people at once is said once', () => {
+  const to = (recipientUserId: string, over: Partial<AlertRow> = {}) => ({ ...row(over), recipientUserId });
+
+  it('the same notice to three people or more is for the team; anything else stays with the person it is for', () => {
+    const health = { kind: 'system.health', objectId: 'health-2026-10-06', subject: 'System health needs attention', context: null };
+    const rows = [
+      to('a', { id: '1', ...health }),
+      to('b', { id: '2', ...health }),
+      to('c', { id: '3', ...health }),
+      to('a', { id: '4' }), // her own task
+      to('a', { id: '5', kind: 'ap_invoice.overdue', objectId: 'inv-1', subject: 'Invoice API-1 is overdue', context: null }),
+      to('b', { id: '6', kind: 'ap_invoice.overdue', objectId: 'inv-1', subject: 'Invoice API-1 is overdue', context: null }), // two people: not the team's
+    ];
+    const { personal, shared } = splitShared(rows);
+    expect(shared).toHaveLength(1);
+    expect(shared[0]!.row.kind).toBe('system.health');
+    expect(shared[0]!.recipients).toEqual(['a', 'b', 'c']);
+    expect(personal.map((one) => one.id)).toEqual(['4', '5', '6']);
+    // Nothing is lost and nothing is said twice.
+    expect(personal.length + shared.reduce((sum, one) => sum + one.recipients.length, 0)).toBe(rows.length);
+    expect(splitShared(rows, 2).shared.map((one) => one.row.kind)).toEqual(['system.health', 'ap_invoice.overdue']);
+  });
+
+  it('one message, everybody it concerns tagged on one line, each notice once', () => {
+    const said = teamMessage({
+      tags: ['@111', '@222', '@333'],
+      rows: [row({ kind: 'system.health', subject: 'System health needs attention', body: 'restore drill failed', context: null })],
+      words: WORDS,
+      locale: 'en',
+      appUrl: 'https://erp.example',
+    }).split('\n');
+    expect(said).toEqual([
+      '📣 *For the team — new in the ERP*',
+      '@111 @222 @333',
+      '• 05 Oct 14:05 — 🛠 System health needs attention — restore drill failed',
+      'Open them: https://erp.example/notifications',
+      '_Automatic alert from the ERP._',
+    ]);
+    expect(teamMessage({ tags: ['@1'], rows: [row()], words: WORDS, locale: 'ar', appUrl: 'x' }).split('\n')[0]).toBe('📣 *للفريق — جديد في النظام*');
+  });
+});
+
 describe('the morning note', () => {
   const none = { dueToday: 0, overdue: 0, toReview: 0, approvals: 0 };
 
@@ -304,8 +348,9 @@ describe('the one exception to "he speaks only when called" is as wide as it was
       /const alertToItsGroup =\s+Boolean\(alert\) && Boolean\(to\.groupJid\) && to\.groupJid === alert!\.groupJid && to\.groupJid === current\(\)\.groupJid && current\(\)\.groupNotifications && !message\.attachment;/,
     );
     expect(bridge).toMatch(/if \(current\(\)\.groupOnly && !called\.getStore\(\) && !alertToItsGroup\) \{\s+throw new Error\('unasked:/);
-    // Two places set it — an alert and the morning note — and each sends to the group it was set for.
-    expect(bridge.match(/alerting\.run\(/g)).toHaveLength(2);
+    // Three places set it — a person's alert, the team's, the morning note — and each sends to the group it was set for.
+    expect(bridge.match(/alerting\.run\(/g)).toHaveLength(3);
+    expect(bridge.match(/alerting\.run\(\{ groupJid: settings\.groupJid \}, \(\) => send\(\{ e164, groupJid: settings\.groupJid \}, \{ text, quote: false \}\)\)/g)).toHaveLength(2);
     expect(bridge).toMatch(/alerting\.run\(\{ groupJid: settings\.groupJid \}, \(\) => send\(\{ e164, groupJid: settings\.groupJid \}, \{ text, quote: false \}\)\)/);
     expect(bridge).toMatch(/alerting\.run\(\{ groupJid: first \}, \(\) => send\(\{ e164, groupJid: first \}, \{ text, quote: false \}\)\)/);
     // The group-only rule on WHERE he writes is untouched by it.
