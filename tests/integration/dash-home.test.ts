@@ -217,9 +217,13 @@ describe('1 · the page is composed from grants', () => {
       expect(pages.get(name), name).not.toContain('list_major_imports');
     }
 
-    // The accounting manager can be waited on; an officer who only raises documents cannot.
+    // The accounting manager can be waited on. So can an accounting officer, since the inventory
+    // grants: `approve` on inventory_movement and warehouse_transfer means a stock count or a
+    // transfer can wait on them (found 2026-10-05, when this was merged with main — the test
+    // still said an officer only raises documents). Somebody who approves nothing is not offered it.
     expect(pages.get('manager')).toContain('approvals_waiting');
-    expect(pages.get('officer')).not.toContain('approvals_waiting');
+    expect(pages.get('officer')).toContain('approvals_waiting');
+    expect(pages.get('outsider')).not.toContain('approvals_waiting');
     expect(pages.get('officer')).toContain('cash_position');
 
     // A warehouse role is operational: stock and movements, nothing financial.

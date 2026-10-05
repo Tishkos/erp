@@ -29,6 +29,19 @@ export default defineConfig({
           name: 'unit',
           include: ['tests/unit/**/*.test.ts'],
           environment: 'node',
+          /*
+           * A unit test never talks to a database — but some of what it imports
+           * imports the database client, and that module refuses to load with
+           * no address at all. CI always has one in its environment, so tests
+           * written there loaded; a deploy runs this project with none, and
+           * four files (the close-check catalogue among them) failed before
+           * their first test (found 2026-10-05, after the platform merge). The
+           * address below is never connected to: nothing listens on port 9, so
+           * a unit test that did query would fail at once and say so.
+           */
+          env: { DATABASE_URL: process.env.DATABASE_URL ?? 'postgres://unit-tests-never-connect@127.0.0.1:9/none' },
+          // A file that writes a real workbook takes over five seconds on a machine short of memory; that is not a failure.
+          testTimeout: 20_000,
         },
       },
       {
