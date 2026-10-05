@@ -237,6 +237,28 @@ test.describe('Automation · a rule from a template, an event, a run, and who ma
     await admin.close();
   });
 
+  test('changing a rule is a new version: the form shows what was typed, and the old version stays on the page', async ({ browser }) => {
+    test.setTimeout(240_000);
+    const admin = await as(browser, ADMIN);
+    const page = admin.page;
+    await page.goto(`/administration/automation/${encodeURIComponent(ruleNo)}`, { waitUntil: 'networkidle' });
+    await page.getByRole('button', { name: 'Edit parameters' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.locator('input[name="p_daysLate"]')).toHaveValue('1');
+    await expect(dialog.locator('input[name="p_notifyAssignee"]')).toBeChecked();
+    await dialog.locator('input[name="p_daysLate"]').fill('2');
+    await dialog.locator('input[name="note"]').fill(`Two days is enough ${RUN}`);
+    await dialog.getByRole('button', { name: 'Save as a new version' }).click();
+    await page.waitForURL(/saved=1/, { timeout: 60_000 });
+    await expect(page.getByText(/Days late is at least 2/)).toBeVisible();
+    const versions = page.locator('table[aria-labelledby="automation-versions-title"] tbody tr');
+    await expect(versions).toHaveCount(2);
+    await expect(versions.first()).toContainText('Current');
+    await expect(versions.first()).toContainText(`Two days is enough ${RUN}`);
+    await expect(chip(page)).toHaveText('On');
+    await admin.close();
+  });
+
   test('the administrator switches the rule off again, with a reason; it keeps its history', async ({ browser }) => {
     test.setTimeout(240_000);
     const admin = await as(browser, ADMIN);

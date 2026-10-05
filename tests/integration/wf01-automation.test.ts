@@ -514,6 +514,9 @@ describe('AU4 · a task is overdue: the assignee, and the supervisor where the s
     const told = await noticesOf('automation.task_overdue');
     expect(told.map((n) => n.who).sort()).toEqual([clerk.id, supervisor.id].sort());
     expect(log!.results[0]!.detail).toMatch(/Told 2 people/);
+    // The notice names the task by its title beside its number (a task has no supplier or customer), and says which rule told them.
+    const context = (await ownerPool.query(`select context from notification where event_type = 'automation.task_overdue' and context->>'rule' = $1 limit 1`, [ruleNo])).rows[0].context as Record<string, string>;
+    expect(context).toMatchObject({ reference: taskNo, party: 'Send the August statements', name: 'Tasks late', rule: ruleNo });
   });
 
   it('a task that is not late, or not owed any more, is not an event', async () => {
