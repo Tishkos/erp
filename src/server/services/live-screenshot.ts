@@ -28,16 +28,31 @@
  *                       not delete a session (§25, migration 0014: "a revoked
  *                       session stays"), and revocation is one-way. The token
  *                       never leaves this function.
- *   IT CAN ONLY LOOK    The browser is refused every request that is not a
- *                       GET or a HEAD, every request to another origin, and
- *                       every download. A server action is a POST, so nothing
- *                       it could press would reach the server — and it presses
- *                       nothing: it opens one address, waits, draws, and takes
- *                       the picture. No click, no key, no form.
+ *   IT CANNOT CHANGE    The browser is refused every request that is not a
+ *   ANYTHING            GET or a HEAD, every request to another origin, and
+ *                       every download. Saving, sending, approving and posting
+ *                       are all POSTs: whatever happened in the page, none of
+ *                       them would reach the server. That guard (`lookOnly`)
+ *                       is the rule, and it is on the whole browser.
+ *   IT OPENS, AND       Since 2026-10-05 ("no more training picture … always
+ *   NOTHING MORE        live") the camera also shows what the ready-made
+ *                       pictures used to: the form that opens, a window, the
+ *                       menu. For that it may press three kinds of thing and
+ *                       no other — a menu of the top bar, the Print / Export
+ *                       menu, and a button that has a `<dialog>` directly
+ *                       after it (which opens that window and does nothing
+ *                       else). The page itself is asked whether the thing is
+ *                       one of those immediately before the one press
+ *                       (`MAY_PRESS`, `press`); a button that acts at once is
+ *                       refused; nothing inside what opened is pressed; no
+ *                       key is typed; no form is filled.
  *   ONLY THE PAGES      The address must be a page of the application itself:
  *                       not `/api`, not the export or attachment routes (a GET
  *                       there is a file, and an export is audited as one), not
  *                       the sign-in form.
+ *
+ * The sign-in page is the one picture taken as NOBODY (`liveSignIn`): no
+ * session at all, one address, the same page everybody meets.
  *
  * `firstRecord` (2026-10-05, for a how-to's "an opened record"): the address is
  * a list, and what is pictured is the first record that list shows the asker.
@@ -58,7 +73,8 @@ import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:f
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Browser, BrowserContext, Page } from '@playwright/test';
-import { clearMarks, drawMarks, type Mark } from '../guide/markers';
+import { clearMarks, drawMarks, type Mark, type MarkOptions } from '../guide/markers';
+import { DIALOG_OVERFLOW, FIND_OPENERS, PREPARE_DIALOG, RING, keyOf, type Opener } from '../guide/openers';
 
 export interface LiveShot {
   /** The picture, on this host. */
@@ -70,9 +86,32 @@ export interface LiveShot {
   readonly marks: readonly Mark[];
   /** The `pointAt` labels that are not in the picture. */
   readonly notFound: readonly string[];
+  /** A screen or a record, pictured as it opens: the windows it can open, each by the key to ask for it with. */
+  readonly windows?: ReadonlyArray<{ readonly key: string; readonly name: string }>;
+  /** A menu's picture: the entry that is ringed, as the menu words it. */
+  readonly ringed?: string;
+  /** What was opened for the picture: the button's own words (a form, a window). */
+  readonly opened?: string;
 }
 
 export type LiveShotResult = { readonly ok: true; readonly shot: LiveShot } | { readonly ok: false; readonly reason: string };
+
+/**
+ * What the camera may open on the page before the picture is taken — the
+ * whole list. Each is a thing a person opens to LOOK: none of them saves,
+ * sends or changes anything, and nothing inside what opens is ever pressed.
+ */
+export type LiveOpen =
+  /** A module's dropdown in the top bar, with the entry for `route` ringed in red. */
+  | { readonly kind: 'menu'; readonly route: string; readonly moduleTitles: readonly string[] }
+  /** The way in to a new record: its own page (its address read off a link, opened with a plain GET) or the window its button opens. */
+  | { readonly kind: 'form' }
+  /** A window this page opens, by its key or by words of its name; '' asks only which there are. */
+  | { readonly kind: 'dialog'; readonly which: string }
+  /** The menu behind the person's initials. */
+  | { readonly kind: 'user-menu' }
+  /** Nothing opened: the bar every screen sits under, its parts numbered. */
+  | { readonly kind: 'top-bar' };
 
 /** `session.ts` › SESSION_COOKIE. That module is Next's own (it imports `next/headers`); the name is held equal by a test. */
 export const LIVE_SESSION_COOKIE = 'erp_session';
@@ -227,7 +266,10 @@ async function endSession(userId: string, sessionId: string): Promise<void> {
   );
 }
 
-async function auditShot(userId: string, input: { path: string; outcome: 'success' | 'denied' | 'failure'; reason?: string; sessionId?: string | null; marks?: number }): Promise<void> {
+async function auditShot(
+  userId: string,
+  input: { path: string; outcome: 'success' | 'denied' | 'failure'; reason?: string; sessionId?: string | null; marks?: number; opened?: string },
+): Promise<void> {
   try {
     const audit = await import('./audit');
     await audit.recordSecurity(
@@ -238,7 +280,7 @@ async function auditShot(userId: string, input: { path: string; outcome: 'succes
         objectType: 'whatsapp',
         objectId: null,
         branchCode: null,
-        after: { path: input.path.slice(0, 300), ...(input.marks === undefined ? {} : { marks: input.marks }) },
+        after: { path: input.path.slice(0, 300), ...(input.marks === undefined ? {} : { marks: input.marks }), ...(input.opened ? { opened: input.opened } : {}) },
         reason: input.reason ? input.reason.slice(0, 300) : null,
         outcome: input.outcome,
         sessionId: input.sessionId ?? null,
@@ -381,6 +423,209 @@ async function settle(page: Page, budget: number): Promise<void> {
   await page.waitForTimeout(250);
 }
 
+// ---------------------------------------------------------------------------
+// What may be opened for a picture — and the one place anything is pressed
+// ---------------------------------------------------------------------------
+
+/**
+ * THE ONLY THINGS THAT MAY BE PRESSED, asked of the page itself about the one
+ * element tagged for pressing, immediately before the press:
+ *
+ *   1. a menu of the top bar — a module's dropdown, the account menu;
+ *   2. the Print / Export menu of a list — a `<details>`, opened by its `<summary>`;
+ *   3. a button with a `<dialog>` DIRECTLY AFTER it, that belongs to no form
+ *      (or says `type="button"`): it opens that window and does nothing else.
+ *
+ * A button with no dialog after it acts at once, and is refused here whatever
+ * asked for it. This is the rule the ready-made pictures were taken by, over
+ * every screen of the menu, without saving anything (`guide/openers.ts`).
+ */
+export const MAY_PRESS = String.raw`(function () {
+  var all = document.querySelectorAll('[data-noah-press]');
+  if (all.length !== 1) return 'none';
+  var el = all[0];
+  var raw = el.className && el.className.baseVal !== undefined ? el.className.baseVal : el.className;
+  var cls = ' ' + String(raw || '') + ' ';
+  if (el.disabled) return 'refused';
+  if (el.tagName === 'BUTTON' && el.closest('.erp-header') && (cls.indexOf(' erp-nav__trigger ') >= 0 || cls.indexOf(' erp-user-trigger ') >= 0)) return 'ok';
+  if (el.tagName === 'SUMMARY' && el.parentElement && el.parentElement.tagName === 'DETAILS' && el.parentElement.hasAttribute('data-export-menu')) return 'ok';
+  if (
+    el.tagName === 'BUTTON' &&
+    !el.closest('dialog') &&
+    el.nextElementSibling &&
+    el.nextElementSibling.tagName === 'DIALOG' &&
+    (!el.form || el.getAttribute('type') === 'button')
+  ) {
+    return 'ok';
+  }
+  return 'refused';
+})()`;
+
+/**
+ * Finds what is to be opened and tags it (`data-noah-press`) — finding is
+ * reading; the press is `press`'s, after `MAY_PRESS` has agreed.
+ *
+ *   user        the account menu's button
+ *   module      the top bar's button for one module, by its title (either language)
+ *   opener      a window's opener, by the place `FIND_OPENERS` gave it
+ *   form        the way in to a new record: a link to its own page (returned, not
+ *               tagged — it is opened with a GET), else the button whose dialog
+ *               is the form (tagged), else the button that starts one at once
+ *               (named, never tagged)
+ *   point-new   the same thing, only marked for the arrow (`data-guide-point`)
+ */
+export const TAG_TARGET = String.raw`(function (kind, arg) {
+  var old = document.querySelectorAll('[data-noah-press]');
+  for (var o = 0; o < old.length; o += 1) old[o].removeAttribute('data-noah-press');
+  function classOf(el) {
+    var raw = el.className && el.className.baseVal !== undefined ? el.className.baseVal : el.className;
+    return String(raw || '');
+  }
+  function shown(el) {
+    if (!el || !el.getClientRects().length) return false;
+    var rect = el.getBoundingClientRect();
+    if (rect.width < 3 || rect.height < 3) return false;
+    var style = getComputedStyle(el);
+    return style.visibility !== 'hidden' && style.display !== 'none';
+  }
+  function words(el) {
+    return String(el.getAttribute('title') || el.getAttribute('aria-label') || el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  }
+  var el = null;
+  if (kind === 'user') {
+    el = document.querySelector('.erp-header .erp-user-trigger');
+  } else if (kind === 'module') {
+    var triggers = document.querySelectorAll('.erp-header button.erp-nav__trigger');
+    for (var i = 0; i < triggers.length && !el; i += 1) {
+      var title = String(triggers[i].getAttribute('title') || triggers[i].textContent || '').replace(/\s+/g, ' ').trim();
+      for (var t = 0; t < arg.length; t += 1) if (title === arg[t]) el = triggers[i];
+    }
+  } else if (kind === 'opener') {
+    el = document.querySelector('[data-guide-dialog="' + String(Number(arg)) + '"]');
+  } else {
+    var link = null;
+    var links = document.querySelectorAll('main a[href]');
+    for (var l = 0; l < links.length && !link; l += 1) {
+      if (/\/new(\?|$)/.test(links[l].getAttribute('href') || '') && shown(links[l]) && !links[l].closest('dialog')) link = links[l];
+    }
+    var button = null;
+    var buttons = document.querySelectorAll('main button');
+    for (var b = 0; b < buttons.length && !button; b += 1) {
+      var one = buttons[b];
+      var next = one.nextElementSibling;
+      if (!next || next.tagName !== 'DIALOG' || one.disabled || one.closest('dialog') || !shown(one)) continue;
+      /* A door of the title bar opens a window too, and is not a new record; neither is a row's own button. */
+      if (/sapIconButton/.test(classOf(one)) || one.closest('tbody')) continue;
+      button = one;
+    }
+    var plus = null;
+    var primaries = document.querySelectorAll('main header [class*="headerActions"] a[class*="primary"], main header [class*="headerActions"] button[class*="primary"]');
+    for (var p = 0; p < primaries.length && !plus; p += 1) if (primaries[p].querySelector('svg') && shown(primaries[p])) plus = primaries[p];
+    if (kind === 'point-new') {
+      var starter = link || button || plus;
+      var was = document.querySelectorAll('[data-guide-point]');
+      for (var w = 0; w < was.length; w += 1) was[w].removeAttribute('data-guide-point');
+      if (starter) starter.setAttribute('data-guide-point', '');
+      return { found: !!starter, label: starter ? words(starter) : '' };
+    }
+    if (link) return { found: true, way: 'link', href: link.getAttribute('href'), label: words(link) };
+    if (button) {
+      button.setAttribute('data-noah-press', '');
+      return { found: true, way: 'button', label: words(button) };
+    }
+    return { found: false, way: plus ? 'acts' : 'none', label: plus ? words(plus) : '' };
+  }
+  if (!el || !shown(el)) return { found: false, label: '' };
+  el.setAttribute('data-noah-press', '');
+  return { found: true, label: words(el) };
+})`;
+
+/** The open dropdown of the top bar: the entry for one address ringed in red, and where the dropdown ends. */
+const RING_ENTRY = String.raw`(function (route, ring) {
+  var all = document.querySelectorAll('.erp-module-popover');
+  var popover = null;
+  for (var i = 0; i < all.length && !popover; i += 1) if (all[i].getClientRects().length) popover = all[i];
+  if (!popover) return { found: false, label: '', bottom: 0 };
+  var links = popover.querySelectorAll('a[href]');
+  var link = null;
+  for (var l = 0; l < links.length && !link; l += 1) if (links[l].getAttribute('href') === route) link = links[l];
+  if (!link) return { found: false, label: '', bottom: 0 };
+  link.setAttribute('style', (link.getAttribute('style') || '') + ';' + ring);
+  link.scrollIntoView({ block: 'nearest' });
+  var rect = popover.getBoundingClientRect();
+  return { found: true, label: String(link.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80), bottom: rect.top + rect.height };
+})`;
+
+/** Where one thing on the page ends, for a picture that stops just under it. */
+const BOTTOM_OF = String.raw`(function (selector) {
+  var el = document.querySelector(selector);
+  if (!el || !el.getClientRects().length) return 0;
+  var rect = el.getBoundingClientRect();
+  return rect.top + rect.height;
+})`;
+
+const call = (snippet: string, ...args: readonly unknown[]): string => `${snippet}(${args.map((one) => JSON.stringify(one ?? null)).join(', ')})`;
+
+interface Tagged {
+  readonly found: boolean;
+  readonly label: string;
+  readonly way?: 'link' | 'button' | 'acts' | 'none';
+  readonly href?: string | null;
+}
+
+/**
+ * The press. The one line in this service that presses anything, and it
+ * presses only what the page itself has just agreed is a menu of the top bar,
+ * an export menu, or a button that opens a window. Returns '' when it was
+ * pressed, else the sentence that says why not.
+ *
+ * It is not the guard — `lookOnly` is: whatever is pressed, no request that
+ * is not a GET or a HEAD leaves this browser, so nothing can be saved. This
+ * is the second lock on the same door, and the page must still be the same
+ * page afterwards.
+ */
+async function press(page: Page, budget: number): Promise<string> {
+  const verdict = (await page.evaluate(MAY_PRESS).catch(() => 'none')) as string;
+  if (verdict !== 'ok') {
+    return 'Nothing was pressed: what would open it is not one of the things this camera may press (a menu of the top bar, or a button that only opens a window).';
+  }
+  const before = page.url();
+  try {
+    await page.locator('[data-noah-press]').first().click({ timeout: Math.min(8_000, budget) });
+  } catch (error) {
+    return `It could not be opened (${(error instanceof Error ? (error.message.split('\n')[0] ?? '') : String(error)).slice(0, 120)}).`;
+  }
+  await page.waitForTimeout(150);
+  if (page.url() !== before) return 'Pressing it left the page, which a button that only opens a window never does, so nothing was pictured.';
+  return '';
+}
+
+/** A long window scrolls inside itself: the browser is made taller for the picture, so every numbered field is in it. */
+async function fitWindow(page: Page): Promise<void> {
+  const over = Number(await page.evaluate(DIALOG_OVERFLOW).catch(() => 0)) || 0;
+  if (over > 4) await page.setViewportSize({ width: WIDTH, height: Math.min(2400, HEIGHT + Math.ceil(over) + 40) }).catch(() => {});
+  await page.waitForTimeout(180);
+}
+
+/** Words as a person may write them, for matching a window's name: lower case, punctuation as spaces. */
+const fold = (text: string) =>
+  String(text ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9؀-ۿ]+/g, ' ')
+    .trim();
+
+/** The windows a page opens, each with the key to ask for it by. */
+async function windowsOf(page: Page): Promise<Array<Opener & { readonly key: string }>> {
+  const found = ((await page.evaluate(FIND_OPENERS).catch(() => [])) as Opener[]).slice(0, 12);
+  const used = new Set<string>();
+  return found.map((one) => {
+    let key = keyOf(one);
+    for (let again = 2; used.has(key); again += 1) key = `${keyOf(one)}_${again}`;
+    used.add(key);
+    return { ...one, key };
+  });
+}
+
 interface Seen {
   readonly title: string;
   readonly state: 'error' | 'missing' | 'denied' | null;
@@ -395,11 +640,14 @@ async function take(input: {
   readonly pointAt?: readonly string[];
   readonly fullPage?: boolean;
   readonly firstRecord?: boolean;
+  readonly open?: LiveOpen;
+  readonly pointNew?: boolean;
+  readonly as?: 'form';
 }): Promise<LiveShotResult> {
   const base = baseUrl();
   const origin = new URL(base).origin;
-  // A record found on a list is two pages opened, not one.
-  const timeout = shotTimeout() * (input.firstRecord ? 2 : 1);
+  // A record found on a list, and a thing opened on the page, are each a step more than one page opened.
+  const timeout = shotTimeout() * (1 + (input.firstRecord ? 1 : 0) + (input.open ? 1 : 0));
   const started = Date.now();
   const left = () => Math.max(1_000, timeout - (Date.now() - started));
 
@@ -413,6 +661,8 @@ async function take(input: {
   let outcome: 'success' | 'denied' | 'failure' = 'failure';
   let why = '';
   let count: number | undefined;
+  /** What was opened for the picture, for the audit row. */
+  let what = '';
   /** What was pictured, once it is not the address that was asked for: the record a list led to. */
   let pictured = '';
   const refuse = (kind: 'denied' | 'failure', reason: string): LiveShotResult => {
@@ -507,29 +757,165 @@ async function take(input: {
       opened = await visit(checked.path);
       if ('ok' in opened) return opened;
     }
-    const { landed, seen } = opened;
-    const where = `${landed.pathname}${landed.search}`;
+    let { landed, seen } = opened;
+    let where = `${landed.pathname}${landed.search}`;
 
     const lastSegment = (landed.pathname.split('/').filter(Boolean).pop() ?? '').toLowerCase();
     const record = Boolean(input.firstRecord) || Boolean(seen?.record) || /\d/.test(lastSegment);
-    const drawnMarks = await drawMarks(page, {
-      scope: record ? 'record' : 'screen',
-      withValues: true,
-      ...(input.pointAt && input.pointAt.length > 0 ? { pointAt: input.pointAt.slice(0, 6).map((one) => String(one).slice(0, 80)) } : {}),
-      ...(input.fullPage ? { fullPage: true } : {}),
-    });
+
+    /** What the numbers are drawn over, and how much of the page the picture takes. */
+    let scope: MarkOptions['scope'] = input.as === 'form' ? 'form' : record ? 'record' : 'screen';
+    let root: string | undefined = input.as === 'form' ? 'main' : undefined;
+    let gridAsOne: boolean | undefined = input.as === 'form' ? false : undefined;
+    let whole = Boolean(input.fullPage);
+    let numbered = true;
+    /** A picture that stops just under what was opened: how far down that is. */
+    let stopAt = 0;
+    let ringed = '';
+    let openedBy = '';
+    let windows: Array<{ readonly key: string; readonly name: string }> = [];
+
+    const toOpen = input.open;
+    if (!toOpen) {
+      // The windows this page can open are named with its picture, so one can be asked for by name.
+      if (scope === 'screen' || scope === 'record') windows = (await windowsOf(page)).map((one) => ({ key: one.key, name: one.name }));
+      // A screen's picture is about the way to a new one: that button gets the thick box and the arrow.
+      if (input.pointNew && scope === 'screen') await page.evaluate(call(TAG_TARGET, 'point-new', null)).catch(() => null);
+    } else if (toOpen.kind === 'top-bar') {
+      scope = 'top-bar';
+    } else if (toOpen.kind === 'user-menu') {
+      const target = (await page.evaluate(call(TAG_TARGET, 'user', null)).catch(() => null)) as Tagged | null;
+      if (!target?.found) return refuse('failure', 'The account menu could not be found on the page.');
+      const refused = await press(page, left());
+      if (refused) return refuse('failure', refused);
+      const shownPanel = await page.locator('#erp-user-panel').first().waitFor({ state: 'visible', timeout: Math.min(8_000, left()) }).then(() => true, () => false);
+      if (!shownPanel) return refuse('failure', 'The account menu did not open.');
+      scope = 'user-menu';
+      stopAt = Number(await page.evaluate(call(BOTTOM_OF, '#erp-user-panel')).catch(() => 0)) || 0;
+    } else if (toOpen.kind === 'menu') {
+      const target = (await page.evaluate(call(TAG_TARGET, 'module', toOpen.moduleTitles.slice(0, 6))).catch(() => null)) as Tagged | null;
+      if (!target?.found) return refuse('denied', 'That module is not in this person\'s top bar, so there is no menu of it to picture.');
+      const refused = await press(page, left());
+      if (refused) return refuse('failure', refused);
+      const shownMenu = await page.locator('.erp-module-popover').first().waitFor({ state: 'visible', timeout: Math.min(8_000, left()) }).then(() => true, () => false);
+      if (!shownMenu) return refuse('failure', 'The module\'s menu did not open.');
+      await page.waitForTimeout(150);
+      const entry = (await page.evaluate(call(RING_ENTRY, toOpen.route, RING.replace(/\s+/g, ' ').trim())).catch(() => null)) as { found: boolean; label: string; bottom: number } | null;
+      if (!entry?.found) return refuse('denied', 'That screen is not in this person\'s menu: their role does not open it, or it is reached from another screen.');
+      await page.waitForTimeout(120);
+      ringed = entry.label;
+      openedBy = target.label;
+      stopAt = entry.bottom;
+      numbered = false;
+    } else if (toOpen.kind === 'form') {
+      const way = (await page.evaluate(call(TAG_TARGET, 'form', null)).catch(() => null)) as Tagged | null;
+      if (way?.way === 'link' && way.href) {
+        const checked = checkPath(new URL(way.href, `${origin}${where}`).pathname + new URL(way.href, `${origin}${where}`).search);
+        if (!checked.ok) return refuse('denied', 'The way to a new one on that screen does not lead to a page of the ERP.');
+        pictured = checked.path;
+        const next = await visit(checked.path);
+        if ('ok' in next) return next;
+        ({ landed, seen } = next);
+        where = `${landed.pathname}${landed.search}`;
+        scope = 'form';
+        root = 'main';
+        whole = true;
+        openedBy = way.label;
+      } else if (way?.way === 'button') {
+        const refused = await press(page, left());
+        if (refused) return refuse('failure', refused);
+        const shownForm = await page.locator('dialog[open]').first().waitFor({ state: 'visible', timeout: Math.min(8_000, left()) }).then(() => true, () => false);
+        if (!shownForm) return refuse('failure', `"${way.label}" was pressed and no window opened.`);
+        await page.waitForTimeout(250);
+        await page.evaluate(PREPARE_DIALOG).catch(() => 0);
+        await fitWindow(page);
+        scope = 'form';
+        openedBy = way.label;
+      } else if (way?.way === 'acts') {
+        return refuse(
+          'denied',
+          `There is no form to picture before starting one here: "${way.label}" does its work at once — it raises the draft and opens it. Take the screen's picture, where the arrow is at that button, and say that pressing it opens the new draft to fill in.`,
+        );
+      } else {
+        return refuse('denied', 'This screen has no button for a new one — nothing is created here, or this person\'s role may not create it.');
+      }
+    } else if (toOpen.kind === 'dialog') {
+      const all = await windowsOf(page);
+      const list = all.map((one) => `"${one.key}" — ${one.name}`).join('; ');
+      const wanted = fold(toOpen.which);
+      const match = !wanted
+        ? null
+        : (all.find((one) => fold(one.key) === wanted || fold(one.name) === wanted) ?? all.find((one) => fold(one.name).includes(wanted) || fold(one.key).includes(wanted) || wanted.includes(fold(one.name))) ?? null);
+      if (!match) {
+        return refuse(
+          'denied',
+          all.length === 0
+            ? `That page opens no window${record ? '' : ' — an opened record of it may: ask for the window on the record'}.`
+            : `${wanted ? `No window on that page is called "${toOpen.which}". ` : ''}The windows it opens: ${list}. Ask for one of them by its name.`,
+        );
+      }
+      const target = (await page.evaluate(call(TAG_TARGET, 'opener', match.order)).catch(() => null)) as Tagged | null;
+      if (!target?.found) return refuse('failure', `The button for "${match.name}" could not be found again on the page.`);
+      const refused = await press(page, left());
+      if (refused) return refuse('failure', refused);
+      root = match.menu ? 'details[open][data-export-menu]' : 'dialog[open]';
+      const shownWindow = await page.locator(root).first().waitFor({ state: 'visible', timeout: Math.min(8_000, left()) }).then(() => true, () => false);
+      if (!shownWindow) return refuse('failure', `"${match.name}" was pressed and no window opened.`);
+      await page.waitForTimeout(250);
+      if (!match.menu) {
+        await page.evaluate(PREPARE_DIALOG).catch(() => 0);
+        await fitWindow(page);
+      }
+      scope = 'dialog';
+      openedBy = match.name;
+    }
+
+    const drawnMarks = numbered
+      ? await drawMarks(page, {
+          scope,
+          ...(root ? { root } : {}),
+          ...(gridAsOne === undefined ? {} : { gridAsOne }),
+          withValues: true,
+          ...(input.pointAt && input.pointAt.length > 0 ? { pointAt: input.pointAt.slice(0, 6).map((one) => String(one).slice(0, 80)) } : {}),
+          ...(whole ? { fullPage: true } : {}),
+        })
+      : { marks: [] as Mark[], notFound: [] as string[] };
+    if (toOpen?.kind === 'form' && drawnMarks.marks.length === 0) {
+      return refuse('denied', 'What opens there has nothing to fill in for this person — it says why a new one cannot be started yet. Say what it says, in words.');
+    }
     await page.waitForTimeout(120);
 
     const dir = shotsDir();
     mkdirSync(dir, { recursive: true });
     sweep(dir);
     const file = join(dir, `${Date.now().toString(36)}-${randomBytes(6).toString('hex')}.jpg`);
-    await page.screenshot({ path: file, type: 'jpeg', quality: 65, fullPage: Boolean(input.fullPage), timeout: left() });
+    const tall = page.viewportSize()?.height ?? HEIGHT;
+    await page.screenshot({
+      path: file,
+      type: 'jpeg',
+      quality: 65,
+      fullPage: whole,
+      ...(stopAt > 0 && !whole ? { clip: { x: 0, y: 0, width: WIDTH, height: Math.max(120, Math.min(tall, Math.ceil(stopAt + 14))) } } : {}),
+      timeout: left(),
+    });
     await clearMarks(page);
 
     outcome = 'success';
     count = drawnMarks.marks.length;
-    return { ok: true, shot: { file, path: where, title: seen?.title ?? '', marks: drawnMarks.marks, notFound: drawnMarks.notFound } };
+    what = toOpen?.kind ?? '';
+    return {
+      ok: true,
+      shot: {
+        file,
+        path: where,
+        title: seen?.title ?? '',
+        marks: drawnMarks.marks,
+        notFound: drawnMarks.notFound,
+        ...(windows.length > 0 ? { windows } : {}),
+        ...(ringed ? { ringed } : {}),
+        ...(openedBy ? { opened: openedBy } : {}),
+      },
+    };
   } catch (error) {
     const said = error instanceof Error ? (error.message.split('\n')[0] ?? '') : String(error);
     return refuse('failure', `The picture could not be taken (${said.slice(0, 160)}).`);
@@ -537,9 +923,101 @@ async function take(input: {
     if (context) await context.close().catch(() => {});
     // Whatever happened above, the session ends here.
     await endSession(input.userId, minted.sessionId).catch(() => {});
-    await auditShot(input.userId, { path: pictured || input.path, outcome, ...(why ? { reason: why } : {}), sessionId: minted.sessionId, ...(count === undefined ? {} : { marks: count }) });
+    await auditShot(input.userId, {
+      path: pictured || input.path,
+      outcome,
+      ...(why ? { reason: why } : {}),
+      sessionId: minted.sessionId,
+      ...(count === undefined ? {} : { marks: count }),
+      ...(what || input.open ? { opened: what || input.open!.kind } : {}),
+    });
     restLater();
   }
+}
+
+/**
+ * The sign-in page, as somebody who is not signed in meets it.
+ *
+ * The one picture taken as NOBODY: no session is made, no cookie but the
+ * language is sent, and the browser may open that one address and no other.
+ * It is the same page for everybody, so there is nothing of anybody's on it;
+ * `userId` is only who asked, for the audit row.
+ */
+async function takeSignIn(input: { readonly userId: string; readonly locale: 'en' | 'ar' }): Promise<LiveShotResult> {
+  const base = baseUrl();
+  const origin = new URL(base).origin;
+  const timeout = shotTimeout();
+  let context: BrowserContext | null = null;
+  let outcome: 'success' | 'denied' | 'failure' = 'failure';
+  let why = '';
+  let count: number | undefined;
+  try {
+    const open = await theBrowser();
+    context = await open.newContext({
+      viewport: { width: WIDTH, height: HEIGHT },
+      deviceScaleFactor: 1,
+      acceptDownloads: false,
+      serviceWorkers: 'block',
+      locale: input.locale === 'ar' ? 'ar-IQ' : 'en-GB',
+    });
+    await context.addCookies([{ name: LOCALE_COOKIE, value: input.locale, url: base, sameSite: 'Lax' }]);
+    await context.route('**/*', (route) => {
+      const request = route.request();
+      const method = request.method().toUpperCase();
+      if (method !== 'GET' && method !== 'HEAD') return route.abort('blockedbyclient');
+      let url: URL;
+      try {
+        url = new URL(request.url());
+      } catch {
+        return route.abort('blockedbyclient');
+      }
+      if (url.origin !== origin) return route.abort('blockedbyclient');
+      if (request.isNavigationRequest() && url.pathname !== '/sign-in') return route.abort('blockedbyclient');
+      return route.continue();
+    });
+    const page = await context.newPage();
+    page.setDefaultTimeout(timeout);
+    await page.goto(`${base}/sign-in`, { waitUntil: 'domcontentloaded', timeout });
+    await page.locator('main input').first().waitFor({ timeout });
+    await page.waitForLoadState('networkidle', { timeout: 6_000 }).catch(() => {});
+    await page.evaluate('document.fonts && document.fonts.ready ? document.fonts.ready.then(function () { return true; }) : true').catch(() => {});
+    await page.addStyleTag({ content: 'nextjs-portal { display: none !important; }' }).catch(() => {});
+    await page.waitForTimeout(250);
+    const title = String((await page.evaluate(`(function () { var h = document.querySelector('h1'); return h ? String(h.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 120) : ''; })()`).catch(() => '')) ?? '');
+    // Nobody's values: the form is empty, and what a browser might offer to fill is not read.
+    const drawn = await drawMarks(page, { scope: 'form', root: 'main', gridAsOne: false });
+    await page.waitForTimeout(120);
+    const dir = shotsDir();
+    mkdirSync(dir, { recursive: true });
+    sweep(dir);
+    const file = join(dir, `${Date.now().toString(36)}-${randomBytes(6).toString('hex')}.jpg`);
+    await page.screenshot({ path: file, type: 'jpeg', quality: 65, timeout });
+    await clearMarks(page);
+    outcome = 'success';
+    count = drawn.marks.length;
+    return { ok: true, shot: { file, path: '/sign-in', title, marks: drawn.marks, notFound: [] } };
+  } catch (error) {
+    why = `The sign-in page could not be pictured (${(error instanceof Error ? (error.message.split('\n')[0] ?? '') : String(error)).slice(0, 160)}).`;
+    return { ok: false, reason: why };
+  } finally {
+    if (context) await context.close().catch(() => {});
+    await auditShot(input.userId, { path: '/sign-in', outcome, ...(why ? { reason: why } : {}), ...(count === undefined ? {} : { marks: count }), opened: 'sign-in, as nobody' });
+    restLater();
+  }
+}
+
+/** The sign-in page as it is now — the same for everybody, pictured as nobody. `userId` is who asked. */
+export async function liveSignIn(input: { readonly userId: string; readonly locale: 'en' | 'ar' }): Promise<LiveShotResult> {
+  const ready = liveShotsReady();
+  if (!ready.ok) return { ok: false, reason: ready.reason ?? 'Live pictures cannot be taken on this server.' };
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.userId)) return { ok: false, reason: 'There is nobody to take the picture for.' };
+  const locale = input.locale === 'ar' ? 'ar' : 'en';
+  const work = turn.then(
+    () => takeSignIn({ userId: input.userId, locale }),
+    () => takeSignIn({ userId: input.userId, locale }),
+  );
+  turn = work.catch(() => {});
+  return work;
 }
 
 /**
@@ -560,6 +1038,12 @@ export async function liveScreenshot(input: {
   readonly fullPage?: boolean;
   /** The path is a list: open the first record it shows, and picture that. */
   readonly firstRecord?: boolean;
+  /** Open one thing on that page first: its menu entry, its form, one of its windows (see `LiveOpen`). */
+  readonly open?: LiveOpen;
+  /** A screen's picture: the thick box and the arrow go to the way in to a new record. */
+  readonly pointNew?: boolean;
+  /** The page is itself a form (changing a password): number its fields as one. */
+  readonly as?: 'form';
 }): Promise<LiveShotResult> {
   const ready = liveShotsReady();
   if (!ready.ok) return { ok: false, reason: ready.reason ?? 'Live pictures cannot be taken on this server.' };

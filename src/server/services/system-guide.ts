@@ -31,6 +31,7 @@ import {
   type GuideChunk,
   type IssueInput,
   type MenuLabels,
+  type ScreenEntry,
 } from '../domain/system-guide';
 
 type Catalogue = { shell?: { module?: Record<string, string> }; nav?: Record<string, string>; page?: Record<string, string> };
@@ -202,6 +203,28 @@ const LIVE_WORDS = {
   screen: { en: 'the screen — your real one, as it is now', ar: 'الشاشة — شاشتك الحقيقية كما هي الآن' },
   record: { en: 'one of your real records, opened', ar: 'أحد سجلاتك الحقيقية مفتوحاً' },
 } as const;
+
+/** A screen as `show_screen` was asked for it: one of the menu's, or one of the four that are outside it. */
+export type ResolvedScreen =
+  | { readonly kind: 'screen'; readonly entry: ScreenEntry }
+  | { readonly kind: 'extra'; readonly route: '/sign-in' | 'top-bar' | 'user-menu' | '/password'; readonly en: string; readonly ar: string };
+
+/** What can be asked for besides the menu's screens, as a person would say it. */
+export const EXTRA_SCREENS: readonly string[] = ['sign in', 'top bar', 'account menu', 'change password'];
+
+/**
+ * Which screen was meant — by its address, or by words of its name in either
+ * language — for the live pictures (`live-guide.ts`). Null when no built
+ * screen matches. Whether the person may open it is on the entry.
+ */
+export function resolveScreen(principal: Principal, asked: string): ResolvedScreen | null {
+  const wanted = asked.trim();
+  const extra = extraFor(wanted);
+  if (extra) return { kind: 'extra', route: extra.route as '/sign-in' | 'top-bar' | 'user-menu' | '/password', en: extra.en, ar: extra.ar };
+  const catalogue = screenCatalogue({ principal, en: EN, ar: AR });
+  const entry = catalogue.find((candidate) => candidate.route === wanted) ?? findScreens(catalogue, wanted).find((candidate) => candidate.built) ?? null;
+  return entry ? { kind: 'screen', entry } : null;
+}
 
 /**
  * Which screen was meant, before any picture is chosen: so a live picture can

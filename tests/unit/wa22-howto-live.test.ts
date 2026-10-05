@@ -1,24 +1,26 @@
 /**
- * A how-to's pictures, live — `services/howto-live.ts`, and the one thing it
- * needed from `services/live-screenshot.ts` (`firstRecord`).
+ * A how-to's pictures — all of them live: `services/howto-live.ts`,
+ * `services/live-guide.ts`, and what `services/live-screenshot.ts` may do on a
+ * page to take them.
  *
- * By direction (2026-10-05): once the training sessions are over, a how-to's
- * "the screen" and "an opened record" may be pictured from the real database,
- * as the person asking — behind a switch that is off until the owner says so,
- * with the pictures made ahead of time kept for everything else and as the
- * fallback whenever a live one cannot be taken.
+ * By direction (2026-10-05), twice: first that a how-to's "the screen" and "an
+ * opened record" be pictured from the real system as the person asking; then,
+ * the same day, "no more training picture … always live". So the camera now
+ * also shows the menu, the form that opens and a window — and for that it may
+ * press, in ONE place, only what opens and nothing that acts.
  *
- * No browser and no database here: the switch, the addresses it will ask for,
- * the one-minute reuse (with the taker injected), and — read from the source —
- * that finding a record on a list is still only looking.
+ * No browser and no database here: what is asked of the camera for each view
+ * (with the taker injected), the one-minute reuse, the rule for what may be
+ * pressed (run against stand-in elements), and — read from the source — that
+ * everything else is still only looking.
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { CAPTION_MAX, asksForTrainingPicture, kindNote, layOutAnswer, pictureLanguage } from '@/server/domain/whatsapp-pictures';
-import { howToLiveReady, liveHowToPicture } from '@/server/services/howto-live';
-import type { LiveShotResult } from '@/server/services/live-screenshot';
+import { CAPTION_MAX, kindNote, layOutAnswer, pictureLanguage } from '@/server/domain/whatsapp-pictures';
+import { howToLiveReady, liveExtraPicture, liveHowToPicture } from '@/server/services/howto-live';
+import { MAY_PRESS, TAG_TARGET, type LiveOpen, type LiveShotResult } from '@/server/services/live-screenshot';
 
 const dir = mkdtempSync(join(tmpdir(), 'howto-live-'));
 // A browser "installed", as `liveShotsReady` looks for one — without one being started.
@@ -42,7 +44,7 @@ afterEach(() => {
 });
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-type Asked = { userId: string; path: string; locale: 'en' | 'ar'; pointAt?: readonly string[]; firstRecord?: boolean };
+type Asked = { userId: string; path: string; locale: 'en' | 'ar'; pointAt?: readonly string[]; firstRecord?: boolean; open?: LiveOpen; pointNew?: boolean; as?: 'form' };
 
 /** A taker that pictures nothing: it says what it was asked for and hands back a picture that exists. */
 function taker(result?: (asked: Asked) => LiveShotResult) {
@@ -59,15 +61,13 @@ let nextUser = 0;
 const user = () => `00000000-0000-4000-8000-${String((nextUser += 1)).padStart(12, '0')}`;
 
 describe('the switch', () => {
-  it('is off unless the owner turned it on — the pictures made ahead of time are used', () => {
-    delete process.env.NOAH_HOWTO_LIVE;
-    expect(howToLiveReady()).toEqual({ ok: false, reason: expect.stringMatching(/not switched on \(NOAH_HOWTO_LIVE=on/) });
-    for (const value of ['off', '', '1', 'true', 'yes']) {
-      process.env.NOAH_HOWTO_LIVE = value;
-      expect(howToLiveReady().ok, value).toBe(false);
+  it('needs no switch any more: it is on wherever a picture can be taken', () => {
+    // 2026-10-05, the owner: "no more training picture … always live". NOAH_HOWTO_LIVE is no longer read.
+    for (const value of [undefined, 'off', '', 'on']) {
+      if (value === undefined) delete process.env.NOAH_HOWTO_LIVE;
+      else process.env.NOAH_HOWTO_LIVE = value;
+      expect(howToLiveReady(), String(value)).toEqual({ ok: true });
     }
-    process.env.NOAH_HOWTO_LIVE = ' ON ';
-    expect(howToLiveReady()).toEqual({ ok: true });
   });
 
   it('is on only where a live picture can be taken at all: a browser there, and live pictures not switched off', () => {
@@ -78,23 +78,24 @@ describe('the switch', () => {
     expect(howToLiveReady()).toEqual({ ok: false, reason: expect.stringMatching(/No browser is installed/) });
   });
 
-  it('switched off, nothing is asked of the browser — and the refusal is a value, not an error', async () => {
-    process.env.NOAH_HOWTO_LIVE = 'off';
+  it('where no picture can be taken, nothing is asked of the browser — and the refusal is a value, not an error', async () => {
+    process.env.NOAH_LIVE_SHOTS = 'off';
     const { calls, take } = taker();
     await expect(liveHowToPicture({ userId: user(), locale: 'en', route: '/payables/suppliers', view: 'screen' }, { take })).resolves.toEqual({
       ok: false,
-      reason: expect.stringMatching(/not switched on/),
+      reason: expect.stringMatching(/switched off/),
     });
+    await expect(liveExtraPicture({ userId: user(), locale: 'en', which: 'top-bar' }, { take })).resolves.toEqual({ ok: false, reason: expect.stringMatching(/switched off/) });
     expect(calls).toEqual([]);
   });
 });
 
 describe('what it asks the live picture service for', () => {
-  it('a screen is its menu address, with the arrow where the ready-made picture has it', async () => {
+  it('a screen is its menu address, with the arrow at the way to a new one', async () => {
     const { calls, take } = taker();
     const asker = user();
     const shown = await liveHowToPicture({ userId: asker, locale: 'ar', route: ' /payables/suppliers ', view: 'screen', pointAt: [' New supplier ', '', 'a', 'b', 'c', 'd'] }, { take });
-    expect(calls).toEqual([{ userId: asker, path: '/payables/suppliers', locale: 'ar', pointAt: ['New supplier', 'a', 'b', 'c'] }]);
+    expect(calls).toEqual([{ userId: asker, path: '/payables/suppliers', locale: 'ar', pointNew: true, pointAt: ['New supplier', 'a', 'b', 'c'] }]);
     expect(shown).toEqual({ ok: true, file: picture, path: '/payables/suppliers', title: 'Suppliers', marks: [{ n: 1, label: 'New supplier', kind: 'button', pointed: true }], notFound: [] });
   });
 
@@ -136,24 +137,67 @@ describe('what it asks the live picture service for', () => {
     expect(calls).toHaveLength(asked);
   });
 
-  it('refuses "an opened record" of what is already a record, and any view it does not picture', async () => {
+  it('the menu, the form and a window are asked of the same camera, each by what it may open', async () => {
+    const { calls, take } = taker();
+    const asker = user();
+    const base = { userId: asker, locale: 'en' as const, route: '/payables/suppliers' };
+    await liveHowToPicture({ ...base, view: 'menu', moduleTitles: ['Payables', 'الذمم الدائنة'] }, { take });
+    await liveHowToPicture({ ...base, view: 'form' }, { take });
+    await liveHowToPicture({ ...base, view: 'dialog', dialog: ' Attachments ' }, { take });
+    await liveHowToPicture({ ...base, view: 'dialog', dialog: 'add bank account', on: 'record' }, { take });
+    await liveHowToPicture({ ...base, view: 'dialog' }, { take });
+    const at = { userId: asker, path: '/payables/suppliers', locale: 'en' };
+    expect(calls).toEqual([
+      { ...at, open: { kind: 'menu', route: '/payables/suppliers', moduleTitles: ['Payables', 'الذمم الدائنة'] } },
+      { ...at, open: { kind: 'form' } },
+      { ...at, open: { kind: 'dialog', which: 'Attachments' } },
+      { ...at, open: { kind: 'dialog', which: 'add bank account' }, firstRecord: true },
+      // Asked for no window by name: the camera answers with the windows there are.
+      { ...at, open: { kind: 'dialog', which: '' } },
+    ]);
+  });
+
+  it('one record is not a screen of the menu, and a view that does not exist is not pictured', async () => {
     const { calls, take } = taker();
     for (const route of ['/payables/invoices/API-HQ-2026-000005', '/payables/suppliers/SUP-00001', '/inventory/items/ITM-SEED']) {
-      await expect(liveHowToPicture({ userId: user(), locale: 'en', route, view: 'record' }, { take })).resolves.toEqual({
-        ok: false,
-        reason: expect.stringMatching(/already one record/),
-      });
+      for (const view of ['screen', 'record', 'form', 'menu'] as const) {
+        await expect(liveHowToPicture({ userId: user(), locale: 'en', route, view }, { take })).resolves.toEqual({
+          ok: false,
+          reason: expect.stringMatching(/a screen of the menu/),
+        });
+      }
     }
-    for (const view of ['menu', 'form', 'dialog', 'all']) {
-      const refused = await liveHowToPicture({ userId: user(), locale: 'en', route: '/payables/suppliers', view: view as 'screen' }, { take });
-      expect(refused, view).toEqual({ ok: false, reason: expect.stringMatching(/"the screen" and "an opened record" only/) });
-    }
+    await expect(liveHowToPicture({ userId: user(), locale: 'en', route: '/payables/suppliers', view: 'all' as 'screen' }, { take })).resolves.toEqual({
+      ok: false,
+      reason: 'There is no such picture of a screen.',
+    });
     expect(calls).toEqual([]);
+  });
+
+  it('the way in, and the bar every screen sits under: sign-in as nobody, the rest as the asker', async () => {
+    const { calls, take } = taker();
+    const signIns: unknown[] = [];
+    const signIn = async (asked: { userId: string; locale: 'en' | 'ar' }): Promise<LiveShotResult> => {
+      signIns.push(asked);
+      return { ok: true, shot: { file: picture, path: '/sign-in', title: 'Sign in', marks: [], notFound: [] } };
+    };
+    const asker = user();
+    await expect(liveExtraPicture({ userId: asker, locale: 'ar', which: '/sign-in' }, { take, signIn })).resolves.toMatchObject({ ok: true, path: '/sign-in' });
+    await liveExtraPicture({ userId: asker, locale: 'en', which: 'top-bar' }, { take, signIn });
+    await liveExtraPicture({ userId: asker, locale: 'en', which: 'user-menu' }, { take, signIn });
+    await liveExtraPicture({ userId: asker, locale: 'en', which: '/password' }, { take, signIn });
+    // The sign-in page is asked for without a path, a session or anything that could be opened as somebody.
+    expect(signIns).toEqual([{ userId: asker, locale: 'ar' }]);
+    expect(calls).toEqual([
+      { userId: asker, path: '/notifications', locale: 'en', open: { kind: 'top-bar' } },
+      { userId: asker, path: '/notifications', locale: 'en', open: { kind: 'user-menu' } },
+      { userId: asker, path: '/password', locale: 'en', as: 'form' },
+    ]);
   });
 });
 
 describe('it never costs the how-to its answer', () => {
-  it('hands a refusal on as a sentence — the caller falls back to the ready-made picture', async () => {
+  it('hands a refusal on as a sentence — that part is then explained in words', async () => {
     const { take } = taker(() => ({ ok: false, reason: 'There is no record on that screen yet to open.' }));
     await expect(liveHowToPicture({ userId: user(), locale: 'en', route: '/sales/sales-returns', view: 'record' }, { take })).resolves.toEqual({
       ok: false,
@@ -230,16 +274,12 @@ describe('the same picture asked for twice within a minute is one picture', () =
   });
 });
 
-describe('finding a record on a list is still only looking', () => {
+describe('what the camera may do on a page: read, open what only opens, and nothing else', () => {
   const service = readFileSync('src/server/services/live-screenshot.ts', 'utf8');
   const howTo = readFileSync('src/server/services/howto-live.ts', 'utf8');
+  const liveGuide = readFileSync('src/server/services/live-guide.ts', 'utf8');
 
-  it('nothing is pressed: an href is read, checked like any address, and opened with a plain GET', () => {
-    // No click, no key, no form — in either file.
-    for (const source of [service, howTo]) {
-      expect(source).not.toMatch(/\.(click|dblclick|tap|fill|type|press|check|uncheck|selectOption|setInputFiles|dispatchEvent|dragTo)\(/);
-      expect(source).not.toMatch(/keyboard\.|mouse\./);
-    }
+  it('a record is found by reading: an href, checked like any address, and opened with a plain GET', () => {
     // The link is read off the page…
     expect(service).toMatch(/document\.querySelectorAll\('main table tbody tr a\[href\]'\)/);
     expect(service).toMatch(/getAttribute\('href'\)/);
@@ -250,12 +290,75 @@ describe('finding a record on a list is still only looking', () => {
     // …passes the same address rules as one that was asked for…
     expect(service).toMatch(/const checked = typeof found === 'string' && found \? checkPath\(found\) : null;/);
     expect(service).toMatch(/if \(!checked \|\| !checked\.ok\) return refuse\('denied', 'There is no record on that screen yet to open\.'\);/);
-    // …and is opened by the one way anything is opened here.
+    // …and is opened by the one way a signed-in page is opened here. (The other `goto` is the sign-in page's, as nobody.)
     expect(service).toMatch(/opened = await visit\(checked\.path\);/);
-    expect(service.match(/page\.goto\(/g)).toHaveLength(1);
+    expect(service.match(/page\.goto\(/g)).toHaveLength(2);
+    expect(service).toMatch(/await page\.goto\(`\$\{base\}\/sign-in`,/);
   });
 
-  it('the in-page reading is text a page can run as it stands', () => {
+  it('a form on its own page is reached the same way: its link is read, checked, and opened with a GET', () => {
+    expect(service).toMatch(/if \(way\?\.way === 'link' && way\.href\) \{\s+const checked = checkPath\(/);
+    expect(service).toMatch(/const next = await visit\(checked\.path\);/);
+  });
+
+  it('presses in ONE place, and only what the page itself agrees is a menu or a button that opens a window', () => {
+    for (const source of [howTo, liveGuide]) {
+      expect(source).not.toMatch(/\.(click|dblclick|tap|fill|type|press|check|uncheck|selectOption|setInputFiles|dispatchEvent|dragTo)\(/);
+      expect(source).not.toMatch(/keyboard\.|mouse\.|page\.goto|playwright|chromium|auth_session|authSession/);
+    }
+    expect(service.match(/\.(click|dblclick|tap)\(/g)).toEqual(['.click(']);
+    const press = service.slice(service.indexOf('async function press(page: Page, budget: number): Promise<string> {'), service.indexOf('/** A long window scrolls inside itself'));
+    expect(press).toMatch(/const verdict = \(await page\.evaluate\(MAY_PRESS\)\.catch\(\(\) => 'none'\)\) as string;\s+if \(verdict !== 'ok'\) \{\s+return 'Nothing was pressed/);
+    expect(press).toMatch(/await page\.locator\('\[data-noah-press\]'\)\.first\(\)\.click\(/);
+    // The agreement comes before the press, and the page must still be the same page after it.
+    expect(press.indexOf('MAY_PRESS')).toBeLessThan(press.indexOf('.click('));
+    expect(press).toMatch(/if \(page\.url\(\) !== before\) return 'Pressing it left the page/);
+    // No key, no typing, no form filled, no file given, nothing dragged — anywhere in the service.
+    expect(service).not.toMatch(/\.(fill|type|press|check|uncheck|selectOption|setInputFiles|dispatchEvent|dragTo)\(/);
+    expect(service).not.toMatch(/keyboard\.|mouse\./);
+  });
+
+  it('the page says no to anything that acts: a submit button, a button with no window after it, a link', () => {
+    type Fake = Record<string, unknown>;
+    const element = (over: Fake): Fake => ({
+      tagName: 'BUTTON',
+      className: 'button primary',
+      disabled: false,
+      form: null,
+      parentElement: null,
+      nextElementSibling: null,
+      getAttribute: () => null,
+      closest: () => null,
+      ...over,
+    });
+    const verdict = (tagged: Fake[]) => new Function('document', `return ${MAY_PRESS};`)({ querySelectorAll: () => tagged }) as string;
+    const dialog = { tagName: 'DIALOG' };
+    const inHeader = (selector: string) => (selector === '.erp-header' ? {} : null);
+
+    // The three that only open.
+    expect(verdict([element({ nextElementSibling: dialog })])).toBe('ok');
+    expect(verdict([element({ className: 'erp-nav__trigger', closest: inHeader })])).toBe('ok');
+    expect(verdict([element({ className: 'erp-user-trigger', closest: inHeader })])).toBe('ok');
+    expect(verdict([element({ tagName: 'SUMMARY', parentElement: { tagName: 'DETAILS', hasAttribute: (name: string) => name === 'data-export-menu' } })])).toBe('ok');
+    // Inside a form it must say it is only a button.
+    expect(verdict([element({ nextElementSibling: dialog, form: {}, getAttribute: (name: string) => (name === 'type' ? 'button' : null) })])).toBe('ok');
+
+    // Everything that acts.
+    expect(verdict([element({})]), 'a button with no window after it acts at once').toBe('refused');
+    expect(verdict([element({ nextElementSibling: { tagName: 'DIV' } })])).toBe('refused');
+    expect(verdict([element({ nextElementSibling: dialog, form: {} })]), 'a form\'s own button').toBe('refused');
+    expect(verdict([element({ nextElementSibling: dialog, disabled: true })])).toBe('refused');
+    expect(verdict([element({ nextElementSibling: dialog, closest: (selector: string) => (selector === 'dialog' ? {} : null) })]), 'nothing inside an open window').toBe('refused');
+    expect(verdict([element({ tagName: 'A', nextElementSibling: dialog })]), 'a link').toBe('refused');
+    expect(verdict([element({ className: 'erp-nav__trigger' })]), 'a look-alike outside the top bar').toBe('refused');
+    expect(verdict([element({ tagName: 'SUMMARY', parentElement: { tagName: 'DETAILS', hasAttribute: () => false } })])).toBe('refused');
+    expect(verdict([element({ tagName: 'INPUT', nextElementSibling: dialog })])).toBe('refused');
+    // And it must be exactly one thing that was tagged.
+    expect(verdict([])).toBe('none');
+    expect(verdict([element({ nextElementSibling: dialog }), element({ nextElementSibling: dialog })])).toBe('none');
+  });
+
+  it('the in-page code is text a page can run as it stands', () => {
     const start = service.indexOf('const firstRecordCall = (listPath: string): string => `');
     const end = service.indexOf('})(${JSON.stringify(listPath)})`;', start);
     expect(start).toBeGreaterThan(0);
@@ -263,59 +366,38 @@ describe('finding a record on a list is still only looking', () => {
     const script = service.slice(start, end);
     expect(script).not.toContain('=>\n');
     expect(script.slice(script.indexOf('`') + 1)).not.toMatch(/=>|\bconst\s|\blet\s|\basync\s|\bawait\s/);
+    // The snippets that find and judge what may be opened: ES5, and they parse.
+    for (const snippet of [MAY_PRESS, TAG_TARGET]) {
+      expect(snippet).not.toMatch(/=>|\bconst\s|\blet\s|\basync\s|\bawait\s|`/);
+      expect(() => new Function(`return ${snippet};`)).not.toThrow();
+    }
   });
 
-  it('it is still one session, ended in the finally, and one audit row — for the record that was pictured', () => {
+  it('it is still one session per picture, ended in the finally, and one audit row that says what was opened', () => {
     expect(service.match(/await mintSession\(/g)).toHaveLength(1);
     expect(service).toMatch(/\} finally \{[\s\S]{0,260}await endSession\(input\.userId, minted\.sessionId\)/);
-    expect(service).toMatch(/await auditShot\(input\.userId, \{ path: pictured \|\| input\.path, outcome,/);
-    // Two pages are given twice the time, and no more.
-    expect(service).toMatch(/const timeout = shotTimeout\(\) \* \(input\.firstRecord \? 2 : 1\);/);
+    expect(service).toMatch(/await auditShot\(input\.userId, \{\s+path: pictured \|\| input\.path,\s+outcome,/);
+    expect(service).toMatch(/\.\.\.\(what \|\| input\.open \? \{ opened: what \|\| input\.open!\.kind \} : \{\}\),/);
+    // Each further step — a record found on a list, a thing opened — is given one more share of the time, and no more.
+    expect(service).toMatch(/const timeout = shotTimeout\(\) \* \(1 \+ \(input\.firstRecord \? 1 : 0\) \+ \(input\.open \? 1 : 0\)\);/);
   });
 
-  it('the how-to adds no way in of its own: it asks the live picture service, and only that', () => {
-    expect(howTo).toMatch(/import \{ checkPath, liveScreenshot, liveShotsReady, type LiveShotResult \} from '\.\/live-screenshot';/);
-    expect(howTo).not.toMatch(/playwright|chromium|auth_session|authSession|page\.goto/);
+  it('the sign-in page is pictured as nobody: no session is made, and the browser may open that one address', () => {
+    const signIn = service.slice(service.indexOf('async function takeSignIn('), service.indexOf('export async function liveSignIn('));
+    expect(signIn.length).toBeGreaterThan(500);
+    expect(signIn).not.toMatch(/mintSession|LIVE_SESSION_COOKIE|minted/);
+    expect(signIn).toMatch(/if \(method !== 'GET' && method !== 'HEAD'\) return route\.abort\('blockedbyclient'\);/);
+    expect(signIn).toMatch(/if \(request\.isNavigationRequest\(\) && url\.pathname !== '\/sign-in'\) return route\.abort\('blockedbyclient'\);/);
+    expect(signIn).toMatch(/acceptDownloads: false/);
+    // Nobody's values are read off it.
+    expect(signIn).not.toMatch(/withValues/);
+  });
+
+  it('the how-to adds no way in of its own: it asks the camera, and only that', () => {
+    expect(howTo).toMatch(/import \{ checkPath, liveScreenshot, liveShotsReady, liveSignIn, type LiveShotResult \} from '\.\/live-screenshot';/);
     expect(howTo).not.toMatch(/email|impersonat/i);
-  });
-});
-
-describe('whose data a how-to shows is the owner\'s setting — the training copy is the person\'s to ask for', () => {
-  it('hears the person ask for the sample picture, in the languages they write in', () => {
-    for (const asked of [
-      'show me the suppliers screen, the sample one',
-      'the training picture please, not my real data',
-      'an example screenshot is enough',
-      'without our data please',
-      'اريد صورة تجريبية مو بياناتي',
-      'مثال فقط',
-    ]) {
-      expect(asksForTrainingPicture(asked), asked).toBe(true);
-    }
-  });
-
-  it('a plain how-to is not a request for the training copy', () => {
-    for (const asked of [
-      'how do I add a new supplier? show me step by step with pictures',
-      'where do I post a purchase invoice',
-      'show me the suppliers screen live',
-      'شلون اضيف مورد جديد؟ وريني بالصور',
-      '',
-      null,
-    ]) {
-      expect(asksForTrainingPicture(asked), String(asked)).toBe(false);
-    }
-  });
-
-  it('the model\'s own "training" counts only with those words: the tool is handed what the person wrote', () => {
-    const service = readFileSync(join(process.cwd(), 'src/server/services/whatsapp-agent.ts'), 'utf8');
-    expect(service).toMatch(/const trainingAsked = args\.data === 'training' && \(meta\?\.question == null \|\| asksForTrainingPicture\(meta\.question\)\);/);
-    expect(service).toMatch(/args\.data === 'live' \? liveShots\.liveShotsReady\(\)\.ok : trainingAsked \? false : howTo\.howToLiveReady\(\)\.ok/);
-    expect(service).toMatch(/lastExchange, question: input\.question \}/);
-    // And he is told to leave the choice alone.
-    const prompt = readFileSync(join(process.cwd(), 'src/server/domain/whatsapp-agent.ts'), 'utf8');
-    expect(prompt).toMatch(/LEAVE `data` OUT of show_screen and the server decides/);
-    expect(prompt).toMatch(/A plain "how do I …" is NOT a request for the training copy/);
+    expect(liveGuide).not.toMatch(/email|impersonat|guide-shots|screenPictures|kind: 'training'/i);
+    expect(liveGuide).toMatch(/import \{ howToLiveReady, liveExtraPicture, liveHowToPicture, type HowToLive, type HowToView \} from '\.\/howto-live';/);
   });
 });
 
@@ -366,15 +448,16 @@ describe('a picture speaks the language that was asked for, and says whose data 
     expect(english.text).not.toMatch(/Training picture|Live picture/);
   });
 
-  it('the tools hand over the kind and the language: ready-made pictures are training, a screenshot is live', () => {
+  it('show_screen and screenshot both ask the live camera, in the language asked for, and every picture they hand over is live', () => {
     const service = readFileSync(join(process.cwd(), 'src/server/services/whatsapp-agent.ts'), 'utf8');
-    expect(service).toMatch(/const shownIn = pictureLanguage\(args\.language, meta\?\.question, ctx\.locale\);/);
-    expect(service).toMatch(/systemGuide\.screenPictures\(ctx\.principal, shownIn, asked, view,/);
+    expect(service.match(/const shownIn = pictureLanguage\(args\.language, meta\?\.question, ctx\.locale\);/g)).toHaveLength(2);
+    expect(service).toMatch(/const shown = await liveGuide\.showLive\(\{/);
+    expect(service).toMatch(/locale: shownIn,/);
     expect(service).toMatch(/group: `live:\$\{shot\.path\}`, kind: 'live' \}/);
-    const guide = readFileSync(join(process.cwd(), 'src/server/services/system-guide.ts'), 'utf8');
-    expect(guide).toMatch(/kind: isLive \? \('live' as const\) : \('training' as const\)/);
-    // …and so is a window that opens: no picture leaves the guide without saying whose data it shows.
-    expect(guide).toMatch(/images: \[\{ file, caption, kind: 'training' as const \}\]/);
-    expect(guide).not.toMatch(/images: \[\{ file, caption \}\]/);
+    // Nothing is read from a folder made ahead of time, and nothing can ask for a training picture.
+    expect(service).not.toMatch(/screenPictures|asksForTrainingPicture|NOAH_HOWTO_LIVE|args\.data\b/);
+    const liveGuide = readFileSync(join(process.cwd(), 'src/server/services/live-guide.ts'), 'utf8');
+    expect(liveGuide).toMatch(/kind: 'live'/);
+    expect(liveGuide).not.toMatch(/'training'/);
   });
 });

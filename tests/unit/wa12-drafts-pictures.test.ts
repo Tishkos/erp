@@ -74,7 +74,11 @@ describe('what the instructions say about them', () => {
     expect(prompt).toMatch(/Write your answer as STEPS, and put each picture at its step/);
     expect(prompt).toMatch(/What you write under a tag is sent as the caption of that picture/);
     expect(prompt).toMatch(/A task that crosses several screens is several pictures in order/);
-    expect(prompt).toMatch(/pictures of a training copy with sample data/);
+    // 2026-10-05: there are no training pictures any more, and he may never call a picture one.
+    expect(prompt).toMatch(/EVERY PICTURE IS LIVE\. There are no ready-made or training pictures any more/);
+    expect(prompt).toMatch(/never call one a sample, an example or a training copy/);
+    expect(prompt).toMatch(/explain that part in WORDS; never describe a picture you were not given/);
+    expect(prompt).not.toMatch(/pictures of a training copy|TWO KINDS OF PICTURE/);
   });
 
   it('explains every numbered thing: what it is for, why, what to enter, whether it may be empty, what it changes', () => {

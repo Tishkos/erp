@@ -146,12 +146,15 @@ describe('a live picture — the rules it is taken under', () => {
     expect(service).toMatch(/\} finally \{[\s\S]{0,260}await endSession\(input\.userId, minted\.sessionId\)/);
   });
 
-  it('can only look: every request but a GET or a HEAD is refused, and it is given nothing to press', () => {
-    expect(service).toMatch(/if \(method !== 'GET' && method !== 'HEAD'\) return route\.abort\('blockedbyclient'\);/);
-    expect(service).toMatch(/if \(url\.origin !== origin\) return route\.abort\('blockedbyclient'\);/);
-    expect(service).toMatch(/acceptDownloads: false/);
-    // No click, no key, no form: the page is opened, waited for, drawn on and pictured.
-    expect(service).not.toMatch(/\.(click|dblclick|tap|fill|type|press|check|uncheck|selectOption|setInputFiles|dispatchEvent|dragTo)\(/);
+  it('cannot change anything: every request but a GET or a HEAD is refused — for the signed-in pictures and for the sign-in page', () => {
+    expect(service.match(/if \(method !== 'GET' && method !== 'HEAD'\) return route\.abort\('blockedbyclient'\);/g)).toHaveLength(2);
+    expect(service.match(/if \(url\.origin !== origin\) return route\.abort\('blockedbyclient'\);/g)).toHaveLength(2);
+    expect(service.match(/acceptDownloads: false/g)).toHaveLength(2);
+    // A navigation must still be to a page of the application (or, signed out, to the sign-in page and nowhere else).
+    expect(service).toMatch(/if \(request\.isNavigationRequest\(\) && !checkPath\(`\$\{url\.pathname\}\$\{url\.search\}`\)\.ok\) return route\.abort\('blockedbyclient'\);/);
+    // One press in the whole service (what it may be is held in wa22); no key, no typing, no form filled, no file given.
+    expect(service.match(/\.(click|dblclick|tap)\(/g)).toEqual(['.click(']);
+    expect(service).not.toMatch(/\.(fill|type|press|check|uncheck|selectOption|setInputFiles|dispatchEvent|dragTo)\(/);
     expect(service).not.toMatch(/keyboard\.|mouse\./);
   });
 

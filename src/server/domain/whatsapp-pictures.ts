@@ -40,15 +40,6 @@ export interface AnswerPart {
 export const CAPTION_MAX = 900;
 
 /**
- * Did the person's own words ask for the sample picture rather than their real
- * screen? ("show me the training one", "the example, not my data", "صورة
- * تجريبية"). Whose data a how-to shows is the owner's setting (option B,
- * 2026-10-05: a how-to shows the asker their own live screen); the model may
- * turn it down to the training copy only when the person said so — on the
- * first live question after it was switched on he chose "training" by
- * himself, for a plain "how do I add a supplier", and the setting did nothing.
- */
-/**
  * The language a picture is shown in. A person who writes "show me in arabic"
  * has written in English, so the language of their message is not the
  * language they asked for (2026-10-05: an Arabic explanation arrived under an
@@ -85,12 +76,6 @@ export function kindNote(kind: 'training' | 'live', arabic: boolean): string {
       : 'ℹ️ _Training picture: taken during the training session with sample data — not your real, current data._';
   }
   return arabic ? '🟢 _صورة حيّة: شاشتكم الحقيقية كما هي الآن._' : '🟢 _Live picture: your real screen as it is right now._';
-}
-
-export function asksForTrainingPicture(text: string | null | undefined): boolean {
-  const said = (text ?? '').toLowerCase();
-  if (/\b(sample|training|demo|dummy|example|fake|test data|not (my|our|the) real|without (my|our|the) (real )?data)\b/.test(said)) return true;
-  return /تجريب|تدريب|نموذج|مثال|عين[ةه]|وهمي|مو حقيقي|غير حقيقي|نمونه|نموونە|تاقیکردنەوە/.test(said);
 }
 
 /** A picture's tag: its file's name without the folder or the extension. */

@@ -1,48 +1,55 @@
 /**
- * A how-to's pictures, live — for the two that have the company's own data in
- * them.
+ * A how-to's pictures — every one of them live.
  *
- * By direction (2026-10-05). The owner asked whether, once the training
- * sessions are over, a how-to could show the REAL database, and chose this:
- * for "the screen" and "an opened record" Noah takes a fresh picture of the
- * live application AS THE PERSON ASKING — their permissions, their branches,
- * always current — and the pictures made ahead of time stay for everything
- * that has no data in it: where a screen is in the menu, an empty form, the
- * sign-in page, the top bar ("still keep the original images, sometimes they
- * are needed … keep it as it is and keep the generation running").
+ * By direction, twice on 2026-10-05. First the owner chose that "the screen"
+ * and "an opened record" be pictured from the real system as the person
+ * asking, with the pictures made ahead of time kept for what has no data in
+ * it. Then, the same day, after an answer arrived with a training picture of
+ * somebody else's suppliers: "he doesn't need temporary screenshots any more —
+ * always live, no more training picture … explain with a picture if needed,
+ * real time".
  *
- * So this is an addition, behind a switch that is OFF until he says the
- * testing phase is over (`NOAH_HOWTO_LIVE=on` in the bridge's environment):
+ * So there is one source of pictures now, `live-screenshot.ts`, and this file
+ * only decides WHAT to ask it for:
  *
- *   on    a how-to's `screen` and `record` pictures are asked for here first;
- *   off   — or whenever a live picture cannot be taken, for any reason — the
- *         caller uses the ready-made picture exactly as before, and says
- *         nothing about it.
+ *   menu     the screen's own page, with its module's dropdown opened and its
+ *            entry ringed
+ *   screen   the screen as it opens, the way to a new record pointed at
+ *   form     what opens for a new record — its own page, or the window its
+ *            button opens
+ *   record   the first record the screen lists for this person
+ *   dialog   one of the windows the screen (or that record) opens
  *
- * It adds no power to `live-screenshot.ts` and loosens none of its rules: it
- * only decides WHICH address to ask that service for. A screen is its menu
- * address; a record is "the first record that screen lists for this person"
- * (`firstRecord`), found by reading the list, never by pressing anything.
+ * and, outside the menu: the sign-in page (as nobody), the top bar, the
+ * account menu, the password page.
  *
- * Every failure is a value with a sentence. Nothing here throws: a how-to
- * must never be lost to a picture.
+ * It adds no power to the camera and loosens none of its rules. Every failure
+ * is a value with a sentence: a how-to is never lost to a picture — it is
+ * explained in words instead, and never with a picture of anything else.
  */
 import { existsSync } from 'node:fs';
 import type { Mark } from '../guide/markers';
-import { checkPath, liveScreenshot, liveShotsReady, type LiveShotResult } from './live-screenshot';
+import { checkPath, liveScreenshot, liveShotsReady, liveSignIn, type LiveShotResult } from './live-screenshot';
+
+export type HowToView = 'menu' | 'screen' | 'form' | 'record' | 'dialog';
+export type HowToExtra = '/sign-in' | 'top-bar' | 'user-menu' | '/password';
 
 export type HowToLive =
-  | { readonly ok: true; readonly file: string; readonly path: string; readonly title: string; readonly marks: readonly Mark[]; readonly notFound: readonly string[] }
+  | {
+      readonly ok: true;
+      readonly file: string;
+      readonly path: string;
+      readonly title: string;
+      readonly marks: readonly Mark[];
+      readonly notFound: readonly string[];
+      readonly windows?: ReadonlyArray<{ readonly key: string; readonly name: string }>;
+      readonly ringed?: string;
+      readonly opened?: string;
+    }
   | { readonly ok: false; readonly reason: string };
 
-/**
- * On only when the owner has switched it on AND a browser is there:
- * `NOAH_HOWTO_LIVE=on` and `liveShotsReady().ok`.
- */
+/** A picture can be taken here: a browser is installed and nobody switched live pictures off. */
 export function howToLiveReady(): { readonly ok: boolean; readonly reason?: string } {
-  if ((process.env.NOAH_HOWTO_LIVE ?? '').trim().toLowerCase() !== 'on') {
-    return { ok: false, reason: 'Live how-to pictures are not switched on (NOAH_HOWTO_LIVE=on turns them on): the pictures made ahead of time are used.' };
-  }
   const ready = liveShotsReady();
   return ready.ok ? { ok: true } : { ok: false, reason: ready.reason ?? 'Live pictures cannot be taken on this server.' };
 }
@@ -55,20 +62,11 @@ export function howToLiveReady(): { readonly ok: boolean; readonly reason?: stri
  */
 const MENU_ROUTE = /^\/(?:[a-z][a-z-]*(?:\/[a-z][a-z-]*){0,3})?$/;
 
-/** A document number or a code as its last word: `/payables/invoices/API-HQ-2026-000005`, `/payables/suppliers/SUP-00001`. */
-function looksLikeRecord(path: string): boolean {
-  const last = path.split('?')[0]!.split('/').filter(Boolean).pop() ?? '';
-  return /\d/.test(last) || /[A-Z]/.test(last);
-}
-
-function menuRoute(raw: string, view: 'screen' | 'record'): { readonly ok: true; readonly path: string } | { readonly ok: false; readonly reason: string } {
+function menuRoute(raw: string): { readonly ok: true; readonly path: string } | { readonly ok: false; readonly reason: string } {
   const checked = checkPath(raw);
   if (!checked.ok) return checked;
-  if (view === 'record' && looksLikeRecord(checked.path)) {
-    return { ok: false, reason: 'That address is already one record: a how-to asks for a screen of the menu, and its first record is found from there.' };
-  }
   if (!MENU_ROUTE.test(checked.path)) {
-    return { ok: false, reason: 'A how-to pictures a screen of the menu: give its own address, such as /payables/suppliers — not a record, and nothing after a "?".' };
+    return { ok: false, reason: 'A how-to pictures a screen of the menu: give its own address, such as /payables/suppliers — not a record, and nothing after a "?". One record is pictured with the screenshot tool.' };
   }
   return checked;
 }
@@ -77,12 +75,39 @@ function menuRoute(raw: string, view: 'screen' | 'record'): { readonly ok: true;
 const REUSE_MS = 60_000;
 const taken = new Map<string, { readonly at: number; readonly result: Promise<HowToLive> }>();
 
-type Taker = (input: { readonly userId: string; readonly path: string; readonly locale: 'en' | 'ar'; readonly pointAt?: readonly string[]; readonly firstRecord?: boolean }) => Promise<LiveShotResult>;
+type Taker = typeof liveScreenshot;
+type SignInTaker = typeof liveSignIn;
+interface Deps {
+  readonly take?: Taker;
+  readonly signIn?: SignInTaker;
+  readonly now?: () => number;
+}
+
+const said = (error: unknown) => `The live picture could not be taken (${(error instanceof Error ? (error.message.split('\n')[0] ?? '') : String(error)).slice(0, 160)}).`;
+
+function unwrap(shot: LiveShotResult): HowToLive {
+  if (!shot.ok) return { ok: false, reason: shot.reason };
+  const { file, path, title, marks, notFound, windows, ringed, opened } = shot.shot;
+  return { ok: true, file, path, title, marks, notFound, ...(windows ? { windows } : {}), ...(ringed ? { ringed } : {}), ...(opened ? { opened } : {}) };
+}
+
+/** One picture, once: the same request inside a minute is the same file. */
+async function once(key: string, now: number, work: () => Promise<HowToLive>): Promise<HowToLive> {
+  for (const [old, entry] of taken) if (now - entry.at >= REUSE_MS) taken.delete(old);
+  const before = taken.get(key);
+  if (before) {
+    const same = await before.result;
+    // The picture is a file somebody may have swept: one that is gone is taken again.
+    if (!same.ok || existsSync(same.file)) return same;
+    taken.delete(key);
+  }
+  const result = work().catch((error): HowToLive => ({ ok: false, reason: said(error) }));
+  taken.set(key, { at: now, result });
+  return result;
+}
 
 /**
- * One live picture for a how-to, as the asker: the screen at `route` (with an
- * arrow at `pointAt`, normally its New button as the ready-made picture names
- * it), or — `view: 'record'` — the first record that screen lists.
+ * One live picture of a menu screen, as the asker.
  *
  * `deps` is for the tests: the service that takes the picture, and the clock.
  */
@@ -92,51 +117,73 @@ export async function liveHowToPicture(
     readonly locale: 'en' | 'ar';
     /** A menu screen's address, e.g. /payables/suppliers. */
     readonly route: string;
-    readonly view: 'screen' | 'record';
+    readonly view: HowToView;
+    /** `menu`: the module's name in the top bar, in either language. */
+    readonly moduleTitles?: readonly string[];
+    /** `dialog`: which window, by its key or words of its name; nothing asks which there are. */
+    readonly dialog?: string | null;
+    /** `dialog`: on the screen itself, or on the first record it lists. */
+    readonly on?: 'screen' | 'record';
     readonly pointAt?: readonly string[];
   },
-  deps: { readonly take?: Taker; readonly now?: () => number } = {},
+  deps: Deps = {},
 ): Promise<HowToLive> {
   try {
     const ready = howToLiveReady();
-    if (!ready.ok) return { ok: false, reason: ready.reason ?? 'Live how-to pictures are not available here.' };
-    if (input.view !== 'screen' && input.view !== 'record') return { ok: false, reason: 'A how-to is pictured live for "the screen" and "an opened record" only.' };
-    const route = menuRoute(String(input.route ?? ''), input.view);
+    if (!ready.ok) return { ok: false, reason: ready.reason ?? 'Live pictures are not available here.' };
+    if (!['menu', 'screen', 'form', 'record', 'dialog'].includes(input.view)) return { ok: false, reason: 'There is no such picture of a screen.' };
+    const route = menuRoute(String(input.route ?? ''));
     if (!route.ok) return { ok: false, reason: route.reason };
 
     const locale = input.locale === 'ar' ? 'ar' : 'en';
     const pointAt = (input.pointAt ?? []).map((one) => String(one).trim()).filter(Boolean).slice(0, 4);
+    const titles = (input.moduleTitles ?? []).map((one) => String(one).trim()).filter(Boolean).slice(0, 6);
+    const which = String(input.dialog ?? '').trim().slice(0, 80);
+    const on = input.on === 'record' ? 'record' : 'screen';
     const now = (deps.now ?? Date.now)();
-    for (const [key, entry] of taken) if (now - entry.at >= REUSE_MS) taken.delete(key);
-
-    const key = [input.userId, route.path, input.view, locale, ...pointAt].join('\u0001');
-    const before = taken.get(key);
-    if (before) {
-      const same = await before.result;
-      // The picture is a file somebody may have swept: one that is gone is taken again.
-      if (!same.ok || existsSync(same.file)) return same;
-      taken.delete(key);
-    }
-
+    const key = [input.userId, route.path, input.view, locale, on, which, ...titles, '|', ...pointAt].join('\u0001');
     const take = deps.take ?? liveScreenshot;
-    const result = (async (): Promise<HowToLive> => {
-      try {
-        const shot = await take({
-          userId: input.userId,
-          path: route.path,
-          locale,
-          ...(pointAt.length > 0 ? { pointAt } : {}),
-          ...(input.view === 'record' ? { firstRecord: true } : {}),
-        });
-        if (!shot.ok) return { ok: false, reason: shot.reason };
-        return { ok: true, file: shot.shot.file, path: shot.shot.path, title: shot.shot.title, marks: shot.shot.marks, notFound: shot.shot.notFound };
-      } catch (error) {
-        return { ok: false, reason: `The live picture could not be taken (${(error instanceof Error ? (error.message.split('\n')[0] ?? '') : String(error)).slice(0, 160)}).` };
+
+    return await once(key, now, async () => {
+      const base = { userId: input.userId, path: route.path, locale } as const;
+      switch (input.view) {
+        case 'menu':
+          return unwrap(await take({ ...base, open: { kind: 'menu', route: route.path, moduleTitles: titles } }));
+        case 'screen':
+          return unwrap(await take({ ...base, pointNew: true, ...(pointAt.length > 0 ? { pointAt } : {}) }));
+        case 'form':
+          return unwrap(await take({ ...base, open: { kind: 'form' } }));
+        case 'record':
+          return unwrap(await take({ ...base, firstRecord: true, ...(pointAt.length > 0 ? { pointAt } : {}) }));
+        default:
+          return unwrap(await take({ ...base, open: { kind: 'dialog', which }, ...(on === 'record' ? { firstRecord: true } : {}) }));
       }
-    })();
-    taken.set(key, { at: now, result });
-    return await result;
+    });
   } catch (error) {
-    return { ok: false, reason: `The live picture could not be taken (${(error instanceof Error ? (error.message.split('\n')[0] ?? '') : String(error)).slice(0, 160)}).` };
+    return { ok: false, reason: said(error) };
   }
 }
+
+/** One of the pictures that is not a screen of the menu: the way in, and the bar every screen sits under. */
+export async function liveExtraPicture(input: { readonly userId: string; readonly locale: 'en' | 'ar'; readonly which: HowToExtra }, deps: Deps = {}): Promise<HowToLive> {
+  try {
+    const ready = howToLiveReady();
+    if (!ready.ok) return { ok: false, reason: ready.reason ?? 'Live pictures are not available here.' };
+    const locale = input.locale === 'ar' ? 'ar' : 'en';
+    const now = (deps.now ?? Date.now)();
+    const take = deps.take ?? liveScreenshot;
+    const signIn = deps.signIn ?? liveSignIn;
+    return await once([input.userId, 'extra', input.which, locale].join('\u0001'), now, async () => {
+      // The sign-in page is everybody's: it is pictured as nobody, with no session at all.
+      if (input.which === '/sign-in') return unwrap(await signIn({ userId: input.userId, locale }));
+      if (input.which === '/password') return unwrap(await take({ userId: input.userId, path: '/password', locale, as: 'form' }));
+      // The bar is on every screen; the notifications list is a light one to stand under it.
+      return unwrap(await take({ userId: input.userId, path: BAR_PAGE, locale, open: { kind: input.which === 'user-menu' ? 'user-menu' : 'top-bar' } }));
+    });
+  } catch (error) {
+    return { ok: false, reason: said(error) };
+  }
+}
+
+/** The page the top bar and the account menu are pictured on: every role may open it, and it draws quickly. */
+const BAR_PAGE = '/notifications';

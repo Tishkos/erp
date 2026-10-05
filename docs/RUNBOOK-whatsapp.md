@@ -206,9 +206,9 @@ What people say in the group:
 * `!ai approve the opening stock and then post the invoice` — one plan, one `!ai yes`.
 * `!ai show me the suppliers screen live` / `… the sample one` — whose data the picture shows.
 
-**Live data in how-to pictures** is `NOAH_HOWTO_LIVE=on` in `/opt/qs-erp-next/.env`
-(restart the bridge). Off, every how-to picture is the training copy; a person
-can still ask for a live one in words.
+**Every picture is live** (since 2026-10-05): there are no training pictures
+any more, and no switch for them. `NOAH_HOWTO_LIVE` is no longer read; the
+folder `var/guide-shots` on the server is no longer used and may be deleted.
 
 ## Trying him without the group watching
 
@@ -221,27 +221,35 @@ else's private chat is ever read, and a note to self that does not begin with
 
 ## Live pictures
 
-`!ai show me INV-HQ-2026-000001 and where I press to post it` — Noah takes a
-picture of the real page as that person sees it, with a box and a number on
-each part and an arrow at the button, and explains it. About ten seconds.
+Every picture Noah sends is taken at that moment, of the running system, as
+the person who asked, in the language they asked for: where a screen is in the
+menu, the screen, the form that opens for a new record, one of their own
+records, a window (attachments, notes, history, print, an action that asks for
+a reason), the sign-in page, the top bar. A few seconds each.
 
+* `!ai how do I add a supplier?` — the menu, the screen and the form, each at
+  its step.
+* `!ai show me INV-HQ-2026-000001 and where I press to post it` — that
+  document's own page, with an arrow at the button.
 * It is taken **as the person who asked**, through a session that lives three
   minutes and is revoked as soon as the picture is taken; it appears, revoked,
   on that user's sessions list, and every picture is in the audit trail
-  (`whatsapp.screenshot`).
+  (`whatsapp.screenshot`, with what was opened). The sign-in page is pictured
+  signed out, as nobody.
 * It **cannot change anything**: the browser it uses is refused every request
-  that is not a plain page read.
-* It shows **real figures in the group**. If that is ever not wanted, set
-  `NOAH_LIVE_SHOTS=off` in the bridge's environment and restart it; the
-  training pictures keep working.
-* The server needs a browser, once:
-  ```
-  cd /opt/qs-erp-next && npx playwright install chromium && npx playwright install-deps chromium
-  ```
-* Try one by hand: `npx tsx scripts/ops/live-shot.ts <email> /payables/invoices --point "New invoice"`.
-* A person with a temporary password, or a super user who has not set up the
-  authenticator yet, gets no picture — the application sends them to that
-  screen first, and Noah says so.
+  that is not a plain page read. To show a form or a window it may open a menu
+  of the top bar and press a button that only opens a window — never a button
+  that acts, never a key, never a form.
+* It shows **real figures in the group** — what that person's own screen
+  shows. If that is ever not wanted, set `NOAH_LIVE_SHOTS=off` in
+  `/opt/qs-erp-next/.env` and restart the bridge: he then explains in words
+  only. There is no other set of pictures to fall back on.
+* A list with nothing in it yet has no record to open, and a screen he may not
+  open is not pictured: he says so, and explains in words.
+* The server needs a browser: `npx playwright install chromium` and
+  `npx playwright install-deps chromium`, once.
+* Try one by hand: `npx tsx scripts/ops/live-shot.ts <email> <path> [--point "Label"]`,
+  or the whole answer: `npx tsx scripts/ops/ask-noah.ts <email> "show me the form for a new supplier"`.
 
 ## Noah's test set
 

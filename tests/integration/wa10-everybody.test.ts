@@ -526,19 +526,35 @@ describe('a draft from chat', () => {
 describe('the pictures of a screen travel with the answer', () => {
   const show = (ctx: ActorContext, args: Record<string, unknown>) =>
     asking(ctx, (read) => toolRunnerFor(read, [], undefined, { userName: 'Tester', chat: CHAT })('show_screen', args));
+  /**
+   * Three pictures as the live camera hands them over (2026-10-05: every
+   * picture is live; there is no folder of ready-made ones). No browser runs
+   * in this suite, so they are made by hand: the files, each with its caption.
+   */
+  const pictures = (): Array<{ file: string; caption: string; kind: 'live' }> => [
+    { file: join(shotsDir, 'en', 'payables-invoices-menu.jpg'), caption: 'Payables → Purchasing & Invoices → Purchase Invoices: where it is in the menu — the entry ringed in red', kind: 'live' },
+    { file: join(shotsDir, 'en', 'payables-invoices-screen.jpg'), caption: 'Payables → Purchasing & Invoices → Purchase Invoices: the screen as it is now — the red numbers are explained in the message', kind: 'live' },
+    { file: join(shotsDir, 'en', 'payables-invoices-form.jpg'), caption: 'Payables → Purchasing & Invoices → Purchase Invoices: the form that opens — the fields to fill — the red numbers are explained in the message', kind: 'live' },
+  ];
 
-  it('show_screen attaches them for somebody who may open the screen, each with its tag', async () => {
-    const shown = await show(world.manager, { screen: '/payables/invoices', view: 'all' });
-    expect(shown.text).toMatch(/3 picture\(s\) of Purchase Invoices/);
-    expect(shown.text).toContain('[picture: payables-invoices-menu]');
-    expect(shown.images).toHaveLength(3);
-    const closed = await show(nobody, { screen: '/payables/invoices' });
-    expect(closed.images ?? []).toEqual([]);
-    expect(closed.text).toMatch(/role cannot open Purchase Invoices/);
+  it('show_screen takes nothing from a folder: with no camera it says so and asks for words, whoever asks', async () => {
+    const was = process.env.NOAH_LIVE_SHOTS;
+    process.env.NOAH_LIVE_SHOTS = 'off';
+    try {
+      const shown = await show(world.manager, { screen: '/payables/invoices', view: 'all' });
+      // The folder of ready-made pictures is still there in this test, and is not read.
+      expect(shown.images ?? []).toEqual([]);
+      expect(shown.text).toMatch(/^No picture can be taken right now: Live pictures are switched off/);
+      expect(shown.text).toMatch(/Explain it in words instead/);
+      expect(shown.text).not.toMatch(/training|sample/i);
+      expect((await show(nobody, { screen: '/payables/invoices' })).images ?? []).toEqual([]);
+    } finally {
+      if (was === undefined) delete process.env.NOAH_LIVE_SHOTS;
+      else process.env.NOAH_LIVE_SHOTS = was;
+    }
   });
 
   it('untagged, the words go first and each picture follows under what it shows', async () => {
-    const shown = await show(world.manager, { screen: '/payables/invoices', view: 'all' });
     const reply = await wa.answer({
       userId: world.manager.principal.userId,
       text: 'where do I enter a purchase invoice?',
@@ -546,7 +562,7 @@ describe('the pictures of a screen travel with the answer', () => {
         text: 'Payables → Purchasing & Invoices → Purchase Invoices. The ringed entry in the first picture is the one to click.',
         model: null,
         used: ['screens', 'show_screen'],
-        images: [...(shown.images ?? []), { file: join(shotsDir, 'en', 'never-made.jpg'), caption: 'missing' }],
+        images: [...pictures(), { file: join(shotsDir, 'en', 'never-made.jpg'), caption: 'missing' }],
       }),
     });
     // The one whose file is not there is left out; the words still go.
@@ -559,7 +575,6 @@ describe('the pictures of a screen travel with the answer', () => {
   });
 
   it('tagged, each step is sent under its own picture, and the stamp closes the last of them', async () => {
-    const shown = await show(world.manager, { screen: '/payables/invoices', view: 'all' });
     const reply = await wa.answer({
       userId: world.manager.principal.userId,
       text: 'how do I enter a purchase invoice?',
@@ -578,7 +593,7 @@ describe('the pictures of a screen travel with the answer', () => {
         ].join('\n'),
         model: null,
         used: ['guide', 'show_screen'],
-        images: shown.images ?? [],
+        images: pictures(),
       }),
     });
     expect(reply.parts.map((part) => [part.image?.fileName ?? null, part.text.split('\n')[0]])).toEqual([
@@ -591,11 +606,11 @@ describe('the pictures of a screen travel with the answer', () => {
     const last = reply.parts[reply.parts.length - 1]!;
     expect(last.text).toMatch(/BGW/);
     expect(last.image!.caption).toBe(last.text);
-    // Under each ready-made picture, the note that it is a training picture and not their real, current data (2026-10-05).
+    // Under each picture, the one small line that says it is their real screen, taken now (2026-10-05).
     expect(reply.parts[1]!.image!.caption).toBe(`*Step 1* — open *Payables* and click *Purchase Invoices*, ringed in red.
 
-${kindNote('training', false)}`);
-    for (const part of reply.parts.slice(1)) expect(part.text).toContain(kindNote('training', false));
+${kindNote('live', false)}`);
+    for (const part of reply.parts.slice(1)) expect(part.text).toContain(kindNote('live', false));
     // The record keeps the whole answer, without the tags.
     expect(reply.text).not.toMatch(/\[picture/);
     expect(reply.text).toContain('*Step 2* — press *New invoice*.');

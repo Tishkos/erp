@@ -22,8 +22,9 @@ import * as insight from './whatsapp-insight';
 import * as notes from './whatsapp-notes';
 import { correctionFor, isClean, unsupportedIn } from '../domain/whatsapp-selfcheck';
 import * as liveShots from './live-screenshot';
-import * as howTo from './howto-live';
-import { asksForTrainingPicture, pictureLanguage } from '../domain/whatsapp-pictures';
+import type { HowToView } from './howto-live';
+import * as liveGuide from './live-guide';
+import { pictureLanguage } from '../domain/whatsapp-pictures';
 import * as review from './whatsapp-review';
 import * as sqlService from './whatsapp-sql';
 import * as systemGuide from './system-guide';
@@ -496,47 +497,30 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
       case 'document_status':
         return { text: await doService.describeDocument(ctx.tx, ctx.principal, String(args.no ?? ''), systemGuide.appUrl()) };
       case 'show_screen': {
-        const view = ['menu', 'screen', 'form', 'record', 'dialog', 'all'].includes(String(args.view)) ? (args.view as systemGuide.ShotView | 'all') : 'all';
-        const asked = String(args.screen ?? '');
+        const view = ['menu', 'screen', 'form', 'record', 'dialog', 'all'].includes(String(args.view)) ? (args.view as HowToView | 'all') : 'all';
         // The language asked for, not the language the asking was written in: "show me in arabic" is an English sentence.
         const shownIn = pictureLanguage(args.language, meta?.question, ctx.locale);
         /*
-         * Whose data (2026-10-05, option B): with live data on — the server's
-         * default once the owner switched it on, or because the person asked
-         * for it — the screen and an opened record are pictured from the real
-         * system as the asker. Everything else, and whatever a live picture
-         * could not be taken of, is the ready-made picture.
+         * Every picture is LIVE (2026-10-05, the owner: "no more training
+         * picture … always live"): taken now, of the running system, as the
+         * person asking. What cannot be pictured comes back as a sentence, to
+         * be explained in words.
          */
-        // "training" is the person's to ask for, not the model's to choose: with their words in hand it counts only when they said so.
-        const trainingAsked = args.data === 'training' && (meta?.question == null || asksForTrainingPicture(meta.question));
-        const wantsLive = args.data === 'live' ? liveShots.liveShotsReady().ok : trainingAsked ? false : howTo.howToLiveReady().ok;
-        const live: Partial<Record<'screen' | 'record', systemGuide.LivePicture>> = {};
-        const notTaken: string[] = [];
-        if (wantsLive && (view === 'all' || view === 'screen' || view === 'record')) {
-          const which = systemGuide.screenFor(ctx.principal, shownIn, asked);
-          if (which && which.menuScreen && which.allowed) {
-            for (const one of view === 'record' ? (['record'] as const) : (['screen'] as const)) {
-              const taken = await howTo.liveHowToPicture({
-                userId: ctx.principal.userId,
-                locale: shownIn,
-                route: which.route,
-                view: one,
-                ...(one === 'screen' && which.newButton ? { pointAt: [which.newButton] } : {}),
-              });
-              if (taken.ok) live[one] = { file: taken.file, marks: taken.marks };
-              else notTaken.push(taken.reason);
-            }
-          }
-        } else if (args.data === 'live' && !wantsLive) {
-          notTaken.push(liveShots.liveShotsReady().reason ?? 'live pictures are not available on this server');
-        }
-        const shown = systemGuide.screenPictures(ctx.principal, shownIn, asked, view, typeof args.dialog === 'string' ? args.dialog : null, live);
-        const note = notTaken.length > 0 && args.data === 'live' ? `${chr10()}A live picture could not be taken (${notTaken[0]}), so this is the training picture: say so.` : '';
-        return { text: `${shown.text}${note}`, ...(shown.images.length > 0 ? { images: shown.images } : {}) };
+        const pointAt = Array.isArray(args.pointAt) ? args.pointAt.filter((one): one is string => typeof one === 'string' && one.trim() !== '').slice(0, 4) : [];
+        const shown = await liveGuide.showLive({
+          principal: ctx.principal,
+          userId: ctx.principal.userId,
+          locale: shownIn,
+          asked: String(args.screen ?? ''),
+          view,
+          dialog: typeof args.dialog === 'string' ? args.dialog : null,
+          ...(pointAt.length > 0 ? { pointAt } : {}),
+        });
+        return { text: shown.text, ...(shown.images.length > 0 ? { images: shown.images } : {}) };
       }
       case 'screenshot': {
         const ready = liveShots.liveShotsReady();
-        if (!ready.ok) return { text: `No live picture: ${ready.reason ?? 'it is not available here.'} The training pictures (show_screen) still work.` };
+        if (!ready.ok) return { text: `No live picture: ${ready.reason ?? 'it is not available here.'} Explain it in words instead.` };
         // The address as a tool gave it, or as a path: only the path is used.
         const base = systemGuide.appUrl();
         const given = String(args.address ?? '').trim();
