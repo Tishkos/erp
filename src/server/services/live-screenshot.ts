@@ -978,7 +978,8 @@ async function takeSignIn(input: { readonly userId: string; readonly locale: 'en
     const page = await context.newPage();
     page.setDefaultTimeout(timeout);
     await page.goto(`${base}/sign-in`, { waitUntil: 'domcontentloaded', timeout });
-    await page.locator('main input').first().waitFor({ timeout });
+    // The first input of the form is one the framework hides: a field a person fills is what is waited for.
+    await page.locator('main input:not([type="hidden"])').first().waitFor({ timeout });
     await page.waitForLoadState('networkidle', { timeout: 6_000 }).catch(() => {});
     await page.evaluate('document.fonts && document.fonts.ready ? document.fonts.ready.then(function () { return true; }) : true').catch(() => {});
     await page.addStyleTag({ content: 'nextjs-portal { display: none !important; }' }).catch(() => {});

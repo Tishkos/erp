@@ -135,6 +135,35 @@ the e-mail rows are marked `suppressed` and the log says so once per run.
 * After a deploy: `systemctl restart whatsapp-bridge`, so the bridge runs the
   new instructions and tools.
 
+## The ERP's own alerts in the group (2026-10-05)
+
+The one thing said in the group without `!ai` — and it is the ERP speaking,
+not Noah. With **Group notifications** switched on (Settings → Administration
+→ WhatsApp), the group is told, with the person tagged:
+
+| What | When | Example |
+|---|---|---|
+| A new notification for them — a task given, due or overdue, an approval waiting, a chat message, a late container, a finding | within half a minute | `@Shene 🔔 You have a new notification in the ERP` · `• 05 Oct 14:05 — 📌 Task TASK-… was assigned to you — Call the bank` |
+| A decision on something they raised — approved, rejected, returned, posted by somebody else | within half a minute | `• 05 Oct 14:07 — ✅ Tishko approved your payment application PAP-…` |
+| The morning note — who has what due, overdue, to review or to approve | once a day, 08:00–12:00 | `☀️ Good morning — your day in the ERP` · `@Shene — ⏰ 2 due today · ✍️ 1 waiting for your approval` |
+
+* **Who is told:** a person whose WhatsApp contact has *Notifications* ticked,
+  who is a member of the group. Untick it on their contact to stop theirs.
+* **What is never shown:** the words of a chat message, and anything from HR
+  (leave, pay, advances) — those say only that there is one.
+* **Not at night:** between 22:00 and 07:00 (Baghdad) alerts wait for the
+  morning.
+* **Each alert ends with what to type** to ask Noah about it, e.g.
+  `!ai explain TASK-…`, `!ai my tasks`, `!ai what is waiting for my approval`.
+* **Switching it on tells nothing old:** the first sweep only notes where the
+  notifications and the audit trail stand (`/opt/qs-erp-next/var/noah/alerts.json`).
+  Deleting that file does the same again — it never floods the group.
+* **To stop everything:** switch Group notifications off. Noah's answers to
+  `!ai` are not affected either way.
+
+Each alert is a row in the message log (intent `alert`, `alert.morning`) and a
+line of counts in the bridge's log (`journalctl -u whatsapp-bridge | grep alerts`).
+
 ## He speaks only when called (2026-10-04)
 
 * **The trigger is `!ai` at the very start of the message.** Anything else said

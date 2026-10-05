@@ -737,8 +737,14 @@ export function registerWhatsappSender(transport: Transport): void {
      * any messages until called — never ever unless !ai"). A notification is
      * the system speaking unasked, so in group-only mode there is nowhere it
      * may be said: not a private chat, and not the group. The person still
-     * has it in the application and by e-mail; whatever `group_notifications`
-     * says, this delivery is suppressed.
+     * has it in the application and by e-mail, and this delivery is
+     * suppressed.
+     *
+     * What the group IS told (2026-10-05, the owner's later direction) does
+     * not come through here: with `group_notifications` on, the bridge reads
+     * the notifications themselves and posts one tagged alert per person
+     * (`whatsapp-alerts.ts`, the bridge's `sendAlerts`) — most of what the
+     * platform raises has no rule and so no delivery row to arrive here.
      */
     if (groupOnly) {
       throw new notifications.DeliverySuppressed('the bot speaks only in its group, and there only when it is called with !ai');

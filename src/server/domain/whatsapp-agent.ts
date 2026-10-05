@@ -409,6 +409,32 @@ export const AGENT_TOOLS = [
     },
   },
   {
+    name: 'my_notifications',
+    description:
+      'What is new for the person asking in the ERP — their own notifications, the list behind the bell: when each was raised, what it says, whether they have read it, and the address that opens it. Use it for "what are my notifications", "anything new for me", "what was that alert about". The group is told automatically when somebody has something new (a tagged alert the system writes by itself, a line per notification); this reads the same list in full. Only their own — nobody else\'s can be read, and it marks nothing as read.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        unread: { type: 'boolean', description: 'Only what they have not read yet. Default true; false for the latest whether read or not.' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'my_tasks',
+    description:
+      'The Task Center as the person asking sees it. With no `task`: a list — view "mine" (given to me; the default), "assigned" (what I gave to others) or "team" (my team\'s), narrowed by `bucket` ("open", "today", "soon", "overdue", "blocked", "review", "completed") — each task with its number, title, status, priority, due date and who it is from and for. With `task` (its number, TASK-…): that one task in full — its description, who raised it and for whom, its status and the note on it, how many days are left, what it is about, and what THIS person may do with it next. Use it for "what are my tasks", "what is due", "what did I assign", "explain TASK-…", "what is that task alert about". It changes nothing.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        view: { ...string, enum: ['mine', 'assigned', 'team'] },
+        bucket: { ...string, enum: ['all', 'open', 'today', 'soon', 'overdue', 'blocked', 'review', 'completed'] },
+        task: { ...string, description: 'One task by its number, e.g. TASK-2026-000007.' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'screens',
     description:
       'Where a screen is in the top bar — Module → Heading → Screen — in English and in Arabic, with its address, whether it is built yet, and whether this person\'s role can open it. Call it for every "where is…", "how do I get to…", "وين القه", and before you give steps, so the path you give is the one on their screen. Search with a word or two — best in English ("purchase invoice", "trial balance"), because an Arabic singular will not match the plural the menu uses. With no search it gives the whole menu: every module, heading and built screen, in both languages — short enough to read whole, and the answer to "what is in the system".',
@@ -754,6 +780,7 @@ export function systemPrompt(input: {
     '• When explaining a field or a whole form, go through every field in the order the form shows them. Nobody should have to ask twice.',
     '• Send the pictures — a how-to without them is half an answer: call show_screen for the screen you are explaining ("all" for a how-to, "menu" when they only asked where it is; "sign in", "top bar", "account menu" and "change password" have pictures too). It hands you a tag for each picture. Write your answer as STEPS, and put each picture at its step: the tag alone on a line, and under it that step\'s words — "*Step 2* — in this picture the button ringed in red is *New supplier*: press it." What you write under a tag is sent as the caption of that picture, so keep each step short (a few lines) and complete in itself. Start to finish: where to go, what to press, what to type in which field, what happens when they save.',
     '• TWO WAYS TO TAKE A PICTURE, both live. show_screen is for a screen of the menu and what it opens — where it is, the screen, the form for a new one, one of their records, a window — for "how do I…" and "where is…". screenshot is for ONE address: THEIR document, after you have read it (document_story, review_document give you its address) — take one picture of its page with pointAt set to the button to press or the field that is wrong, and say "in the picture the arrow is at *Post*". A picture has a number on each part and a thick box with an arrow at what is pointed at; refer to a part by its number and its name. A picture takes a few seconds: take the ones the answer needs, not every one there is.',
+    '• THE GROUP IS ALERTED BY THE SYSTEM, NOT BY YOU. When somebody gets a notification in the ERP — a task given to them, a task due or overdue, a chat message, an approval waiting, a finding — the system itself posts one line in this group with their tag, the date and time and a short summary (never the words of a chat message, never the content of an HR notice). You do not send those and cannot; you still speak only when called. When somebody asks about one — "what is that task", "explain my alert", "what do I have to do" — read it: my_notifications for what is new for them, my_tasks for their tasks (give `task` for one in full), then explain it properly: what it is, who gave it, when it is due, what to do next and where (the Task Center is Dashboard → Home → My Tasks; show_screen pictures it). Each person is told only of their own.',
     '• A PICTURE SPEAKS THE LANGUAGE OF YOUR ANSWER. Every picture exists in English and in Arabic: pass `language` to show_screen and screenshot — "ar" when you are answering in Arabic or Kurdish, "en" in English. "Show me in Arabic", "بالعربي" means the words AND the pictures: call show_screen again with language "ar" for the same screen (and the same dialog) and explain it in Arabic. Never put an English picture under an Arabic explanation, and never tell somebody to change the language of their own screen in order to follow you.',
     '• EVERY PICTURE IS LABELLED FOR YOU. Under each picture the system itself adds one small line saying it is a live picture of their real screen. Do not repeat that on every picture.',
     '• EVERY PICTURE IS LIVE. There are no ready-made or training pictures any more (the owner, 2026-10-05): show_screen and screenshot both take the picture NOW, of the real system, as the person asking — their own screen, their own records, their own language. So a picture is always true for THEM: never call one a sample, an example or a training copy, and never say the names in it are not the company\'s. It shows real figures in the chat, exactly what that person\'s own screen shows. If a picture could not be taken — the result says why: no record yet, the screen has no form, their role may not open it, the camera failed — explain that part in WORDS; never describe a picture you were not given, and never offer a picture of something else in its place. Anybody can ask in plain words: *!ai show me the suppliers screen*, *!ai show me the form for a new supplier*, *!ai screenshot INV-…*.',

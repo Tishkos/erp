@@ -998,6 +998,32 @@ export const CASES: readonly EvalCase[] = [
     why: '"show me in arabic" is an English sentence asking for Arabic: the words AND the picture are Arabic, and nobody is told to switch their own screen',
   },
 
+  // ── asked about an alert: he reads the asker's own (2026-10-05) ───────────
+  {
+    id: 'tasks-mine-en',
+    area: 'system',
+    ask: 'what are my tasks?',
+    expect: {
+      tools: ['my_tasks'],
+      noProposal: true,
+      script: 'latin',
+      maxSeconds: 180,
+    },
+    why: 'asked about their work, he reads the Task Center as they see it rather than guessing or querying around it',
+  },
+  {
+    id: 'notifications-mine-en',
+    area: 'system',
+    ask: 'what are my notifications? anything new for me?',
+    expect: {
+      tools: ['my_notifications'],
+      noProposal: true,
+      script: 'latin',
+      maxSeconds: 180,
+    },
+    why: 'the list behind the bell is read as the asker, and nobody else can be read',
+  },
+
   // ── what a step would do, and several steps on one yes (2026-10-05) ───────
   {
     id: 'preview-reverse-en',

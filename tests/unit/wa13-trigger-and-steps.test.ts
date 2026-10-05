@@ -104,7 +104,9 @@ describe('the trigger', () => {
     // "shouldn't send any messages until called — never ever unless !ai".
     const bridge = readFileSync('scripts/ops/whatsapp-bridge.ts', 'utf8');
     // The one place a message leaves checks that something called it…
-    expect(bridge).toMatch(/if \(current\(\)\.groupOnly && !called\.getStore\(\)\) \{\s+throw new Error\('unasked:/);
+    // (Since 2026-10-05 one thing passes without a call, by the owner's direction: the ERP's own tagged alert to its
+    // group, with Group notifications switched on. What that exception is, and is not, is held in wa24-alerts.)
+    expect(bridge).toMatch(/if \(current\(\)\.groupOnly && !called\.getStore\(\) && !alertToItsGroup\) \{\s+throw new Error\('unasked:/);
     // …the only thing that sets it is the handler that returns unless the message began with the trigger…
     expect(bridge.match(/called\s*\.run\(/g)).toHaveLength(1);
     expect(bridge).toMatch(/called\s*\.run\(\{ quoted: message, used: false, self: selfChat \}, \(\) => handleInbound\(/);

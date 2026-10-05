@@ -24,6 +24,9 @@ import { correctionFor, isClean, unsupportedIn } from '../domain/whatsapp-selfch
 import * as liveShots from './live-screenshot';
 import type { HowToView } from './howto-live';
 import * as liveGuide from './live-guide';
+import * as notificationsService from './notifications';
+import * as tasksService from './tasks';
+import { alertTime } from '../domain/whatsapp-alerts';
 import { pictureLanguage } from '../domain/whatsapp-pictures';
 import * as review from './whatsapp-review';
 import * as sqlService from './whatsapp-sql';
@@ -547,6 +550,66 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
             .join(chr10()),
           // One live picture per page: a retake replaces the first.
           images: [{ file: shot.file, caption, group: `live:${shot.path}`, kind: 'live' }],
+        };
+      }
+      case 'my_notifications': {
+        // Their own, and only their own: the table's policy is the recipient's, and the read is the asker's.
+        const unreadOnly = args.unread !== false;
+        const all = await notificationsService.inboxFor(ctx.tx, ctx.principal.userId, { unreadOnly });
+        const latest = all.slice(-25).reverse();
+        if (latest.length === 0) return { text: unreadOnly ? 'They have no unread notifications. (Ask with unread false for the latest ones they have already read.)' : 'They have no notifications at all yet.' };
+        const base = systemGuide.appUrl();
+        return {
+          text: [
+            `${all.length} ${unreadOnly ? 'unread ' : ''}notification(s) for this person${all.length > latest.length ? ` — the newest ${latest.length} are below` : ''}, newest first. Times are Baghdad time.`,
+            ...latest.map((row) => {
+              const when = alertTime(row.createdAt, 'en');
+              const detail = String(row.body ?? '').replace(/\s+/g, ' ').trim();
+              return `• ${when} — ${row.subject}${detail ? ` — ${detail.slice(0, 200)}` : ''} [${row.eventType}${row.readAt ? ', read' : ', unread'}] · opens at ${base}/notifications/open/${row.id}`;
+            }),
+            `The whole list is on ${base}/notifications (the bell in the top bar). For a task among them, my_tasks with its number explains it in full.`,
+          ].join(chr10()),
+        };
+      }
+      case 'my_tasks': {
+        const refused = lacks('task');
+        if (refused) return refused;
+        const reader = { principal: ctx.principal };
+        const base = systemGuide.appUrl();
+        const one = typeof args.task === 'string' ? args.task.trim().toUpperCase() : '';
+        if (one) {
+          const found = await tasksService.byNo(ctx.tx, reader, one, ctx.today);
+          if (!found) return { text: `There is no task ${one} that this person may open. Check the number (my_tasks with no task lists theirs).` };
+          const { row } = found;
+          const due =
+            row.dueDate === null
+              ? 'no due date'
+              : `due ${row.dueDate}${found.daysLeft === null ? '' : found.daysLeft < 0 ? ` — ${-found.daysLeft} day(s) OVERDUE` : found.daysLeft === 0 ? ' — TODAY' : ` — ${found.daysLeft} day(s) left`}`;
+          return {
+            text: [
+              `${row.taskNo} — ${row.title}`,
+              `Status: ${row.status}${row.statusNote ? ` (note: ${row.statusNote})` : ''} · priority ${row.priority} · ${due} · progress ${found.progress}%`,
+              `Raised by ${found.createdBy.name}${found.assignedBy ? `, assigned by ${found.assignedBy.name}` : ''}${found.assignee ? `, to ${found.assignee.name}` : ' — not assigned to anybody yet'} · department ${found.departmentName}`,
+              row.description ? `What is asked: ${row.description}` : 'It has no description beyond its title.',
+              found.related ? `It is about: ${found.related.label}${found.related.href ? ` (${base}${found.related.href})` : ' (a record this person may not open)'}` : '',
+              found.watchers.length > 0 ? `Watching: ${found.watchers.map((person) => person.name).join(', ')}` : '',
+              `What THIS person may do with it now: ${found.actions.length > 0 ? found.actions.join(', ') : 'nothing — it waits on somebody else, or it is finished'}. Each is a button on its page: ${base}/tasks/${row.taskNo}`,
+            ]
+              .filter((line) => line !== '')
+              .join(chr10()),
+          };
+        }
+        const listed = await tasksService.listForScreen(ctx.tx, reader, { view: typeof args.view === 'string' ? args.view : 'mine', bucket: typeof args.bucket === 'string' ? args.bucket : 'open', page: 1 }, ctx.today);
+        if (listed.rows.length === 0) return { text: `No tasks in "${listed.view}" / "${listed.bucket}" for this person. (Other views: mine, assigned, team; other buckets: all, today, soon, overdue, blocked, review, completed.)` };
+        return {
+          text: [
+            `${listed.total} task(s) — view "${listed.view}", bucket "${listed.bucket}"${listed.total > listed.rows.length ? `; the first ${listed.rows.length} are below` : ''}. Today is ${ctx.today}.`,
+            ...listed.rows.map(
+              (row) =>
+                `• ${row.taskNo} — ${row.title} · ${row.status} · ${row.priority} · ${row.dueDate ? `due ${row.dueDate}${row.dueState === 'overdue' ? ' (OVERDUE)' : row.dueState === 'today' ? ' (today)' : ''}` : 'no due date'} · from ${row.assignedByName ?? '—'} to ${row.assigneeName ?? '—'}`,
+            ),
+            `One of them in full: my_tasks with its number. The screen: ${base}/tasks`,
+          ].join(chr10()),
         };
       }
       case 'screens':

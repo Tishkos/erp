@@ -64,6 +64,10 @@ import {
 import * as audit from '../../src/server/services/audit';
 import * as runner from '../../src/server/services/notification-runner';
 import * as wa from '../../src/server/services/whatsapp';
+import * as alerts from '../../src/server/services/whatsapp-alerts';
+import { alertMessage, briefHour, byRecipient, hasSomething, morningBrief, quietNow, type DayCounts } from '../../src/server/domain/whatsapp-alerts';
+import { businessToday } from '../../src/server/domain/business-date';
+import { appUrl } from '../../src/server/services/system-guide';
 import * as actions from '../../src/server/services/whatsapp-actions';
 import { agentClientFor, anthropicClient, modelRouter } from '../../src/server/services/whatsapp-router';
 import { runAgentFor, type AgentClient } from '../../src/server/services/whatsapp-agent';
@@ -243,6 +247,22 @@ async function paced(perMinute: number): Promise<void> {
 const called = new AsyncLocalStorage<{ quoted: WAMessage | null; used: boolean; self?: boolean }>();
 
 /**
+ * The one thing said without being called — by the same owner's later
+ * direction (2026-10-05): "let Tishko know in the WhatsApp group and tag them:
+ * you have notifications, date, time and a short summary … task due, task
+ * alert … automatically … it is so important, tag the person."
+ *
+ * So the rule above stands for everything Noah says, and has exactly one
+ * exception, held here where a message leaves: a text composed by the system
+ * itself from a notification the person already has (`sendAlerts`,
+ * `domain/whatsapp-alerts.ts` — the model writes none of it), sent to the
+ * registered group and nowhere else, and only while the owner's switch
+ * (Settings → Administration → WhatsApp → Group notifications) is on. Never a
+ * picture, never a file, never a private chat.
+ */
+const alerting = new AsyncLocalStorage<{ readonly groupJid: string }>();
+
+/**
  * The registered group's members, as people (`domain/whatsapp-people.ts`).
  *
  * Read from WhatsApp for that one group only, when somebody calls him there,
@@ -260,7 +280,10 @@ function transportFor(sock: () => WASocket | null, current: () => Awaited<Return
   return async (to, message) => {
     const socket = sock();
     if (!socket) throw new Error('the bridge is not connected to WhatsApp');
-    if (current().groupOnly && !called.getStore()) {
+    const alert = alerting.getStore();
+    const alertToItsGroup =
+      Boolean(alert) && Boolean(to.groupJid) && to.groupJid === alert!.groupJid && to.groupJid === current().groupJid && current().groupNotifications && !message.attachment;
+    if (current().groupOnly && !called.getStore() && !alertToItsGroup) {
       throw new Error('unasked: the bot speaks only when a message begins with !ai, and nothing called it');
     }
     // The last word on where the bot writes: in group-only mode, its group
@@ -1076,6 +1099,140 @@ async function handleCommand(
 // once a day, at the digest hour or as soon after it as the bridge is up.
 // ---------------------------------------------------------------------------
 
+/**
+ * The ERP's own alerts: whoever has something new in the application is told
+ * in the group, tagged, with when it happened and what it is in a line — a
+ * notification (a task given or due, a chat message, an approval waiting), or
+ * a decision somebody else made about a thing they raised (approved,
+ * rejected, returned, posted).
+ *
+ * Only with Group notifications switched on, only to the registered group,
+ * only for people whose contact allows notifications and who are members of
+ * that group (nobody else can be tagged, or would read it), never at night
+ * (`quietNow` — they wait for the morning), and one message per person
+ * however much there is. The marks of what has been told are moved after the
+ * batch; the first time, each is set to the newest and nothing is said, so
+ * switching this on never tells the group what happened before.
+ */
+let alertsBusy = false;
+async function sendAlerts(
+  scope: RequestScope,
+  send: wa.Transport,
+  settings: Awaited<ReturnType<typeof wa.settings>>,
+  members: (groupJid: string) => Promise<readonly Member[]>,
+): Promise<void> {
+  if (!settings.groupJid || !settings.groupNotifications) return;
+  if (alertsBusy) return;
+  alertsBusy = true;
+  try {
+    const marks = alerts.readMarks();
+    if (marks.toldUpTo === null || marks.decidedUpTo === null) {
+      const told = marks.toldUpTo ?? (await alerts.pending(scope, { after: 0n, limit: 1 })).head;
+      const decided = marks.decidedUpTo ?? (await alerts.pendingDecisions(scope, { after: 0n, limit: 1 })).head;
+      alerts.writeMarks({ toldUpTo: told, decidedUpTo: decided });
+      log(`alerts: on — telling of what happens from now (after notification ${told}, audit row ${decided})`);
+      return;
+    }
+    if (quietNow(new Date())) return;
+    const batch = await alerts.pending(scope, { after: marks.toldUpTo });
+    const decided = await alerts.pendingDecisions(scope, { after: marks.decidedUpTo });
+    const moved = { toldUpTo: alerts.markAfter(batch), decidedUpTo: alerts.markAfter(decided) };
+    if (batch.rows.length === 0 && decided.rows.length === 0) {
+      if (moved.toldUpTo > marks.toldUpTo || moved.decidedUpTo > marks.decidedUpTo) alerts.writeMarks(moved);
+      return;
+    }
+    const group = await members(settings.groupJid);
+    const locale = settings.digestLocale === 'ar' ? 'ar' : 'en';
+    const words = alerts.kindWords(locale);
+    const notices = byRecipient(batch.rows);
+    const decisions = byRecipient(decided.rows);
+    let told = 0;
+    for (const userId of new Set([...notices.keys(), ...decisions.keys()])) {
+      const rows = notices.get(userId) ?? [];
+      const theirs = decisions.get(userId) ?? [];
+      const e164 = (rows[0] ?? theirs[0])!.e164;
+      // Not a member of the group: there is nobody to tag, and nobody there to read it.
+      const member = group.find((one) => one.e164 === e164);
+      if (!member) continue;
+      const text = alertMessage({ tag: `@${member.tag.replace(/[:@].*$/, '')}`, rows, decisions: theirs, words, locale, appUrl: appUrl() });
+      const outId = await withScope(scope, (tx) =>
+        wa.recordOutbound(tx, {
+          e164,
+          groupJid: settings.groupJid,
+          body: text,
+          intent: 'alert',
+          detail: { notificationIds: rows.map((row) => row.id), kinds: [...new Set(rows.map((row) => row.kind))], decisions: theirs.map((row) => row.action) },
+        }),
+      );
+      try {
+        const { waMessageId } = await alerting.run({ groupJid: settings.groupJid }, () => send({ e164, groupJid: settings.groupJid }, { text, quote: false }));
+        await withScope(scope, (tx) => wa.markOutbound(tx, outId, { status: 'sent', waMessageId }));
+        told += 1;
+      } catch (error) {
+        await withScope(scope, (tx) => wa.markOutbound(tx, outId, { status: 'failed', errorMessage: error instanceof Error ? error.message : String(error) }));
+        log(`alerts: one could not be sent (${error instanceof Error ? error.message : String(error)})`);
+      }
+    }
+    alerts.writeMarks(moved);
+    // Counts only: what an alert says is in the message log, under its retention.
+    if (told > 0) log(`alerts: ${told} people told of ${batch.rows.length} notification(s) and ${decided.rows.length} decision(s)`);
+  } finally {
+    alertsBusy = false;
+  }
+}
+
+/**
+ * The morning note: once a business day, in the morning, ONE message to the
+ * group with a line for each member who has something due, overdue, to review
+ * or to approve today — counted as that person, under their own permissions
+ * (`alerts.dayOf`). A morning with nothing in it says nothing. Under the same
+ * switch as the alerts, and through the same narrow door.
+ */
+let briefBusy = false;
+async function sendMorningBrief(
+  scope: RequestScope,
+  send: wa.Transport,
+  settings: Awaited<ReturnType<typeof wa.settings>>,
+  members: (groupJid: string) => Promise<readonly Member[]>,
+): Promise<void> {
+  if (!settings.groupJid || !settings.groupNotifications) return;
+  const now = new Date();
+  if (!briefHour(now) || briefBusy) return;
+  const today = businessToday(now);
+  if (alerts.readMarks().briefDay === today) return;
+  briefBusy = true;
+  try {
+    // Marked first: a note that fails to send is said tomorrow, not every poll.
+    alerts.writeMarks({ briefDay: today });
+    const group = await members(settings.groupJid);
+    const locale = settings.digestLocale === 'ar' ? 'ar' : 'en';
+    const people: Array<{ tag: string; counts: DayCounts; e164: string }> = [];
+    for (const contact of await alerts.alertContacts(scope)) {
+      const member = group.find((one) => one.e164 === contact.e164);
+      if (!member) continue;
+      const counts = await alerts.dayOf(contact.userId, today);
+      if (counts) people.push({ tag: `@${member.tag.replace(/[:@].*$/, '')}`, counts, e164: contact.e164 });
+    }
+    const day = new Intl.DateTimeFormat(locale === 'ar' ? 'ar-IQ-u-nu-latn' : 'en-GB', { timeZone: 'Asia/Baghdad', weekday: 'short', day: '2-digit', month: 'short' }).format(now);
+    const text = morningBrief({ day, people, locale });
+    if (!text) return;
+    const first = settings.groupJid;
+    // Recorded under the first person it names: the log keeps a number for every message, and this one is the group's.
+    const e164 = people.find((person) => hasSomething(person.counts))!.e164;
+    const outId = await withScope(scope, (tx) => wa.recordOutbound(tx, { e164, groupJid: first, body: text, intent: 'alert.morning', detail: { people: people.length } }));
+    try {
+      const { waMessageId } = await alerting.run({ groupJid: first }, () => send({ e164, groupJid: first }, { text, quote: false }));
+      await withScope(scope, (tx) => wa.markOutbound(tx, outId, { status: 'sent', waMessageId }));
+      log(`alerts: the morning note was said (${people.filter((person) => hasSomething(person.counts)).length} people on it)`);
+    } catch (error) {
+      await withScope(scope, (tx) => wa.markOutbound(tx, outId, { status: 'failed', errorMessage: error instanceof Error ? error.message : String(error) }));
+      log(`alerts: the morning note could not be sent (${error instanceof Error ? error.message : String(error)})`);
+    }
+  } finally {
+    briefBusy = false;
+  }
+}
+
 async function sendDigest(scope: RequestScope, send: wa.Transport, settings: Awaited<ReturnType<typeof wa.settings>>): Promise<void> {
   // In group-only mode nothing is said unasked, and a digest nobody asked for
   // is exactly that. "!ai today's summary" gives the same figures on request.
@@ -1374,6 +1531,8 @@ async function main(): Promise<void> {
         if (result.dispatched || (r && (r.sent || r.failed || r.suppressed))) log(runner.describe(result));
       }
       if (socket && linked) await sendDigest(scope, send, settings);
+      if (socket && linked) await sendAlerts(scope, send, settings, members).catch((error) => log(`alerts failed: ${error instanceof Error ? error.message : String(error)}`));
+      if (socket && linked) await sendMorningBrief(scope, send, settings, members).catch((error) => log(`morning note failed: ${error instanceof Error ? error.message : String(error)}`));
       if (Date.now() - lastRedaction > 3_600_000) {
         lastRedaction = Date.now();
         const blanked = await withScope(scope, (tx) => wa.redactExpired(tx, settings.retentionDays));
