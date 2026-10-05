@@ -31,6 +31,7 @@ import { businessToday } from '@/server/domain/business-date';
 import { parseDecimal } from '@/server/domain/money';
 import { parseQuantity } from '@/server/domain/uom';
 import { DEFAULT_SETTINGS } from '@/server/domain/whatsapp';
+import { kindNote } from '@/server/domain/whatsapp-pictures';
 import type { PendingAction } from '@/server/domain/whatsapp-do';
 import * as ap from '@/server/services/ap-invoice';
 import * as authz from '@/server/services/authorization';
@@ -590,7 +591,11 @@ describe('the pictures of a screen travel with the answer', () => {
     const last = reply.parts[reply.parts.length - 1]!;
     expect(last.text).toMatch(/BGW/);
     expect(last.image!.caption).toBe(last.text);
-    expect(reply.parts[1]!.image!.caption).toBe('*Step 1* — open *Payables* and click *Purchase Invoices*, ringed in red.');
+    // Under each ready-made picture, the note that it is a training picture and not their real, current data (2026-10-05).
+    expect(reply.parts[1]!.image!.caption).toBe(`*Step 1* — open *Payables* and click *Purchase Invoices*, ringed in red.
+
+${kindNote('training', false)}`);
+    for (const part of reply.parts.slice(1)) expect(part.text).toContain(kindNote('training', false));
     // The record keeps the whole answer, without the tags.
     expect(reply.text).not.toMatch(/\[picture/);
     expect(reply.text).toContain('*Step 2* — press *New invoice*.');
