@@ -30,6 +30,7 @@ import { registerAllRecords } from '@/server/records';
 import * as attachments from '@/server/services/attachments';
 import * as authz from '@/server/services/authorization';
 import * as globalSearch from '@/server/services/global-search';
+import * as notificationCenter from '@/server/services/notification-center';
 import * as recordNotes from '@/server/services/record-notes';
 import * as taskSweep from '@/server/services/task-sweep';
 import * as tasks from '@/server/services/tasks';
@@ -504,6 +505,22 @@ describe('TK5 · notices', () => {
     const kinds = (await ownerPool.query(`select distinct event_type from notification where object_type = 'task'`)).rows.map((r) => r.event_type as string);
     expect(kinds).toEqual(['task.assigned']);
     expect((await ownerPool.query(`select count(*)::int as n from notification where object_id = $1 and dedupe_key is not null`, [made.taskNo])).rows[0].n).toBe(1);
+  });
+
+  it('opens the task from its notice, by number or by id, for whoever may see it and for no one else', async () => {
+    const made = await create(fatima, { assigneeId: khaled.id });
+    const subject = (objectId: string) => ({ kind: 'task.assigned', objectType: 'task', objectId, context: { taskNo: made.taskNo, href: `/tasks/${made.taskNo}` } });
+    const resolve = (p: Person, objectId: string) => as(p, (tx) => notificationCenter.resolveTarget(tx, p.principal, subject(objectId)));
+    const id = (await rowOf(made.taskNo)).id as string;
+
+    expect(await resolve(khaled, made.taskNo)).toEqual({ status: 'ok', href: `/tasks/${made.taskNo}` });
+    expect(await resolve(khaled, id)).toEqual({ status: 'ok', href: `/tasks/${made.taskNo}` });
+    expect(await resolve(fatima, made.taskNo)).toEqual({ status: 'ok', href: `/tasks/${made.taskNo}` });
+    // Someone who cannot see the task is told it is not there, not where it is.
+    expect(await resolve(omar, made.taskNo)).toMatchObject({ status: 'unavailable' });
+    expect(await resolve(omar, id)).toMatchObject({ status: 'unavailable' });
+    // A number that was never raised.
+    expect(await resolve(khaled, 'TSK-0000-000000')).toEqual({ status: 'unavailable', reason: 'not_found' });
   });
 });
 

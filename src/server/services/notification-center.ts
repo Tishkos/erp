@@ -145,6 +145,21 @@ const chartAccount: Resolver = async (tx, principal, subject) => {
   return code ? served(principal, `/master-data/chart-of-accounts/${enc(code)}`) : no('not_found');
 };
 
+/**
+ * A task is named by its number in the Task Center's own notices and by its id in automation's; either finds it, in the
+ * reader's scope (the task row policy decides who sees it) — a notice about a task the reader cannot see is "not found".
+ */
+const task: Resolver = async (tx, principal, subject) => {
+  if (!can(principal, 'view', 'task')) return no('no_access');
+  const result = await tx.execute(
+    /^[0-9a-f-]{36}$/i.test(subject.objectId)
+      ? sql`select task_no from task where id = ${subject.objectId}::uuid limit 1`
+      : sql`select task_no from task where task_no = ${subject.objectId} limit 1`,
+  );
+  const no_ = (result.rows[0] as { task_no: string } | undefined)?.task_no;
+  return no_ ? served(principal, `/tasks/${enc(no_)}`) : no('not_found');
+};
+
 const bankAccount: Resolver = async (tx, principal, subject) => {
   if (!can(principal, 'view', 'business_partner')) return no('no_access');
   if (!/^[0-9a-f-]{36}$/i.test(subject.objectId)) return no('not_found');
@@ -165,6 +180,7 @@ const payslip: Resolver = async (tx, principal, subject) => {
 const SPECIAL: Readonly<Record<string, Resolver>> = {
   chat_conversation: conversation,
   chart_of_account: chartAccount,
+  task,
   partner_bank_account: bankAccount,
   fiscal_period: fixedPage('/finance/periods', 'fiscal_period'),
   inventory_movement: fixedPage('/inventory/checks', 'inventory_movement'),
