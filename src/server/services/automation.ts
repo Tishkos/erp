@@ -694,23 +694,20 @@ export async function runById(tx: Tx, principal: Principal, id: string): Promise
   };
 }
 
-export const fieldType = (eventKey: EventKey, field: string): string | undefined => EVENTS[eventKey].fields[field]?.type;
-
 export interface PayloadLine {
   readonly field: string;
   readonly type: string;
   readonly value: string;
 }
 
-/** The event's payload as lines a person reads, in the event's own field order; the record's id is not one of them, and a person is their name. */
-export function payloadLines(eventKey: EventKey, payload: Readonly<Record<string, unknown>>, users: Readonly<Record<string, string>>): PayloadLine[] {
+/** The event's payload as lines, in the event's own field order, each value as it was recorded; the record's id is not one of them. A reader words them with `fieldValueText`. */
+export function payloadLines(eventKey: EventKey, payload: Readonly<Record<string, unknown>>): PayloadLine[] {
   const lines: PayloadLine[] = [];
   for (const [field, def] of Object.entries(EVENTS[eventKey].fields)) {
     if (field === 'subjectId') continue;
     const raw = payload[field];
     if (raw === undefined || raw === null || raw === '') continue;
-    const value = def.type === 'user' ? (users[String(raw)] ?? '—') : String(raw);
-    lines.push({ field, type: def.type, value });
+    lines.push({ field, type: def.type, value: String(raw) });
   }
   return lines;
 }

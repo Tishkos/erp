@@ -172,7 +172,8 @@ function contextOf(d: Doing, note: string, href: string): Record<string, unknown
     reason: note,
     href,
     ...(typeof p.daysLate === 'number' ? { days: p.daysLate } : {}),
-    party: text(p.supplierName) || text(p.customerName),
+    // What the notice names beside the reference: the supplier or the customer, or — a task has neither — its own title.
+    party: text(p.supplierName) || text(p.customerName) || text(p.taskTitle),
     ...(text(p.amountIqd) ? { amount: say(text(p.amountIqd)) } : {}),
     ...(text(p.dueDate) ? { due_date: text(p.dueDate) } : {}),
     ...(text(p.etaDate) ? { eta: text(p.etaDate) } : {}),

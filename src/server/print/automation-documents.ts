@@ -13,7 +13,7 @@
  * "Posted" for the watermark means nothing here: a rule is not a posting.
  */
 import { formatBusinessDate, formatMoney, formatTimestamp } from '@/i18n/config';
-import { actionText, conditionText, eventName, wordsOf, type Words } from '../domain/automation-text';
+import { actionText, conditionText, eventName, fieldValueText, wordsOf, type Words } from '../domain/automation-text';
 import * as automation from '../services/automation';
 import type { BuildContext, Built } from './documents';
 import type { Column, Fact, Row } from './model';
@@ -51,7 +51,8 @@ export async function automationRule(ctx: BuildContext, ruleNo: string): Promise
     { label: x('rule_template'), value: words.say(`template_${rule.templateCode}`) },
     { label: x('rule_version'), value: String(rule.version), ltr: true },
     { label: x('rule_owner'), value: rule.ownerName },
-    { label: x('rule_created'), value: `${rule.createdByName} · ${moment(rule.createdAt)}` },
+    { label: x('rule_created'), value: rule.createdByName },
+    { label: x('rule_created_at'), value: moment(rule.createdAt), ltr: true },
     { label: x('rule_last_run'), value: rule.lastRunAt ? `${moment(rule.lastRunAt)} · ${x(`outcome_${rule.lastOutcome ?? 'done'}`)}` : x('rule_not_run') },
     { label: x('rule_streak'), value: String(rule.consecutiveFailures), ltr: true },
   ];
@@ -153,11 +154,7 @@ export async function automationRun(ctx: BuildContext, runId: string): Promise<B
     { key: 'actual', label: x('run_cond_actual'), kind: 'text', weight: 2 },
     { key: 'met', label: x('col_outcome'), kind: 'text', weight: 2 },
   ];
-  const valueOf = (field: string, raw: string | null): string => {
-    if (raw === null) return '—';
-    const type = automation.fieldType(run.eventKey, field);
-    return type === 'money' ? formatMoney(raw, 'IQD', locale) : type === 'date' ? formatBusinessDate(raw, locale) : raw;
-  };
+  const valueOf = (field: string, raw: string | null): string => (raw === null ? '—' : fieldValueText(run.eventKey, field, raw, words));
   const checkRows: Row[] = run.checks.map((c) => ({
     cells: { what: conditionText(run.eventKey, c.condition, words), actual: valueOf(c.condition.field, c.actual), met: c.met ? x('run_cond_met') : x('run_cond_unmet') },
     counts: false,
@@ -183,8 +180,8 @@ export async function automationRun(ctx: BuildContext, runId: string): Promise<B
     { key: 'field', label: x('run_payload_field'), kind: 'text', weight: 3 },
     { key: 'value', label: x('run_payload_value'), kind: 'text', weight: 6 },
   ];
-  const payloadRows: Row[] = automation.payloadLines(run.eventKey, run.payload, book.users).map((p) => ({
-    cells: { field: x(`payload_${p.field}`), value: p.type === 'money' ? formatMoney(p.value, 'IQD', locale) : p.type === 'date' ? formatBusinessDate(p.value, locale) : p.value },
+  const payloadRows: Row[] = automation.payloadLines(run.eventKey, run.payload).map((p) => ({
+    cells: { field: x(`payload_${p.field}`), value: fieldValueText(run.eventKey, p.field, p.value, words) },
     counts: false,
   }));
 

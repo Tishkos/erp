@@ -74,15 +74,25 @@ export function who(recipient: Recipient, words: Words): string {
 
 const whoAll = (recipients: readonly Recipient[], words: Words): string => recipients.map((r) => who(r, words)).join(words.say('who_join'));
 
-/** One value of a condition, in the field's own kind: an amount as money, a date as a date, a count as it is. */
+/**
+ * One recorded value in the field's own kind, as a person reads it: an amount as money, a date as a date, a person as their
+ * name, a priority in the Task Center's words, a section by its name. Anything else (a count, a reference, a short master code)
+ * is shown as it is. The screen, the run page and the print model all go through this.
+ */
+export function fieldValueText(eventKey: EventKey, field: string, raw: string, words: Words): string {
+  const def = EVENTS[eventKey].fields[field];
+  if (!def) return raw;
+  if (def.type === 'money') return words.money(raw);
+  if (def.type === 'date') return words.date(raw);
+  if (def.type === 'user') return words.names.user(raw) ?? words.say('who_unknown');
+  if (field === 'priority') return words.priority(raw);
+  if (field === 'departmentCode') return words.names.section(raw);
+  return raw;
+}
+
+/** One value of a condition (or the list of them for "is one of"), in the field's own kind. */
 function valueText(eventKey: EventKey, condition: Condition, words: Words): string {
-  const type = EVENTS[eventKey].fields[condition.field]?.type;
-  const one = (value: unknown): string => {
-    const raw = String(value);
-    if (type === 'money') return words.money(raw);
-    if (type === 'date') return words.date(raw);
-    return raw;
-  };
+  const one = (value: unknown): string => fieldValueText(eventKey, condition.field, String(value), words);
   return Array.isArray(condition.value) ? condition.value.map(one).join(', ') : one(condition.value);
 }
 

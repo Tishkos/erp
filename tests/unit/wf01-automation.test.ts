@@ -42,7 +42,7 @@ import {
   subjectKeyOf,
 } from '../../src/server/domain/automation-events';
 import { TEMPLATES, TEMPLATE_CODES, buildDefinition, parseParams } from '../../src/server/domain/automation-templates';
-import { actionText, conditionText, labelKeys, wordsOf } from '../../src/server/domain/automation-text';
+import { actionText, conditionText, fieldValueText, labelKeys, wordsOf } from '../../src/server/domain/automation-text';
 import { EXPORT_ACCESS } from '../../src/server/print/access';
 import { messagesFor } from '../../src/server/print/i18n';
 import { SCREENS } from '../../src/server/domain/screens';
@@ -497,6 +497,31 @@ describe('automation in words, in both languages', () => {
     // A person who is no longer listed is not a raw id.
     const gone = actionText({ kind: 'create_notification', recipients: [{ kind: 'user', userId: '22222222-2222-4222-8222-222222222222' }], note: '' }, words);
     expect(gone).toBe('Tell someone who is no longer listed');
+  });
+
+  it('words a recorded value in its own kind: a priority, a section, a person, an amount and a date are never a raw code', () => {
+    for (const locale of ['en', 'ar'] as const) {
+      const say = messagesFor(locale).admin;
+      const words = wordsOf({
+        say: (key, values) => say(`automation.${key}`, values),
+        book: { roles: {}, sections: { FIN: 'Finance' }, users: { '11111111-1111-4111-8111-111111111111': 'Rita Reviewer' } },
+        money: (decimal) => `IQD ${decimal}`,
+        date: (iso) => `on ${iso}`,
+        priority: (code) => say(`tasks.priority_${code}`),
+        severity: (code) => say(`exceptions.severity_${code}`),
+      });
+      const of = (field: string, raw: string) => fieldValueText('task.overdue', field, raw, words);
+      expect(of('priority', 'high'), locale).toBe(say('tasks.priority_high'));
+      expect(of('priority', 'high')).not.toBe('high');
+      expect(of('departmentCode', 'FIN')).toBe('Finance');
+      expect(of('assigneeId', '11111111-1111-4111-8111-111111111111')).toBe('Rita Reviewer');
+      expect(of('assigneeId', '33333333-3333-4333-8333-333333333333')).toBe(say('automation.who_unknown'));
+      expect(of('dueDate', '2026-10-12')).toBe('on 2026-10-12');
+      expect(of('daysLate', '3')).toBe('3');
+      expect(fieldValueText('ap_invoice.posted', 'amountIqd', '2500000', words)).toBe('IQD 2500000');
+      // A condition on a priority reads the same way.
+      expect(conditionText('task.overdue', { field: 'priority', op: 'eq', value: 'high' }, words)).toContain(say('tasks.priority_high'));
+    }
   });
 });
 

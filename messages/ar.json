@@ -7717,6 +7717,7 @@
       "rule_paused": "إيقاف مؤقت",
       "rule_version": "الإصدار",
       "rule_created": "أنشأها",
+      "rule_created_at": "تاريخ الإنشاء",
       "rule_last_run": "آخر تشغيل",
       "rule_streak": "أحداث فاشلة متتالية",
       "rule_not_run": "لم تُشغَّل قط",
@@ -8662,7 +8663,7 @@
       },
       "automation_task_overdue": {
         "title": "المهمة {ref} متأخرة: {name}",
-        "detail": "تجاوزت موعدها بـ {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}. {extra}"
+        "detail": "{party} · تجاوزت موعدها بـ {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}. {extra}"
       },
       "automation_container_eta_exceeded": {
         "title": "الحاوية {ref} تجاوزت موعد وصولها المتوقع: {name}",

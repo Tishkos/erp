@@ -251,7 +251,6 @@ export default async function AutomationPage({ searchParams }: { searchParams: S
               <tr>
                 <th scope="col">{x('col_template')}</th>
                 <th scope="col">{x('col_event')}</th>
-                <th scope="col">{x('col_what')}</th>
                 <th scope="col" />
               </tr>
             </thead>
@@ -260,7 +259,6 @@ export default async function AutomationPage({ searchParams }: { searchParams: S
                 <tr key={code}>
                   <td>{x(`template_${code}`)}</td>
                   <td>{eventLabel(TEMPLATES[code].eventKey)}</td>
-                  <td>{x(`template_${code}_what`)}</td>
                   <td>
                     {data.choices ? (
                       <NewRecordDialog
@@ -272,6 +270,7 @@ export default async function AutomationPage({ searchParams }: { searchParams: S
                       >
                         <Form action={createRule}>
                           <input name="template_code" type="hidden" value={code} />
+                          <p className="muted">{x(`template_${code}_what`)}</p>
                           <p className="muted">{x('templates_hint')}</p>
                           <Field id={`new-${code}-name`} label={x('rule_name')} name="name" required wide />
                           <RuleFields choices={data.choices} idPrefix={`new-${code}`} template={code} />

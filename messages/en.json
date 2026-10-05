@@ -7717,6 +7717,7 @@
       "rule_paused": "Paused",
       "rule_version": "Version",
       "rule_created": "Created by",
+      "rule_created_at": "Created",
       "rule_last_run": "Last run",
       "rule_streak": "Failed events in a row",
       "rule_not_run": "Never run",
@@ -8662,7 +8663,7 @@
       },
       "automation_task_overdue": {
         "title": "Task {ref} is overdue: {name}",
-        "detail": "{days, plural, one {# day} other {# days}} past its due date. {extra}"
+        "detail": "{party} · {days, plural, one {# day} other {# days}} past its due date. {extra}"
       },
       "automation_container_eta_exceeded": {
         "title": "Container {ref} is past its expected arrival: {name}",

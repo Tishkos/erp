@@ -13,7 +13,7 @@ import { ExportIcon } from '@/components/print/export-menu';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, formatTimestamp, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
-import { actionText, conditionText, eventName, wordsOf } from '@/server/domain/automation-text';
+import { actionText, conditionText, eventName, fieldValueText, wordsOf } from '@/server/domain/automation-text';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as automation from '@/server/services/automation';
 import * as recordNotes from '@/server/services/record-notes';
@@ -72,12 +72,8 @@ export default async function AutomationRunPage({ params, searchParams }: { para
     priority: (code) => tasks(`priority_${code}`),
     severity: (code) => exceptions(`severity_${code}`),
   });
-  const valueOf = (field: string, raw: string | null): string => {
-    if (raw === null) return '—';
-    const type = automation.fieldType(run.eventKey, field);
-    return type === 'money' ? money(raw) : type === 'date' ? date(raw) : raw;
-  };
-  const payload = automation.payloadLines(run.eventKey, run.payload, book.users);
+  const valueOf = (field: string, raw: string | null): string => (raw === null ? '—' : fieldValueText(run.eventKey, field, raw, words));
+  const payload = automation.payloadLines(run.eventKey, run.payload);
 
   const fields: DocumentField[] = [
     { label: x('run_ref'), value: <bdi dir="ltr">{run.id}</bdi> },
@@ -264,7 +260,7 @@ export default async function AutomationRunPage({ params, searchParams }: { para
                   <tr key={line.field}>
                     <td>{x(`payload_${line.field}`)}</td>
                     <td>
-                      <bdi dir="auto">{line.type === 'money' ? money(line.value) : line.type === 'date' ? date(line.value) : line.value}</bdi>
+                      <bdi dir="auto">{fieldValueText(run.eventKey, line.field, line.value, words)}</bdi>
                     </td>
                   </tr>
                 ))}

@@ -160,6 +160,21 @@ Cloud Files links (`records/exceptions.ts`), is the target a notification
 opens, and is a record in Global Search. The record is never edited: the one
 verb on it is the acknowledgement (a note is required), and it clears by itself.
 
+## Workflow Automation (platform phase, Agent 10)
+
+| Record page | P | A | N | H | Print model | Parties → profile | Owner | Status |
+|---|---|---|---|---|---|---|---|---|
+| `administration/automation/[ruleNo]` — automation rule | ✅ | ✅ | ✅ | ✅ | `automation_rule` (what it listens for, checks and does, its versions, its latest runs) | owner, author, who enabled it: names (the Users screen is the administrator's, not a profile); recipients and assignees: names in the rule's own words | automation | done |
+| `administration/automation/runs/[runId]` — one run | ✅ | ✅ | ✅ | ✅ | `automation_run` (the event, the conditions as they stood, each step) | the record the event was about: link, only to what the reader may open; what the run made (task, approval, exception, notice): its number | automation | done |
+
+`/administration/automation` is a settings screen (it copies Numbering) and has
+no doors. A rule is never edited in place — a change is a new version, shown on
+the rule's page — and never deleted; a run is append-only. A rule's and a run's
+files are attachments of object `automation` and `automation_run` filed under
+the rule's and the run's id (`attachments-runtime.ts`), their notes are
+`record_note` events (`record-notes.ts` TARGETS), and the history door reads the
+same events. Neither kind is registered for QS Cloud Files links.
+
 ## Export keys added on `feat/shared-module`
 
 `project_certificate`, `project_budget`, `project_change_order`,
