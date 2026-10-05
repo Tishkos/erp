@@ -265,8 +265,8 @@ themselves, posted-invoice template, bounded sweeps), `06aa769` (integration tes
 `execute` required to raise an exception), `291becc` (screens, words, print models,
 notes and files access, 0403, menu and catalogue), `988cee5` (Control Center
 check), `0298ac8` (Playwright spec, controls, doors table, values worded by kind,
-templates table) and the closing commit with this record, the AGENTS.md section and
-the ops14/ops16 test lists.
+templates table) `f6ba9f6` (this record, the AGENTS.md section, the e2e step for a new
+version, the ops14/ops16 lists, the task notice naming the task).
 
 ## 10. Remaining limitations
 
