@@ -94,6 +94,11 @@ task
 exception_history
 exception
 exception_sweep_run
+automation_made
+automation_run
+automation_event
+automation_rule_version
+automation_rule
 cloud_file_link
 employee_request_line
 employee_document

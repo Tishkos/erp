@@ -135,6 +135,8 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   hr_settings: 'settings',
   cloud_files_settings: 'settings',
   whatsapp: 'settings',
+  // Automation (platform phase, Agent 10): rules, templates, runs and the kill switch; a rule and a run have record pages behind it.
+  automation: 'settings',
   project_settings: 'settings',
 
   // 5 — Inventory (IMPROVEMENT-002: the twelve screens)
@@ -575,6 +577,8 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/administration/hr-settings',
   // REQ-WA-001 WA-1/WA-2 — the WhatsApp bridge.
   '/administration/whatsapp',
+  // Automation (platform phase, Agent 10).
+  '/administration/automation',
   // REQ-PM-001 PM-1 — the Project System's structure.
   '/projects',
   '/projects/contracts',

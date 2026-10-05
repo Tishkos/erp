@@ -1653,6 +1653,34 @@
       "when": 1795900000200,
       "tag": "0390_control_center_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 236,
+      "version": "7",
+      "when": 1795900000210,
+      "tag": "0400_automation_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 237,
+      "version": "7",
+      "when": 1795900000211,
+      "tag": "0401_automation_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 238,
+      "version": "7",
+      "when": 1795900000212,
+      "tag": "0402_automation_provenance",
+      "breakpoints": true
+    },
+    {
+      "idx": 239,
+      "version": "7",
+      "when": 1795900000213,
+      "tag": "0403_automation_print",
+      "breakpoints": true
     }
   ]
 }

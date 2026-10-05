@@ -16,6 +16,8 @@ import {
   applicant,
   arInvoice,
   asycudaRun,
+  automationRule,
+  automationRun,
   bankLoan,
   bankStatement,
   bankTransfer,
@@ -527,6 +529,25 @@ const exceptionParentAccess = async (tx: Tx, principal: Principal, objectId: str
   return recordVisible(tx, principal, row);
 };
 
+/**
+ * Automation (platform phase, Agent 10) — a rule's files and notes are for whoever
+ * may open the rule: the grant to view automation, and the rule's own row policy.
+ * A run is addressed by its number (the log's id); both are administrators' reading.
+ */
+const automationParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'automation')) return false;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(objectId)) return false;
+  const [row] = await tx.select({ id: automationRule.id }).from(automationRule).where(eq(automationRule.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+const automationRunParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'automation')) return false;
+  if (!/^\d{1,15}$/.test(objectId)) return false;
+  const [row] = await tx.select({ id: automationRun.id }).from(automationRun).where(eq(automationRun.id, BigInt(objectId))).limit(1);
+  return Boolean(row);
+};
+
 let registered = false;
 
 /** Idempotent: every entry point may call it, and the first one wins. */
@@ -571,6 +592,8 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('chat_message', chatMessageParentAccess);
   attachments.registerParentAccessCheck('task', taskParentAccess);
   attachments.registerParentAccessCheck('exception', exceptionParentAccess);
+  attachments.registerParentAccessCheck('automation', automationParentAccess);
+  attachments.registerParentAccessCheck('automation_run', automationRunParentAccess);
   for (const [object, table] of PURCHASE_PARENTS) {
     attachments.registerParentAccessCheck(object, purchaseParentAccess(object, table));
   }

@@ -481,6 +481,56 @@ const whatsappReader: Reader = async ({ tx, now }) => {
   });
 };
 
+/** The runner is scheduled every five minutes; an event still waiting after half an hour means it is not running. */
+const AUTOMATION_BEHIND_MS = 30 * 60_000;
+
+/**
+ * Automation (platform phase, Agent 10): reads the rules and the run log as they are —
+ * a rule paused by its failures, a rule whose runs failed this week, events the runner
+ * has not taken, and the whole of automation left switched off. Nothing set up (no rule
+ * yet) is not a problem: "not set up here".
+ */
+const automationReader: Reader = async ({ tx, now }) => {
+  const [totals] = (
+    await tx.execute(sql`
+      select (select count(*)::int from automation_rule) as rules,
+             (select count(*)::int from automation_rule where enabled) as "on",
+             (select count(*)::int from automation_run where outcome = 'failed' and started_at > ${now.toISOString()}::timestamptz - interval '7 days') as failed_week,
+             (select count(*)::int from automation_event where status in ('pending', 'retry')) as waiting,
+             (select value from automation_setting where key = 'enabled') as switch`)
+  ).rows as { rules: number; on: number; failed_week: number; waiting: number; switch: string | null }[];
+  if (!totals || totals.rules === 0) return readingOf({ notConfigured: true });
+  const items: Item[] = [];
+  if (totals.switch === 'off') items.push(item('automation_off', {}, null, '/administration/automation'));
+  const paused = (
+    await tx.execute(sql`select rule_no, name, paused_reason, paused_at from automation_rule where paused_at is not null order by paused_at desc limit 20`)
+  ).rows as { rule_no: string; name: string; paused_reason: string | null; paused_at: Date | string }[];
+  for (const rule of paused) {
+    items.push(item('automation_paused', { name: rule.name, reason: (rule.paused_reason ?? '').slice(0, 200), pausedDate: businessDateOf(new Date(rule.paused_at)) }, rule.rule_no, `/administration/automation/${encodeURIComponent(rule.rule_no)}`));
+  }
+  const failing = (
+    await tx.execute(sql`
+      select r.rule_no, r.name, count(*)::int as failed, max(x.started_at) as last_at
+        from automation_run x join automation_rule r on r.id = x.rule_id
+       where x.outcome = 'failed' and x.started_at > ${now.toISOString()}::timestamptz - interval '7 days' and r.paused_at is null
+       group by r.rule_no, r.name order by max(x.started_at) desc limit 20`)
+  ).rows as { rule_no: string; name: string; failed: number; last_at: Date | string }[];
+  for (const rule of failing) {
+    items.push(item('automation_failing', { name: rule.name, failed: rule.failed, lastDate: businessDateOf(new Date(rule.last_at)) }, rule.rule_no, `/administration/automation/${encodeURIComponent(rule.rule_no)}`));
+  }
+  const [behind] = (
+    await tx.execute(sql`
+      select count(*)::int as n, min(occurred_at) as since from automation_event
+       where status in ('pending', 'retry') and next_attempt_at < ${new Date(now.getTime() - AUTOMATION_BEHIND_MS).toISOString()}::timestamptz`)
+  ).rows as { n: number; since: Date | string | null }[];
+  if (behind && behind.n > 0 && behind.since) items.push(item('automation_behind', { count: behind.n, sinceDate: businessDateOf(new Date(behind.since)) }, null, '/administration/automation'));
+  return readingOf({
+    figures: [count('automation_rules', totals.rules), count('automation_rules_on', totals.on), count('automation_failed_runs', totals.failed_week), count('automation_waiting', totals.waiting)],
+    items,
+    attention: items.length,
+  });
+};
+
 const cloudReader: Reader = async ({ tx, principal }) => {
   const own = await accountsCloud.stateFor(tx, principal.userId);
   if (!own.settings.enabled) return readingOf({ notConfigured: true });
@@ -630,6 +680,7 @@ export const READERS: Readonly<Record<string, Reader>> = Object.freeze({
   'platform.outbox': outboxReader,
   'platform.deliveries': deliveriesReader,
   'platform.whatsapp': whatsappReader,
+  'platform.automation': automationReader,
   'platform.cloud': cloudReader,
   'platform.system_health': systemHealthReader,
   'platform.users_without_role': usersWithoutRoleReader,

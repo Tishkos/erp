@@ -4,6 +4,7 @@
  * two lists equal. A runner returns what is wrong now; it writes nothing.
  */
 import * as accounting from './accounting';
+import * as automation from './automation';
 import * as inventory from './inventory';
 import * as logistics from './logistics';
 import * as parties from './parties';
@@ -37,5 +38,8 @@ export const RUNNERS: Readonly<Record<string, Runner>> = Object.freeze({
   'tasks.overdue': work.tasksOverdue,
   'tasks.blocked': work.tasksBlocked,
   'approvals.waiting_too_long': work.approvalWaiting,
+  'logistics.automation_container_eta': automation.containerEta,
+  'tasks.automation_task_overdue': automation.taskOverdue,
+  'receivables.automation_invoice_overdue': automation.invoiceOverdue,
   'platform.system_health': platform.systemHealth,
 });

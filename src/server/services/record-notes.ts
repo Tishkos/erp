@@ -106,6 +106,15 @@ function inTable(table: string, key: string, branch: string | null): NoteTargetF
   };
 }
 
+/** A record kept under a whole-number id (a log row): digits only, compared as a number. */
+function inNumbered(table: string, key: string): NoteTargetFinder {
+  return async (tx, recordId) => {
+    if (!/^\d{1,15}$/.test(recordId)) return null;
+    const result = await tx.execute(sql`select 1 as found from ${sql.identifier(table)} where ${sql.identifier(key)} = ${recordId}::bigint limit 1`);
+    return result.rows[0] ? { branchCode: null } : null;
+  };
+}
+
 /** A project document kept by number, whose branch is its project's. */
 function inProjectDocument(table: string, key: string): NoteTargetFinder {
   return async (tx, recordId) => {
@@ -218,6 +227,10 @@ const TARGETS = new Map<string, NoteTarget>([
   // The Exception Center (platform phase) — kept by number, as its history is. Whoever can open the exception may leave
   // a dated, signed note on it (the row policy decides which exist for the reader); a note is never edited.
   ['exception', target('exception', 'view', inTable('exception', 'exception_no', 'branch_code'))],
+  // Automation (platform phase, Agent 10) — a rule is kept by its number, as its history is, and a run by its number in the log.
+  // The people who administer automation leave a dated, signed note on either; a note is never edited.
+  ['automation', target('automation', 'administer', inTable('automation_rule', 'rule_no', null))],
+  ['automation_run', target('automation', 'administer', inNumbered('automation_run', 'id'))],
 ]);
 
 /** A module's own record joins the door. Additive: an existing object is never replaced. */

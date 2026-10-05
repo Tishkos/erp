@@ -77,6 +77,10 @@ import { allocateDocumentNumber } from './numbering';
 import * as execution from './project-execution';
 import * as advances from './supplier-advance';
 import * as units from './item-units';
+import { dispatch as dispatchAutomation } from './automation-dispatch';
+import * as workflow from './workflow';
+import { recordWindow } from '../domain/automation-events';
+import * as notifications from './notifications';
 
 export const DOCUMENT_TYPE = 'ap_invoice';
 export const PERMISSION_OBJECT = 'ap_invoice';
@@ -1358,9 +1362,10 @@ export async function submit(tx: Tx, ctx: ActorContext, id: string): Promise<voi
 
   await statuses.assertTransitionAllowed(tx, DOCUMENT_TYPE, invoice.status, 'submitted');
 
+  const submittedAt = new Date();
   await tx
     .update(apInvoice)
-    .set({ status: 'submitted', submittedBy: ctx.principal.userId, updatedAt: new Date() })
+    .set({ status: 'submitted', submittedBy: ctx.principal.userId, updatedAt: submittedAt })
     .where(eq(apInvoice.id, id));
 
   await audit.record(tx, {
@@ -1373,6 +1378,136 @@ export async function submit(tx: Tx, ctx: ActorContext, id: string): Promise<voi
     after: { status: 'submitted' },
     outcome: 'success',
   });
+
+  // Automation (platform phase, Agent 10): the fact is RECORDED here, in this transaction, and nothing else —
+  // no rule runs now, so a rule can never hold up or undo a submission.
+  await dispatchAutomation(
+    tx,
+    'ap_invoice.submitted',
+    async (sp) => {
+      const current = await load(sp, id);
+      return automationPayload(sp, current.invoice, current.lines);
+    },
+    { window: recordWindow(submittedAt.toISOString()) },
+  );
+}
+
+/** What an automation rule is told about an invoice: who, how much, from whom (IQD, exact). */
+async function automationPayload(
+  tx: Tx,
+  invoice: typeof apInvoice.$inferSelect,
+  lines: readonly (typeof apInvoiceLine.$inferSelect)[],
+): Promise<Record<string, unknown>> {
+  const [supplier] = await tx
+    .select({ code: businessPartner.code, name: businessPartner.legalName })
+    .from(businessPartner)
+    .where(eq(businessPartner.id, invoice.supplierId))
+    .limit(1);
+  const total = lines.reduce((sum, line) => sum + lineValue(line), 0n);
+  return {
+    subjectId: invoice.id,
+    reference: invoice.invoiceNo,
+    branchCode: invoice.branchCode,
+    supplierCode: supplier?.code ?? '-',
+    supplierName: supplier?.name ?? '-',
+    amountIqd: toDecimalString(total < 0n ? 0n : total, 4n),
+    invoiceDate: invoice.invoiceDate,
+    raisedBy: invoice.createdBy ?? null,
+  };
+}
+
+/**
+ * Is a review a rule asked for still open on this invoice? While it is, the invoice cannot be posted:
+ * the second person's decision comes first (`approveReview`).
+ */
+export async function reviewOpen(tx: Tx, id: string): Promise<boolean> {
+  const found = await tx.execute(sql`
+    select 1 from workflow_instance
+     where document_type_code = ${DOCUMENT_TYPE} and document_id = ${id} and not is_complete
+     limit 1`);
+  return found.rows.length > 0;
+}
+
+/**
+ * The review an automation rule asked for, approved by a second person: somebody who holds `submit` on purchase
+ * invoices, is the review step's role, and is neither the person who keyed the invoice nor the one who submitted it
+ * (the workflow engine adds that the rule's owner, who asked, cannot answer). Approving the review posts nothing: it
+ * lifts the hold, and the invoice is then posted — or not — by whoever holds the post and approve grants.
+ */
+export async function approveReview(tx: Tx, ctx: ActorContext, id: string): Promise<void> {
+  const { invoice } = await load(tx, id, { lock: true });
+  await authz.authorize(ctx.principal, 'submit', PERMISSION_OBJECT, { branchCode: invoice.branchCode, objectId: id });
+  assertReviewable(invoice, ctx);
+  const outcome = await workflow.decide(tx, {
+    documentTypeCode: DOCUMENT_TYPE,
+    documentId: id,
+    actor: { userId: ctx.principal.userId, roles: ctx.principal.roleCodes, isDepartmentManager: false },
+    decision: 'approved',
+  });
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'ap_invoice.review_approved',
+    objectType: PERMISSION_OBJECT,
+    objectId: id,
+    branchCode: invoice.branchCode,
+    before: { status: invoice.status, review: 'requested' },
+    after: { status: invoice.status, review: outcome.isComplete ? 'approved' : 'in_progress' },
+    outcome: 'success',
+  });
+}
+
+/** The review refused: the invoice goes back to draft with what to correct, and the people who keyed it are told. */
+export async function rejectReview(tx: Tx, ctx: ActorContext, id: string, reason: string): Promise<void> {
+  const why = (reason ?? '').trim();
+  if (why === '') throw new ApInvoiceStateError('this invoice', 'under review', 'say why it is returned, so it can be corrected.');
+  const { invoice } = await load(tx, id, { lock: true });
+  await authz.authorize(ctx.principal, 'submit', PERMISSION_OBJECT, { branchCode: invoice.branchCode, objectId: id });
+  assertReviewable(invoice, ctx);
+  await statuses.assertTransitionAllowed(tx, DOCUMENT_TYPE, invoice.status, 'draft');
+  const outcome = await workflow.decide(tx, {
+    documentTypeCode: DOCUMENT_TYPE,
+    documentId: id,
+    actor: { userId: ctx.principal.userId, roles: ctx.principal.roleCodes, isDepartmentManager: false },
+    decision: 'rejected',
+    reason: why,
+  });
+  await tx.update(apInvoice).set({ status: 'draft', updatedAt: new Date() }).where(eq(apInvoice.id, id));
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'ap_invoice.review_rejected',
+    objectType: PERMISSION_OBJECT,
+    objectId: id,
+    branchCode: invoice.branchCode,
+    before: { status: invoice.status, review: 'requested' },
+    after: { status: 'draft', review: 'rejected' },
+    reason: why,
+    outcome: 'success',
+  });
+  await notifications.safely(tx, (sp) =>
+    notifications.emit(sp, {
+      kind: 'approval.rejected',
+      objectType: DOCUMENT_TYPE,
+      objectId: id,
+      recipients: [invoice.createdBy, invoice.submittedBy],
+      except: [ctx.principal.userId],
+      subject: `Review returned: ${invoice.invoiceNo}`,
+      body: why,
+      context: { reference: invoice.invoiceNo, actor: '', documentType: DOCUMENT_TYPE, reason: why },
+      occurrence: `${outcome.instanceId}:raiser`,
+      branchCode: invoice.branchCode,
+      actorUserId: ctx.principal.userId,
+    }),
+  );
+}
+
+function assertReviewable(invoice: typeof apInvoice.$inferSelect, ctx: ActorContext): void {
+  if (invoice.status !== 'submitted') {
+    throw new ApInvoiceStateError(invoice.invoiceNo, invoice.status, 'only a submitted invoice has a review to decide.');
+  }
+  const me = ctx.principal.userId;
+  if (invoice.createdBy === me || invoice.submittedBy === me) {
+    throw new ApInvoiceStateError(invoice.invoiceNo, invoice.status, 'the person who keyed or submitted an invoice cannot review it.');
+  }
 }
 
 /**
@@ -1492,6 +1627,15 @@ export async function post(
       invoice.invoiceNo,
       invoice.status,
       'an invoice posts from submitted — it is entered, matched, then posted.',
+    );
+  }
+
+  // A rule (Workflow Automation) may have asked for a second person's review: the hold lifts when it is approved.
+  if (await reviewOpen(tx, id)) {
+    throw new ApInvoiceStateError(
+      invoice.invoiceNo,
+      invoice.status,
+      'it is waiting for the review an automation rule asked for; a second person approves the review first (My Approvals).',
     );
   }
 
@@ -1903,6 +2047,14 @@ export async function post(
     },
     outcome: 'success',
   });
+
+  // Automation: record the fact (nothing runs here), after everything this posting did has been written.
+  await dispatchAutomation(
+    tx,
+    'ap_invoice.posted',
+    async (sp) => ({ ...(await automationPayload(sp, invoice, lines)), amountIqd: toDecimalString(payableIqd < 0n ? 0n : payableIqd, 4n) }),
+    { window: recordWindow(new Date().toISOString()) },
+  );
 
   return { journalEntryId: result.journalEntryId, varianceValueIqd: varianceIqd };
 }

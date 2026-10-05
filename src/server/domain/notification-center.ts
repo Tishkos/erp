@@ -119,6 +119,15 @@ export const KINDS: Readonly<Record<string, KindDef>> = Object.freeze({
   'exception.approvals': { category: 'accounting', object: 'exception', window: 'occurrence' },
   'exception.platform': { category: 'accounting', object: 'exception', window: 'occurrence' },
 
+  // Automation — a rule's notices (Workflow Automation, platform phase Agent 10). One kind per event, so each reads as what it is
+  // about; `domain/automation-events.noticeKind` is the one place the names come from. `automation.paused` tells the administrators.
+  'automation.ap_invoice_submitted': { category: 'invoices', object: 'ap_invoice', window: 'occurrence' },
+  'automation.ap_invoice_posted': { category: 'invoices', object: 'ap_invoice', window: 'occurrence' },
+  'automation.task_overdue': { category: 'tasks', object: 'task', window: 'occurrence' },
+  'automation.container_eta_exceeded': { category: 'logistics', object: 'shipment_container', window: 'occurrence' },
+  'automation.ar_invoice_overdue': { category: 'invoices', object: 'ar_invoice', window: 'occurrence' },
+  'automation.paused': { category: 'system', object: 'automation', window: 'occurrence', fallback: '/administration/automation' },
+
   // Chat — emitted by services/chat.ts.
   'chat.message': { category: 'chat', object: 'chat', window: 'occurrence', userText: true },
   'chat.mention': { category: 'chat', object: 'chat', window: 'occurrence', userText: true },

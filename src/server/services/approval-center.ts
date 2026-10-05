@@ -41,8 +41,9 @@ import {
   type ApprovalItem,
   type ApprovalPage,
 } from '../domain/approval-center';
-import { can, type Principal } from '../domain/permissions';
+import { can, type PermissionVerb, type Principal } from '../domain/permissions';
 import * as bankDetails from './business-partner';
+import * as apInvoices from './ap-invoice';
 import * as accounts from './chart-of-accounts';
 import * as employeeAdvances from './employee-advances';
 import * as employeeRequests from './employee-requests';
@@ -78,6 +79,8 @@ interface Resolved {
 interface WorkflowHandler {
   /** The grant the owning service authorises the decision on. */
   readonly object: string;
+  /** The verb it is decided with. Default `approve`; a purchase invoice's review is decided with `submit` (`ap-invoice.approveReview`). */
+  readonly verb?: PermissionVerb;
   resolve(tx: Tx, documentId: string): Promise<Resolved | null>;
   approve(tx: Tx, ctx: CenterContext, decideId: string): Promise<void>;
   reject(tx: Tx, ctx: CenterContext, decideId: string, reason: string): Promise<void>;
@@ -112,6 +115,25 @@ const HANDLERS: Readonly<Record<string, WorkflowHandler>> = {
     },
     approve: (tx, ctx, decideId) => journal.approve(tx, ctx, decideId),
     reject: (tx, ctx, decideId, reason) => journal.reject(tx, ctx, decideId, reason),
+  },
+  // The review a Workflow Automation rule asked for on a submitted purchase invoice (REQ platform, Agent 10). Deciding it
+  // posts nothing: approving lifts the hold, returning sends the invoice back to draft.
+  ap_invoice: {
+    object: apInvoices.PERMISSION_OBJECT,
+    verb: 'submit',
+    async resolve(tx, documentId) {
+      const [row] = (
+        await tx.execute(sql`
+          select i.invoice_no as "no",
+                 round(case when i.total_iqd <> 0 then i.total_iqd
+                            else coalesce((select sum(l.quantity * l.unit_price - l.discount_iqd) from ap_invoice_line l where l.ap_invoice_id = i.id), 0)
+                       end, 4)::text as "amount"
+            from ap_invoice i where i.id = ${documentId}::uuid`)
+      ).rows as { no: string; amount: string }[];
+      return row ? { no: row.no, href: `/payables/invoices/${encodeURIComponent(row.no)}`, amount: { value: row.amount, currency: 'IQD' }, decideId: documentId } : null;
+    },
+    approve: (tx, ctx, decideId) => apInvoices.approveReview(tx, ctx, decideId),
+    reject: (tx, ctx, decideId, reason) => apInvoices.rejectReview(tx, ctx, decideId, reason),
   },
   partner_bank_account: {
     object: bankDetails.PERMISSION_OBJECT,
@@ -169,7 +191,7 @@ async function workflowItems(tx: Tx, principal: Principal): Promise<{ items: App
     if (!actionable) continue;
     const handler = HANDLERS[row.documentTypeCode];
     // The grant the owning service decides on: a row the button would refuse is not a row to show.
-    if (!handler || !can(principal, 'approve', handler.object)) {
+    if (!handler || !can(principal, handler.verb ?? 'approve', handler.object)) {
       unroutable += handler ? 0 : 1;
       continue;
     }
@@ -266,6 +288,7 @@ async function purchaseInvoices(tx: Tx, principal: Principal): Promise<ApprovalI
         from ap_invoice i
         left join app_user u on u.id = coalesce(i.submitted_by, i.created_by)
        where i.status = 'submitted' and i.reversed_at is null
+         and not exists (select 1 from workflow_instance w where w.document_type_code = 'ap_invoice' and w.document_id = i.id::text and not w.is_complete)
        order by i.updated_at
        limit 100`)
   ).rows as Row[];

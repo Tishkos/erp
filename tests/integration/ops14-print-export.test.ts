@@ -849,7 +849,9 @@ describe('who may take a copy', () => {
     // Shared doors (2026-10-04) — HR's own papers: a leave request, a vacancy
     // and an application are HR's to print, not Finance's (the accounting
     // manager reads leave, and reads no recruitment at all).
-    const HR_ONLY: readonly ExportKey[] = ['leave_request', 'vacancy', 'applicant'];
+    // Platform phase, Agent 10 — an automation rule and a run are the CEO's and the system administrator's
+    // (`view automation`, 0401): the accounting manager and the clerk hold no grant on it.
+    const HR_ONLY: readonly ExportKey[] = ['leave_request', 'vacancy', 'applicant', 'automation_rule', 'automation_run'];
     for (const key of EXPORT_KEYS) {
       expect(mayExport(manager.principal, key, 'pdf'), key).toBe(!HR_ONLY.includes(key));
       expect(mayExport(manager.principal, key, 'xlsx'), key).toBe(!HR_ONLY.includes(key));

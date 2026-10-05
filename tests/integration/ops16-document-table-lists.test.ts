@@ -153,6 +153,9 @@ const KEPT_BY_A_FORMAT = new Set([
   'asset_category',
   'auth_account',
   'auth_verification',
+  // Platform phase, Agent 10: the kill switch and the pause threshold are the company's settings, which a format keeps
+  // (the rules, their versions, events, runs and provenance are documents and are cleared).
+  'automation_setting',
   'bank',
   'bank_cash_account',
   'business_line',
