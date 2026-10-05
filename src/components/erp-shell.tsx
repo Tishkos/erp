@@ -56,8 +56,9 @@ import { Button, Panel } from '@/components/ui';
  * The monogram, not the full mark.
  *
  * The logo carries the Q, "ERP" and the company's name in both scripts, which
- * is right on a sign-in card or a letterhead. The slot here is 46 x 48 CSS
- * pixels and the name is already written beside it in `erp-brand__wordmark`,
+ * is right on a sign-in card or a letterhead. The slot here is a small square
+ * (never cropped: the file carries its own clear space on every side) and the
+ * name is already written beside it in `erp-brand__wordmark`,
  * so the full mark would put the name twice and neither legibly. Both files
  * are cut from the same source, so there is one brand to keep in step.
  */

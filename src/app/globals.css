@@ -912,12 +912,15 @@ table.list a {
 
 .erp-brand__logo {
   /* Smaller by direction (2026-10-02). The mark here is the Q on its own, and
-     a monogram carries at a size the full logo could not. */
-  inline-size: 2.3rem;
+     a monogram carries at a size the full logo could not.
+     Square and `contain`, because the mark is: a slot narrower than it was
+     tall, filled with `cover`, shaved both sides of the Q (reported
+     2026-10-05). Nothing here may crop it — the file carries its own clear
+     space, so the Q is the size it was. */
+  inline-size: 2.4rem;
   block-size: 2.4rem;
   flex: 0 0 auto;
-  object-fit: cover;
-  object-position: center 28%;
+  object-fit: contain;
 }
 
 .erp-brand__wordmark {
@@ -1947,10 +1950,6 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
   .erp-header__utilities > .erp-theme-toggle,
   .erp-user-trigger {
     display: none;
-  }
-
-  .erp-brand__logo {
-    inline-size: 3rem;
   }
 
   .erp-brand {
