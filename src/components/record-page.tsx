@@ -93,7 +93,7 @@ export async function RecordPage({
       {/* Rule 4 — a draft is marked, in text as well as colour, and the marking
           survives printing (see globals.css @media print). */}
       {draftMarking.labelKey === 'record.marking.final' ? null : (
-        <div className="draft-band" role="status">
+        <div className="draft-band mb-4 rounded-lg border border-warning-subtle-fg/25 bg-warning-subtle px-4 py-2.5 text-sm font-medium text-warning-subtle-fg" role="status">
           {t(draftMarking.labelKey.replace('record.marking.', 'marking.'))}
         </div>
       )}
@@ -110,17 +110,17 @@ export async function RecordPage({
 
       {/* Rule 3 — only actions valid for status and permission are offered. */}
       {offered.length > 0 ? (
-        <div className="actions">
+        <div className="actions mb-5 flex flex-wrap items-center gap-3">
           {offered.map((action) => (
             // One form per action, because each posts a different verb.
-            <form action={performRecordAction} key={action.key}>
+            <form action={performRecordAction} className="flex items-center gap-2" key={action.key}>
               <input name="documentType" type="hidden" value={header.documentType} />
               <input name="documentId" type="hidden" value={header.documentId} />
               <input name="action" type="hidden" value={action.key} />
               <input name="returnTo" type="hidden" value={returnTo ?? ''} />
               {/* §5.4 — a rejection or a cancellation carries a reason. */}
               {action.key === 'reject' || action.key === 'cancel' || action.key === 'reverse' ? (
-                <input aria-label={t('reason')} className="action__reason" name="reason" placeholder={t('reason')} required />
+                <input aria-label={t('reason')} className="action__reason h-9 min-w-48 rounded-lg border border-input bg-[var(--w-field,var(--ui-bg))] px-3 text-sm text-fg shadow-xs focus:border-ring focus:ring-[3px] focus:ring-ring/20 focus:outline-none" name="reason" placeholder={t('reason')} required />
               ) : null}
               <button
                 className={`action${action.key === 'submit' || action.key === 'post' || action.key === 'approve' ? ' action--primary' : ''}`}
@@ -133,9 +133,9 @@ export async function RecordPage({
         </div>
       ) : null}
 
-      <section className="panel">
-        <h2 className="panel__title">{t('status')}</h2>
-        <dl className="facts">
+      <section className={PANEL}>
+        <h2 className={PANEL_TITLE}>{t('status')}</h2>
+        <dl className={FACTS}>
           <div>
             <dt>{t('owner')}</dt>
             <dd>{nameOf(header.ownerUserId)}</dd>
@@ -175,12 +175,12 @@ export async function RecordPage({
         </dl>
       </section>
 
-      <section className="panel">
-        <h2 className="panel__title">{t('approvals')}</h2>
+      <section className={PANEL}>
+        <h2 className={PANEL_TITLE}>{t('approvals')}</h2>
         {approvals.every((approval) => approval.decisions.length === 0) ? (
-          <p className="muted">{t('no_approvals')}</p>
+          <p className={EMPTY}>{t('no_approvals')}</p>
         ) : (
-          <ul className="timeline">
+          <ul className={LIST}>
             {approvals.flatMap((approval) =>
               approval.decisions.map((decision, index) => (
                 <li key={`${approval.instanceId}-${index}`}>
@@ -198,12 +198,12 @@ export async function RecordPage({
         )}
       </section>
 
-      <section className="panel">
-        <h2 className="panel__title">{t('related')}</h2>
+      <section className={PANEL}>
+        <h2 className={PANEL_TITLE}>{t('related')}</h2>
         {related.length === 0 ? (
-          <p className="muted">{t('no_related')}</p>
+          <p className={EMPTY}>{t('no_related')}</p>
         ) : (
-          <ul className="timeline">
+          <ul className={LIST}>
             {related.map((doc) => (
               <li key={`${doc.documentType}-${doc.documentId}`}>
                 <span className="muted">{t.has(`relation.${doc.relation}`) ? t(`relation.${doc.relation}`) : doc.relation}</span>
@@ -214,12 +214,12 @@ export async function RecordPage({
         )}
       </section>
 
-      <section className="panel">
-        <h2 className="panel__title">{t('journals')}</h2>
+      <section className={PANEL}>
+        <h2 className={PANEL_TITLE}>{t('journals')}</h2>
         {journals.length === 0 ? (
-          journalEmptyContent ?? <p className="muted">{t('no_journals')}</p>
+          journalEmptyContent ?? <p className={EMPTY}>{t('no_journals')}</p>
         ) : (
-          <ul className="timeline">
+          <ul className={LIST}>
             {journals.map((journal) => (
               <li key={journal.journalId}>
                 <span>{journal.journalNumber ?? journal.journalId}</span>
@@ -230,12 +230,12 @@ export async function RecordPage({
         )}
       </section>
 
-      <section className="panel">
-        <h2 className="panel__title">{t('audit')}</h2>
+      <section className={PANEL}>
+        <h2 className={PANEL_TITLE}>{t('audit')}</h2>
         {audit.length === 0 ? (
-          <p className="muted">{t('no_audit')}</p>
+          <p className={EMPTY}>{t('no_audit')}</p>
         ) : (
-          <ul className="timeline">
+          <ul className={LIST}>
             {audit.map((entry, index) => (
               <li key={index}>
                 <time dateTime={entry.at}>{when(entry.at)}</time>
@@ -251,6 +251,24 @@ export async function RecordPage({
     </article>
   );
 }
+
+/*
+ * The Intent UI look (2026-10-06), as utilities over the framework's own class
+ * names — kept, because print rules and the e2e suite read some of them
+ * (`.draft-band`). Utilities sit above the hand-written CSS (`@layer legacy`).
+ */
+const PANEL = 'panel mb-5 rounded-xl border border-border bg-overlay p-5 shadow-xs';
+const PANEL_TITLE = 'panel__title mb-3 text-base font-semibold tracking-normal text-fg normal-case';
+const FACTS =
+  'facts m-0 grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3 ' +
+  '[&_dt]:text-sm [&_dt]:font-medium [&_dt]:tracking-normal [&_dt]:text-muted-fg [&_dt]:normal-case ' +
+  '[&_dd]:mt-1 [&_dd]:mb-0 [&_dd]:text-sm [&_dd]:text-fg';
+const LIST =
+  'timeline m-0 grid list-none p-0 text-sm text-fg ' +
+  '[&>li]:flex [&>li]:flex-wrap [&>li]:items-baseline [&>li]:justify-between [&>li]:gap-x-4 [&>li]:gap-y-1 ' +
+  '[&>li]:border-b [&>li]:border-border [&>li]:py-2.5 [&>li:last-child]:border-b-0 ' +
+  '[&_time]:text-sm [&_time]:text-muted-fg [&_time]:tabular-nums';
+const EMPTY = 'muted m-0 text-sm text-muted-fg';
 
 /** The catalogue names a document kind by its menu key; the record framework by its type. */
 function kindKey(documentType: string): string {

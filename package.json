@@ -82,5 +82,11 @@
     "tsx": "^4.23.12",
     "typescript": "5.9.3",
     "vitest": "^4.1.10"
-  }
+  },
+  "browserslist": [
+    "chrome >= 111",
+    "edge >= 111",
+    "firefox >= 128",
+    "safari >= 16.4"
+  ]
 }

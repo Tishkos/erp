@@ -229,8 +229,10 @@ export function NewAccountDialog({
                   maps still reports where its type says it does. */}
               {kind === 'posting' ? (
                 <>
-                  <div className={`${styles.field} ${styles.fieldWide}`}>
-                    <span className={styles.label}>{labels.statementMappings}</span>
+                  {/* The four reports are a group of their own: a hairline above
+                      and a heading weight, as Intent's forms divide a section. */}
+                  <div className={`${styles.field} ${styles.fieldWide} border-t border-border pt-4`}>
+                    <span className={`${styles.label} font-semibold`}>{labels.statementMappings}</span>
                   </div>
                   {MAPPING_FIELDS.map(({ statement, field }) => (
                     <div className={styles.field} key={statement}>

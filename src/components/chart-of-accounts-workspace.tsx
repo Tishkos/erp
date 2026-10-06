@@ -3,7 +3,10 @@
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { useMemo, useState } from 'react';
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronsDownUp, ChevronsUpDown, FileText, Folder, FolderOpen } from 'lucide-react';
 import styles from '@/components/admin/admin.module.css';
+import { cn } from '@/components/intent/cn';
+import { toneBadge, toneOf } from '@/components/chart-of-accounts-tones';
 
 /**
  * The Chart of Accounts — the tree of accounts, in the same ruled grid the
@@ -13,6 +16,13 @@ import styles from '@/components/admin/admin.module.css';
  * details pane, no recent journals. An account's details are inside the
  * account, opened by pressing it. A header folds and unfolds with the small
  * mark before its code; the rest is the chart.
+ *
+ * Drawn in Intent UI's terms (2026-10-06): a chevron folds a header, a folder
+ * or a leaf marks what the row is, the type is a tinted badge
+ * (`chart-of-accounts-tones.ts`), and the row the keyboard is on is tinted
+ * with the accent along its start edge. The markup the tests read — the
+ * table named by `chart-title`, one row per account, the code as the first
+ * cell's only link — is as it was.
  */
 
 const ACCOUNT_TYPES = ['asset', 'liability', 'equity', 'revenue', 'expense'] as const;
@@ -122,8 +132,9 @@ export function ChartOfAccountsWorkspace({ rows, query, total, search }: ChartOf
 
   return (
     <>
-      <div className={`${styles.sapEntryBar} ${styles.sapBarEnd}`}>
+      <div className={cn(styles.sapEntryBar, styles.sapBarEnd, 'gap-2 px-5 py-2.5')}>
         <button className={`${styles.button} ${styles.small}`} onClick={() => setCollapsed(new Set())} type="button">
+          <ChevronsUpDown aria-hidden="true" />
           {chart('expand_all')}
         </button>
         <button
@@ -131,6 +142,7 @@ export function ChartOfAccountsWorkspace({ rows, query, total, search }: ChartOf
           onClick={() => setCollapsed(new Set(accounts.filter((a) => a.isGroup).map((a) => a.key)))}
           type="button"
         >
+          <ChevronsDownUp aria-hidden="true" />
           {chart('collapse_all')}
         </button>
       </div>
@@ -149,8 +161,8 @@ export function ChartOfAccountsWorkspace({ rows, query, total, search }: ChartOf
           <tbody>
             {shown.length === 0 ? (
               <tr>
-                <td className={styles.sapEmptyRow} colSpan={5}>
-                  <strong>{list('no_rows')}</strong>
+                <td className={cn(styles.sapEmptyRow, 'py-10 text-center text-sm text-muted-fg')} colSpan={5}>
+                  <strong className="font-semibold text-fg">{list('no_rows')}</strong>
                   <br />
                   {list('no_rows_hint')}
                 </td>
@@ -158,10 +170,25 @@ export function ChartOfAccountsWorkspace({ rows, query, total, search }: ChartOf
             ) : null}
             {shown.map((account) => {
               const folded = collapsed.has(account.key);
+              const Mark = account.isGroup ? (folded ? Folder : FolderOpen) : FileText;
               return (
-                <tr className={account.isGroup ? styles.sapLevelRow : undefined} key={account.key}>
-                  <td style={{ paddingInlineStart: `${0.45 + account.level * 1.1}rem` }}>
-                    <span className={styles.sapTreeCell}>
+                <tr
+                  className={cn(
+                    'group/row',
+                    account.isGroup && styles.sapLevelRow,
+                    // A header is a heading row of the tree: semibold, on a light muted
+                    // band (light enough that the type badge on it keeps 4.5:1).
+                    account.isGroup && '[&>td]:bg-muted/45 [&>td]:font-semibold [&>td]:text-fg [&:hover>td]:bg-muted/75',
+                    // The row the keyboard is on reads as selected.
+                    '[&:focus-within>td]:bg-primary-subtle',
+                  )}
+                  key={account.key}
+                >
+                  <td
+                    className="border-s-2 border-s-transparent group-focus-within/row:border-s-primary"
+                    style={{ paddingInlineStart: `${0.5 + account.level * 1.25}rem` }}
+                  >
+                    <span className={cn(styles.sapTreeCell, 'flex gap-1.5')}>
                       {account.isGroup ? (
                         <button
                           aria-expanded={!folded}
@@ -170,16 +197,28 @@ export function ChartOfAccountsWorkspace({ rows, query, total, search }: ChartOf
                               ? chart('expand_account', { account: account.name || account.code })
                               : chart('collapse_account', { account: account.name || account.code })
                           }
-                          className={styles.sapTreeToggle}
+                          className={cn(
+                            styles.sapTreeToggle,
+                            'size-6 min-h-6 min-w-6 rounded-md text-muted-fg transition-colors hover:bg-secondary hover:text-fg',
+                            'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring',
+                          )}
                           onClick={() => toggle(account.key)}
                           type="button"
                         >
-                          {folded ? '▸' : '▾'}
+                          {folded ? (
+                            <ChevronRight aria-hidden="true" className="size-4 rtl:-scale-x-100" />
+                          ) : (
+                            <ChevronDown aria-hidden="true" className="size-4" />
+                          )}
                         </button>
                       ) : (
-                        <span aria-hidden="true" className={styles.sapTreeToggle} />
+                        <span aria-hidden="true" className={cn(styles.sapTreeToggle, 'size-6 min-h-6 min-w-6')} />
                       )}
-                      <Link className={styles.sapLink} href={href(account.code)}>
+                      <Mark
+                        aria-hidden="true"
+                        className={cn('size-4 shrink-0', account.isGroup ? 'text-primary-subtle-fg' : 'text-muted-fg')}
+                      />
+                      <Link className={cn(styles.sapLink, 'tabular-nums')} href={href(account.code)}>
                         <bdi dir="ltr">{account.code || '—'}</bdi>
                       </Link>
                     </span>
@@ -189,8 +228,18 @@ export function ChartOfAccountsWorkspace({ rows, query, total, search }: ChartOf
                       <bdi dir="auto">{account.name || '—'}</bdi>
                     </Link>
                   </td>
-                  <td>{isAccountType(account.accountType) ? chart(`account_types.${account.accountType}`) : '—'}</td>
-                  <td>{chart(account.isGroup ? 'group_account' : 'posting_account')}</td>
+                  <td>
+                    {isAccountType(account.accountType) ? (
+                      <span className={toneBadge(toneOf(account.accountType))}>
+                        {chart(`account_types.${account.accountType}`)}
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td className={account.isGroup ? undefined : 'text-muted-fg'}>
+                    {chart(account.isGroup ? 'group_account' : 'posting_account')}
+                  </td>
                   <td>
                     {account.status ? (
                       <span
@@ -216,13 +265,15 @@ export function ChartOfAccountsWorkspace({ rows, query, total, search }: ChartOf
       <div className={styles.sapFoot}>
         <div className={styles.sapFootActions}>
           {currentPage > 1 ? (
-            <Link className={styles.button} href={pageHref(currentPage - 1)}>
+            <Link className={cn(styles.button, styles.small)} href={pageHref(currentPage - 1)}>
+              <ChevronLeft aria-hidden="true" className="rtl:-scale-x-100" />
               {chart('pagination.previous')}
             </Link>
           ) : null}
           {currentPage < pageCount ? (
-            <Link className={styles.button} href={pageHref(currentPage + 1)}>
+            <Link className={cn(styles.button, styles.small)} href={pageHref(currentPage + 1)}>
               {chart('pagination.next')}
+              <ChevronRight aria-hidden="true" className="rtl:-scale-x-100" />
             </Link>
           ) : null}
         </div>

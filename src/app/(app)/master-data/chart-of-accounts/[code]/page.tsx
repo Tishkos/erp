@@ -1,8 +1,24 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { Download, Landmark, Printer, ReceiptText, Scale, TrendingUp, WalletCards, type LucideIcon } from 'lucide-react';
+import {
+  ArrowRight,
+  Calculator,
+  Download,
+  Inbox,
+  Info,
+  Landmark,
+  Printer,
+  ReceiptText,
+  Scale,
+  ScrollText,
+  TrendingUp,
+  WalletCards,
+  type LucideIcon,
+} from 'lucide-react';
 import { AdminPage, Flash, admin as s } from '@/components/admin';
+import { cn } from '@/components/intent/cn';
+import { TONE_CHIP, toneBadge, toneOf } from '@/components/chart-of-accounts-tones';
 import { visibleRoute } from '@/server/delivered';
 import { RecordPage } from '@/components/record-page';
 import { registerAllRecords } from '@/server/records';
@@ -46,6 +62,28 @@ const ICONS: Readonly<Record<AccountType, LucideIcon>> = {
 
 /** The most recent postings shown on the account itself. */
 const RECENT = 8;
+
+/*
+ * The account's cards, in Intent UI's terms (the redesign, 2026-10-06): a
+ * rounded card on the overlay with a hairline under its title, a table that
+ * runs to the card's edges, an outline button for print and export. They are
+ * Tailwind utilities rather than the old `.coa-*` rules because the window's
+ * own section and header rules (`.sapDoc section`) are stronger than a plain
+ * class, and utilities sit in the layer above every hand-written rule.
+ */
+const CARD = 'min-w-0 overflow-hidden rounded-xl border border-border bg-overlay p-0 text-overlay-fg shadow-xs';
+const CARD_HEADER =
+  'm-0 flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-none border-0 border-b border-border bg-transparent px-5 py-3';
+const CARD_TITLE = 'm-0 flex items-center gap-2 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-muted-fg';
+const CARD_FOOTER ='flex flex-wrap items-center gap-2 border-t border-border px-5 py-3';
+const FLUSH_TABLE = 'rounded-none border-0';
+const OUTLINE_BUTTON =
+  'inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-border bg-overlay px-3 text-sm font-medium text-fg no-underline shadow-xs transition-colors hover:bg-secondary hover:text-fg hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-muted-fg';
+/** The balance's hairlines: two by two on a phone, four across from `sm`. */
+const STAT_RULES = ['', 'border-s', 'border-t sm:border-t-0 sm:border-s', 'border-s border-t sm:border-t-0'] as const;
+const FACT = 'flex items-start justify-between gap-4 border-t border-border py-2.5 first:border-t-0';
+const FACT_TERM = 'shrink-0 text-muted-fg text-sm';
+const FACT_VALUE = 'm-0 min-w-0 text-end font-medium text-fg text-sm break-words';
 
 export default async function AccountRecordPage({
   params,
@@ -126,6 +164,7 @@ export default async function AccountRecordPage({
   const figure = (value: bigint) => money(toDecimalString(value, MONEY_SCALE));
   const recent = [...activity].reverse().slice(0, RECENT);
   const Icon = ICONS[node.accountType] ?? Landmark;
+  const tone = toneOf(node.accountType);
   const address = `/master-data/chart-of-accounts/${encodeURIComponent(code)}`;
   const mappingLabel = (code: string | null, fallback: string) =>
     code ? (mapping.find((entry) => entry.code === code)?.name ?? code) : fallback;
@@ -145,19 +184,22 @@ export default async function AccountRecordPage({
 
       <div className={`${s.sapDoc} ${s.profileGrid}`}>
         <div className={s.profileStack}>
-          <section className="coa-panel coa-details-panel" aria-labelledby="account-details-title">
-            <header className="coa-panel-header">
-              <h2 id="account-details-title">{chart('account_details')}</h2>
+          <section aria-labelledby="account-details-title" className={CARD}>
+            <header className={CARD_HEADER}>
+              <h2 className={CARD_TITLE} id="account-details-title">
+                <Info aria-hidden="true" />
+                <span>{chart('account_details')}</span>
+              </h2>
             </header>
-            <div className="coa-detail-hero">
-              <span className="coa-detail-icon">
-                <Icon aria-hidden="true" />
+            <div className="flex items-center gap-3 px-5 pt-4 pb-3">
+              <span className={cn('grid size-11 shrink-0 place-items-center rounded-lg', TONE_CHIP[tone])}>
+                <Icon aria-hidden="true" className="size-5" />
               </span>
-              <div>
-                <strong>
+              <div className="flex min-w-0 flex-1 flex-col">
+                <strong className="break-words font-semibold text-base text-fg leading-snug">
                   <bdi dir="auto">{node.name}</bdi>
                 </strong>
-                <span>
+                <span className="text-muted-fg text-xs tabular-nums">
                   <bdi dir="ltr">{node.code}</bdi>
                 </span>
               </div>
@@ -165,43 +207,56 @@ export default async function AccountRecordPage({
                 {status(node.approvalStatus)}
               </span>
             </div>
-            <dl className="coa-detail-grid">
-              <div>
-                <dt>{column('code')}</dt>
-                <dd>
+            {/* Intent's description list: the term at the start, its value at
+                the end, a hairline between each pair. */}
+            <dl className="m-0 px-5 pb-2">
+              <div className={FACT}>
+                <dt className={FACT_TERM}>{column('code')}</dt>
+                <dd className={FACT_VALUE}>
                   <bdi dir="ltr">{node.code}</bdi>
                 </dd>
               </div>
-              <div>
-                <dt>{column('account_type')}</dt>
-                <dd>{chart(`account_types.${node.accountType}`)}</dd>
+              <div className={FACT}>
+                <dt className={FACT_TERM}>{column('account_type')}</dt>
+                <dd className={FACT_VALUE}>
+                  <span className={toneBadge(tone)}>{chart(`account_types.${node.accountType}`)}</span>
+                </dd>
               </div>
-              <div>
-                <dt>{chart('parent_account')}</dt>
-                <dd>
+              <div className={FACT}>
+                <dt className={FACT_TERM}>{chart('parent_account')}</dt>
+                <dd className={FACT_VALUE}>
                   {parent ? (
-                    <Link className={s.sapLink} href={`/master-data/chart-of-accounts/${encodeURIComponent(parent.code)}`}>
-                      <bdi dir="ltr">{parent.code}</bdi>
-                      <span className="coa-detail-parent-name">{parent.name}</span>
+                    <Link
+                      className={cn(s.sapLink, 'inline-flex flex-col items-end gap-0 text-end')}
+                      href={`/master-data/chart-of-accounts/${encodeURIComponent(parent.code)}`}
+                    >
+                      <bdi className="tabular-nums" dir="ltr">
+                        {parent.code}
+                      </bdi>
+                      <span className="font-normal text-muted-fg text-xs">{parent.name}</span>
                     </Link>
                   ) : (
-                    chart('not_available')
+                    <span className="font-normal text-muted-fg">{chart('not_available')}</span>
                   )}
                 </dd>
               </div>
-              <div>
-                <dt>{column('is_group')}</dt>
-                <dd>{chart(node.isGroup ? 'group_account' : 'posting_account')}</dd>
+              <div className={FACT}>
+                <dt className={FACT_TERM}>{column('is_group')}</dt>
+                <dd className={FACT_VALUE}>{chart(node.isGroup ? 'group_account' : 'posting_account')}</dd>
               </div>
-              <div>
-                <dt>{column('is_active')}</dt>
-                <dd>{chart(node.isActive ? 'active' : 'inactive')}</dd>
+              <div className={FACT}>
+                <dt className={FACT_TERM}>{column('is_active')}</dt>
+                <dd className={FACT_VALUE}>
+                  <span className={toneBadge(node.isActive ? 'success' : 'secondary')}>
+                    {chart(node.isActive ? 'active' : 'inactive')}
+                  </span>
+                </dd>
               </div>
               {/* One row per report: where this account prints on each. */}
               {MAPPING_STATEMENTS.map((entry) => (
-                <div key={entry.statement}>
-                  <dt>{page(entry.page)}</dt>
-                  <dd>
+                <div className={FACT} key={entry.statement}>
+                  <dt className={FACT_TERM}>{page(entry.page)}</dt>
+                  <dd className={cn(FACT_VALUE, node.mapping[entry.statement] ? undefined : 'font-normal text-muted-fg')}>
                     {mappingLabel(
                       node.mapping[entry.statement],
                       t('accounts.statement_line_default'),
@@ -210,9 +265,9 @@ export default async function AccountRecordPage({
                 </div>
               ))}
               {node.controlAccount ? (
-                <div>
-                  <dt>{column('control_account')}</dt>
-                  <dd>{chart(`control_accounts.${node.controlAccount}`)}</dd>
+                <div className={FACT}>
+                  <dt className={FACT_TERM}>{column('control_account')}</dt>
+                  <dd className={FACT_VALUE}>{chart(`control_accounts.${node.controlAccount}`)}</dd>
                 </div>
               ) : null}
             </dl>
@@ -220,15 +275,15 @@ export default async function AccountRecordPage({
                 opens the statement in its own tab; export is a route handler
                 that streams the CSV, so a press is a download, not a form. */}
             {mayPrint || mayExport ? (
-              <div className="coa-panel-footer coa-panel-actions">
+              <div className={CARD_FOOTER}>
                 {mayPrint ? (
-                  <Link className={s.sapIconButton} href={`${address}/print`} target="_blank" title={chart('print')}>
+                  <Link className={OUTLINE_BUTTON} href={`${address}/print`} target="_blank" title={chart('print')}>
                     <Printer aria-hidden="true" />
                     <span>{chart('print')}</span>
                   </Link>
                 ) : null}
                 {mayExport ? (
-                  <a className={s.sapIconButton} href={`${address}/export`} title={chart('export')}>
+                  <a className={OUTLINE_BUTTON} href={`${address}/export`} title={chart('export')}>
                     <Download aria-hidden="true" />
                     <span>{chart('export')}</span>
                   </a>
@@ -243,17 +298,24 @@ export default async function AccountRecordPage({
 
         <div className={s.profileStack}>
           {node.isGroup ? null : (
-            <section className="coa-panel coa-journals-panel" aria-labelledby="account-journals-title">
-              <header className="coa-panel-header">
-                <h2 id="account-journals-title">{chart('recent_journals')}</h2>
+            <section aria-labelledby="account-journals-title" className={CARD}>
+              <header className={CARD_HEADER}>
+                <h2 className={CARD_TITLE} id="account-journals-title">
+                  <ScrollText aria-hidden="true" />
+                  <span>{chart('recent_journals')}</span>
+                </h2>
               </header>
               {recent.length === 0 ? (
-                <div className="coa-journal-empty">
-                  <strong>{chart('no_journals_yet')}</strong>
+                <div className="flex flex-col items-center gap-3 px-5 py-12 text-center">
+                  <span className="grid size-10 place-items-center rounded-full bg-muted text-muted-fg">
+                    <Inbox aria-hidden="true" className="size-5" />
+                  </span>
+                  <strong className="font-medium text-fg text-sm">{chart('no_journals_yet')}</strong>
                 </div>
               ) : (
-                <div className={s.sapTableWrap}>
-                  <table className={`${s.sapTable} ${s.sapReportTable}`}>
+                <div className={cn(s.sapTableWrap, FLUSH_TABLE)}>
+                  {/* A register, not a typed grid: no hairlines between the columns. */}
+                  <table className={cn(s.sapTable, s.sapReportTable, '[&_:is(th,td)]:border-s-0')}>
                     <thead>
                       <tr>
                         <th scope="col">{t('journals.posting_date')}</th>
@@ -271,10 +333,12 @@ export default async function AccountRecordPage({
                       {recent.map((row, index) => (
                         <tr key={`${row.entryNo}-${row.lineNo}-${index}`}>
                           <td>
-                            <bdi dir="ltr">{formatBusinessDate(row.postingDate, locale as Locale)}</bdi>
+                            {/* Not forced left to right: an Arabic date read inside an
+                                LTR island comes out back to front (the rule Home follows). */}
+                            <bdi className="whitespace-nowrap">{formatBusinessDate(row.postingDate, locale as Locale)}</bdi>
                           </td>
                           <td>
-                            <Link className={s.sapLink} href={`/finance/journals/${encodeURIComponent(row.entryNo)}`}>
+                            <Link className={cn(s.sapLink, 'tabular-nums')} href={`/finance/journals/${encodeURIComponent(row.entryNo)}`}>
                               <bdi dir="ltr">{row.entryNo}</bdi>
                             </Link>
                           </td>
@@ -297,56 +361,62 @@ export default async function AccountRecordPage({
           )}
 
           {node.isGroup ? null : (
-            <section className="coa-panel coa-journals-panel" aria-labelledby="account-balance-title">
-              <header className="coa-panel-header">
-                <h2 id="account-balance-title">{chart('balance_summary')}</h2>
-                <bdi className="coa-currency-badge" dir="ltr">
+            <section aria-labelledby="account-balance-title" className={CARD}>
+              <header className={CARD_HEADER}>
+                <h2 className={CARD_TITLE} id="account-balance-title">
+                  <Calculator aria-hidden="true" />
+                  <span>{chart('balance_summary')}</span>
+                </h2>
+                <bdi className={toneBadge('secondary', 'tabular-nums')} dir="ltr">
                   IQD · {year}
                 </bdi>
               </header>
-              {/* The same table as the journals above it: four figures across
-                  one row, the year's position read left to right. */}
-              <div className={s.sapTableWrap}>
-                <table className={`${s.sapTable} ${s.sapReportTable}`}>
-                  <thead>
-                    <tr>
-                      <th className={s.sapNum} scope="col">
-                        {chart('opening_balance')}
-                      </th>
-                      <th className={s.sapNum} scope="col">
-                        {chart('total_debits')}
-                      </th>
-                      <th className={s.sapNum} scope="col">
-                        {chart('total_credits')}
-                      </th>
-                      <th className={s.sapNum} scope="col">
-                        {chart('closing_balance')}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td className={s.sapNum}>
-                        <bdi dir="ltr">{figure(opening)}</bdi>
-                      </td>
-                      <td className={s.sapNum}>
-                        <bdi dir="ltr">{figure(debits)}</bdi>
-                      </td>
-                      <td className={s.sapNum}>
-                        <bdi dir="ltr">{figure(credits)}</bdi>
-                      </td>
-                      <td className={s.sapNum}>
-                        <strong>
-                          <bdi dir="ltr">{figure(closing)}</bdi>
-                        </strong>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div className="coa-panel-footer">
-                <Link className={`${s.sapLink} coa-detail-link`} href={`/finance/gl-inquiry/${encodeURIComponent(code)}`}>
+              {/* Four figures across one row, the year's position read from the
+                  start: Intent's stat row, a hairline between each figure and
+                  the closing balance — what the other three add up to — tinted. */}
+              <dl className="m-0 grid grid-cols-2 sm:grid-cols-4">
+                {(
+                  [
+                    ['opening_balance', opening],
+                    ['total_debits', debits],
+                    ['total_credits', credits],
+                    ['closing_balance', closing],
+                  ] as const
+                ).map(([label, value], index) => (
+                  <div
+                    className={cn(
+                      'flex min-w-0 flex-col gap-1 border-border px-4 py-4 sm:px-5',
+                      STAT_RULES[index],
+                      label === 'closing_balance' && 'bg-primary-subtle',
+                    )}
+                    key={label}
+                  >
+                    <dt
+                      className={cn(
+                        'font-medium text-xs',
+                        label === 'closing_balance' ? 'text-primary-subtle-fg' : 'text-muted-fg',
+                      )}
+                    >
+                      {chart(label)}
+                    </dt>
+                    <dd
+                      className={cn(
+                        'm-0 break-words text-base tabular-nums sm:text-lg',
+                        label === 'closing_balance' ? 'font-semibold text-primary-subtle-fg' : 'font-medium text-fg',
+                      )}
+                    >
+                      <bdi dir="ltr">{figure(value)}</bdi>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <div className={CARD_FOOTER}>
+                <Link
+                  className="inline-flex items-center gap-1.5 font-medium text-primary-subtle-fg text-sm no-underline underline-offset-4 hover:text-primary-subtle-fg hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  href={`/finance/gl-inquiry/${encodeURIComponent(code)}`}
+                >
                   {chart('open_ledger')}
+                  <ArrowRight aria-hidden="true" className="size-4 rtl:-scale-x-100" />
                 </Link>
               </div>
             </section>

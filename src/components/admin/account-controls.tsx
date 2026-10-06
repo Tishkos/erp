@@ -1,4 +1,5 @@
 import { getTranslations } from 'next-intl/server';
+import { Archive, FileSpreadsheet, FolderTree, PencilLine, ShieldCheck } from 'lucide-react';
 import { Panel } from '@/components/ui';
 import { ActionButton, Field, Form, Grid, ReasonForm, Select, Submit, SubmitRow, admin as s } from './index';
 import { NewAccountDialog } from './new-account-dialog';
@@ -197,9 +198,11 @@ export async function AccountControls({
   ];
 
   return (
-    <div className={s.assignGrid}>
+    // The cards keep the column's own rhythm: one gap between each, no margin
+    // under them as well (the panel rule adds one, which doubled the space).
+    <div className={`${s.assignGrid} gap-3.5 [&>section]:mb-0`}>
       {/* What may be typed on an account: its name and what it is for. */}
-      <Panel title={t('accounts.edit')}>
+      <Panel icon={PencilLine} title={t('accounts.edit')}>
         <Form action={updateAccount}>
           <input name="id" type="hidden" value={account.id} />
           <input name="code" type="hidden" value={account.code} />
@@ -214,7 +217,7 @@ export async function AccountControls({
       </Panel>
       {!account.isGroup ? (
         <>
-          <Panel title={t('accounts.statement_mappings')}>
+          <Panel icon={FileSpreadsheet} title={t('accounts.statement_mappings')}>
             <Form action={setStatementLines}>
               <input name="id" type="hidden" value={account.id} />
               <input name="code" type="hidden" value={account.code} />
@@ -240,7 +243,7 @@ export async function AccountControls({
 
           {/* The way to hang sub-accounts under an account that was opened as a
               posting one. Refused once it has been posted to — see the service. */}
-          <Panel title={t('accounts.sub_accounts')}>
+          <Panel icon={FolderTree} title={t('accounts.sub_accounts')}>
             <p className={s.sectionHint}>{t('accounts.sub_accounts_hint')}</p>
             <ActionButton
               action={allowSubAccounts}
@@ -255,17 +258,17 @@ export async function AccountControls({
         <>
           {/* A header has no line to set, and the person looking for one is
               owed the reason: it reports wherever its accounts do. */}
-          <Panel title={t('accounts.statement_mappings')}>
-            <p className={s.sectionHint}>{t('accounts.header_no_line')}</p>
+          <Panel icon={FileSpreadsheet} title={t('accounts.statement_mappings')}>
+            <p className={`${s.sectionHint} mb-0`}>{t('accounts.header_no_line')}</p>
           </Panel>
-          <Panel title={t('accounts.sub_accounts')}>
-            <p className={s.sectionHint}>{t('accounts.is_a_header')}</p>
+          <Panel icon={FolderTree} title={t('accounts.sub_accounts')}>
+            <p className={`${s.sectionHint} mb-0`}>{t('accounts.is_a_header')}</p>
           </Panel>
         </>
       )}
 
       {account.isActive ? (
-        <Panel title={t('accounts.deactivate')}>
+        <Panel icon={Archive} title={t('accounts.deactivate')}>
           <p className={s.sectionHint}>{t('accounts.deactivate_hint')}</p>
           <ReasonForm
             action={deactivateAccount}
@@ -288,7 +291,7 @@ export async function ControlAccountDesignation({ account }: { readonly account:
     getTranslations('column'),
   ]);
   return (
-    <Panel title={column('control_account')}>
+    <Panel icon={ShieldCheck} title={column('control_account')}>
       <Form action={setControlAccount}>
         <input name="id" type="hidden" value={account.id} />
         <input name="code" type="hidden" value={account.code} />
