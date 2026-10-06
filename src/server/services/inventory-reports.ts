@@ -24,6 +24,7 @@
 import { sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import { assertCan, type Principal } from '../domain/permissions';
+import { journeyRank } from './warehouses';
 
 export const PERMISSION_OBJECT = 'inventory_movement';
 
@@ -177,7 +178,7 @@ export async function valuation(
       join item i      on i.code = g.item_code
       join warehouse w on w.code = g.warehouse_code
      where ${sql.join(conditions, sql` and `)}
-     order by i.name, w.name
+     order by i.name, ${journeyRank(sql`w.shipment_stage`)}, w.code
   `);
 
   return (result as unknown as { rows: ValuationRow[] }).rows;
@@ -233,7 +234,7 @@ export async function warehouseSummary(tx: Tx, principal: Principal): Promise<Wa
       left join layers v on v.warehouse_code = w.code
      where w.active ${principal.isSuperUser ? sql`` : sql`and app_branch_allowed(w.branch_code)`}
      group by w.code, w.name, w.branch_code, w.is_transit, v.value_iqd
-     order by w.branch_code, w.code`);
+     order by w.branch_code, ${journeyRank(sql`w.shipment_stage`)}, w.code`);
   return (result as unknown as { rows: WarehouseSummaryRow[] }).rows;
 }
 

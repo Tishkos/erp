@@ -14,7 +14,7 @@
  * Every screen that receives or issues stock has to name one, so that limit was
  * the whole of block 7 blocked behind it.
  */
-import { and, asc, eq, isNotNull } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, sql, type SQL } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import { branch, warehouse } from '../db/schema';
 import type { ActorContext } from './chart-of-accounts';
@@ -46,7 +46,7 @@ export async function list(tx: Tx) {
     })
     .from(warehouse)
     .leftJoin(branch, eq(branch.code, warehouse.branchCode))
-    .orderBy(asc(warehouse.code));
+    .orderBy(asc(warehouse.branchCode), journeyRank(sql`${warehouse.shipmentStage}`), asc(warehouse.code));
 }
 
 /** The ones stock can actually be put into or taken out of, for a picker. */
@@ -75,7 +75,7 @@ export async function listForReports(tx: Tx) {
     })
     .from(warehouse)
     .where(eq(warehouse.active, true))
-    .orderBy(asc(warehouse.code));
+    .orderBy(asc(warehouse.branchCode), journeyRank(sql`${warehouse.shipmentStage}`), asc(warehouse.code));
 }
 
 export async function get(tx: Tx, code: string) {
@@ -219,13 +219,25 @@ export async function setActive(
 export const SHIPMENT_STAGE_WAREHOUSES = [
   // Before In Process for an import bought with an advance: its goods wait here
   // until the advance's payment application is paid (2026-10-06, by direction;
-  // the name is the owner's own).
-  { stage: 'without_swift', name: 'On Process (Without SWIFT)' },
-  { stage: 'in_process', name: 'In Process' },
-  { stage: 'on_board', name: 'On Board' },
+  // the name is the owner's own, and so is the code: "the code SHOULD WH-ONPROC").
+  { stage: 'without_swift', code: 'WH-ONPROC', name: 'On Process (Without SWIFT)' },
+  { stage: 'in_process', code: 'WH-INPROC', name: 'In Process' },
+  { stage: 'on_board', code: 'WH-BOARD', name: 'On Board' },
   // "At Port", by direction (2026-10-06: "the warehouse spelling is not correct"); the stage code stays `on_port`.
-  { stage: 'on_port', name: 'At Port' },
+  { stage: 'on_port', code: 'WH-PORT', name: 'At Port' },
 ] as const;
+
+/**
+ * The journey's order (2026-10-06, by direction: "order these nicely step by
+ * step"): the stage warehouses as the goods pass them — On Process, In
+ * Process, On Board, At Port — and then every other warehouse. `stage` is the
+ * `shipment_stage` column as the query names it. The stages are this file's
+ * own constants, so they are written into the statement, not bound.
+ */
+export function journeyRank(stage: SQL): SQL {
+  const steps = SHIPMENT_STAGE_WAREHOUSES.map((entry, index) => `when '${entry.stage}' then ${index}`).join(' ');
+  return sql`case ${stage} ${sql.raw(steps)} else ${sql.raw(String(SHIPMENT_STAGE_WAREHOUSES.length))} end`;
+}
 
 export type ShipmentStage = (typeof SHIPMENT_STAGE_WAREHOUSES)[number]['stage'];
 
@@ -249,7 +261,7 @@ export async function stageWarehouses(tx: Tx) {
     })
     .from(warehouse)
     .where(isNotNull(warehouse.shipmentStage))
-    .orderBy(asc(warehouse.code));
+    .orderBy(journeyRank(sql`${warehouse.shipmentStage}`), asc(warehouse.code));
 }
 
 /**
@@ -271,7 +283,7 @@ export async function ensureStageWarehouses(
 
   const result: StageWarehouse[] = [];
 
-  for (const { stage, name } of SHIPMENT_STAGE_WAREHOUSES) {
+  for (const { stage, code: fixedCode, name } of SHIPMENT_STAGE_WAREHOUSES) {
     const [existing] = await tx
       .select({ code: warehouse.code, name: warehouse.name })
       .from(warehouse)
@@ -283,12 +295,18 @@ export async function ensureStageWarehouses(
       continue;
     }
 
-    const code = await allocateFreeCode(
-      tx,
-      'WAREHOUSE_CODE',
-      async (candidate) => Boolean(await get(tx, candidate)),
-      ctx.principal.userId,
-    );
+    // A stage's code is the stage's, as its name is (2026-10-06, by direction):
+    // WH-ONPROC, WH-INPROC, WH-BOARD, WH-PORT. Minted only when a warehouse of
+    // some other kind already holds that code — a stage warehouse is never
+    // refused for want of one.
+    const code = (await get(tx, fixedCode))
+      ? await allocateFreeCode(
+          tx,
+          'WAREHOUSE_CODE',
+          async (candidate) => Boolean(await get(tx, candidate)),
+          ctx.principal.userId,
+        )
+      : fixedCode;
 
     await tx.insert(warehouse).values({
       code,

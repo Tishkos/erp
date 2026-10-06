@@ -564,7 +564,7 @@
   text-align: start;
 }
 
-.grantTable tbody tr:nth-child(2n) {
+.grantTable tbody tr:nth-child(odd) {
   background: color-mix(in srgb, var(--surface-muted) 55%, var(--surface));
 }
 
@@ -7685,6 +7685,22 @@
   .mapTable td {
     padding-inline: 1rem;
   }
+}
+
+/* ── Striped rows (2026-10-06, by direction: "for the table odd little
+   highlight color and other normal for better visuality") ──────────────────
+   Every table of the application: the odd rows a light tint of the accent,
+   the even rows plain. Painted on the row, not its cells, and inside :where()
+   so it weighs nothing — a hover, a selected row, a group or total row, an
+   entry row or a cell of its own colour all draw over it. Grids that are not
+   lists (a date picker's month, an Intent grid) are left alone; filler rows
+   under a short document grid stay plain. */
+:where(:global(.erp-root) table:not([role='grid'], [role='treegrid'], [role='presentation'])) > :where(tbody) > :where(tr:nth-child(odd):not(.sapFiller, .sapEntryRow)) {
+  background-color: var(--ui-row-stripe, color-mix(in oklab, var(--ui-primary) 8%, var(--ui-overlay, var(--ui-bg))));
+}
+
+:where(:global(.erp-root)[data-palette]:is([data-palette='midnight'], [data-palette='carbon'], [data-palette='ocean'], [data-palette='obsidian_plum'], [data-palette='evergreen'], [data-palette='espresso'], [data-palette='lunar_slate'])) {
+  --ui-row-stripe: color-mix(in oklab, var(--ui-primary) 8%, var(--ui-overlay, var(--ui-bg)));
 }
 
 }

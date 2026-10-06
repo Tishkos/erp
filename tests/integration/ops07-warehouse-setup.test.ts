@@ -179,9 +179,9 @@ describe('ops 7 · the warehouses block 8 needs', () => {
     expect(made.map((entry) => entry.stage)).toEqual(['without_swift', 'in_process', 'on_board', 'on_port']);
     expect(made.map((entry) => entry.name)).toEqual(['On Process (Without SWIFT)', 'In Process', 'On Board', 'At Port']);
     expect(made.every((entry) => entry.created)).toBe(true);
-    // Minted like any other warehouse's — Critical Rule 1 has no exception for
-    // a warehouse the system asks for rather than a person.
-    expect(made.every((entry) => /^WH-\d{4}$/.test(entry.code))).toBe(true);
+    // A stage's code is the stage's own, as its name is (2026-10-06, by
+    // direction: "the code SHOULD WH-ONPROC").
+    expect(made.map((entry) => entry.code)).toEqual(['WH-ONPROC', 'WH-INPROC', 'WH-BOARD', 'WH-PORT']);
   });
 
   it('makes them transit, and keeps them out of the pickers stock is put away from (REQ-AP-001 §17.4)', async () => {
