@@ -808,4 +808,357 @@ html[lang="ar"] .dialogBadge {
   letter-spacing: 0;
   text-transform: none;
 }
+
+/* ══ The Intent UI redesign (2026-10-06) ══════════════════════════════════
+   The same look as the document-window screens (admin.module.css, the block
+   at its end), for the kit's own pieces and for the pages that draw them
+   outside a `.sapPage`. Colours are the --ui-* theme; see
+   docs/design/intent-ui.md. */
+
+.workspace {
+  font-size: 0.875rem;
+}
+
+.pageHeader {
+  align-items: flex-end;
+  gap: 1rem;
+  margin-block-end: 1.25rem;
+}
+
+.title {
+  color: var(--ui-fg);
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.subtitle {
+  margin-block-start: 0.3rem;
+  color: var(--ui-muted-fg);
+  font-size: 0.875rem;
+}
+
+.button,
+.iconButton {
+  min-block-size: 2.25rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-lg);
+  background: var(--ui-overlay);
+  color: var(--ui-fg);
+  font-size: 0.875rem;
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
+}
+
+.button:hover,
+.iconButton:hover,
+.secondary:hover {
+  border-color: var(--ui-input);
+  background: var(--ui-secondary);
+  color: var(--ui-fg);
+}
+
+.primary,
+.primary:hover {
+  border-color: color-mix(in oklab, var(--ui-primary) 82%, var(--ui-fg) 18%);
+  background: var(--ui-primary);
+  color: var(--ui-primary-fg);
+}
+
+.primary:hover {
+  background: color-mix(in oklab, var(--ui-primary) 90%, var(--ui-primary-fg) 10%);
+}
+
+.countBadge {
+  border: 0;
+  background: var(--ui-primary);
+  color: var(--ui-primary-fg);
+  font-weight: 600;
+}
+
+.contextField {
+  min-block-size: 2.25rem;
+  border: 1px solid var(--ui-input);
+  border-radius: var(--radius-lg);
+  background: var(--w-field, var(--ui-bg));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+}
+
+.contextField:focus-within {
+  border-color: var(--ui-ring);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ui-ring) 20%, transparent);
+}
+
+.contextLabel {
+  color: var(--ui-muted-fg);
+  font-weight: 500;
+}
+
+.searchInput {
+  min-block-size: 2.25rem;
+  border: 1px solid var(--ui-input);
+  border-radius: var(--radius-lg);
+  background: var(--w-field, var(--ui-bg));
+  color: var(--ui-fg);
+  font-size: 0.875rem;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+}
+
+.searchInput:focus {
+  border-color: var(--ui-ring);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ui-ring) 20%, transparent);
+}
+
+.searchSubmit {
+  border: 1px solid var(--ui-input);
+  border-radius: var(--radius-lg);
+  background: var(--ui-overlay);
+  color: var(--ui-muted-fg);
+}
+
+.searchSubmit:hover {
+  background: var(--ui-secondary);
+  color: var(--ui-fg);
+}
+
+.panel {
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-xl);
+  background: var(--ui-overlay);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
+}
+
+.panelHeader {
+  border-block-end-color: var(--ui-border);
+}
+
+.panelTitle {
+  color: var(--ui-fg);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.panelTitle > svg {
+  color: var(--ui-muted-fg);
+}
+
+.panelFooter {
+  border-block-start-color: var(--ui-border);
+  background: var(--ui-muted);
+}
+
+.periodPill {
+  border-color: var(--ui-border);
+  border-radius: 999px;
+  background: var(--ui-secondary);
+  color: var(--ui-muted-fg);
+  font-weight: 500;
+}
+
+.status {
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.tableWrap {
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-lg);
+  background: var(--ui-overlay);
+}
+
+.table {
+  color: var(--ui-fg);
+  font-size: 0.875rem;
+}
+
+.table th {
+  padding: 0.5rem 0.75rem;
+  border-block-end: 1px solid var(--ui-border);
+  background: var(--ui-muted);
+  color: var(--ui-muted-fg);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.table td {
+  padding: 0.625rem 0.75rem;
+  border-block-end: 1px solid var(--ui-border);
+}
+
+.table tbody tr:hover td {
+  background: color-mix(in oklab, var(--ui-muted) 75%, transparent);
+}
+
+.cellStrong {
+  color: var(--ui-fg);
+  font-weight: 500;
+}
+
+.cellLink,
+.cellLink:hover {
+  color: var(--ui-primary-subtle-fg);
+  font-weight: 500;
+}
+
+.tableFooter {
+  color: var(--ui-muted-fg);
+  font-size: 0.8125rem;
+}
+
+.pageButton {
+  min-inline-size: 2.25rem;
+  block-size: 2.25rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-lg);
+  background: var(--ui-overlay);
+  color: var(--ui-fg);
+  font-size: 0.875rem;
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+}
+
+.pageButton:hover {
+  border-color: var(--ui-input);
+  background: var(--ui-secondary);
+  color: var(--ui-fg);
+}
+
+.pageCurrent,
+.pageCurrent:hover {
+  border-color: color-mix(in oklab, var(--ui-primary) 82%, var(--ui-fg) 18%);
+  background: var(--ui-primary);
+  color: var(--ui-primary-fg);
+}
+
+.empty {
+  color: var(--ui-muted-fg);
+}
+
+.empty > svg {
+  color: var(--ui-muted-fg);
+}
+
+.emptyTitle {
+  color: var(--ui-fg);
+  font-weight: 600;
+}
+
+.emptyHint {
+  color: var(--ui-muted-fg);
+}
+
+.totalsRow td {
+  border-block-start: 1px solid var(--ui-border);
+  background: var(--ui-muted);
+  font-weight: 600;
+}
+
+.parameters {
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-xl);
+  background: var(--ui-overlay);
+}
+
+.drillHint {
+  color: var(--ui-muted-fg);
+}
+
+.saveBar {
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-xl);
+  background: var(--ui-overlay);
+  box-shadow: 0 8px 24px -8px rgb(0 0 0 / 18%);
+}
+
+.saveBarNote {
+  color: var(--ui-muted-fg);
+}
+
+.dialog {
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-2xl);
+  background: var(--ui-overlay);
+  color: var(--ui-fg);
+  box-shadow: 0 24px 64px -16px rgb(0 0 0 / 30%);
+}
+
+.dialog::backdrop {
+  background: rgb(0 0 0 / 28%);
+  backdrop-filter: blur(2px);
+}
+
+.dialogHead {
+  border-block-end-color: var(--ui-border);
+  background: transparent;
+}
+
+.dialogHead h2 {
+  color: var(--ui-fg);
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+
+.dialogClose {
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--ui-muted-fg);
+}
+
+.dialogClose:hover {
+  background: var(--ui-secondary);
+  color: var(--ui-fg);
+}
+
+.dialogNotice {
+  border-radius: var(--radius-lg);
+}
+
+/* The global list table, chip and action, wherever a page draws them outside
+   a `.sapPage` (that scope has its own, in admin.module.css). `.erp-root` is
+   the wrapper every signed-in page sits in. */
+:global(.erp-root) :global(.table-wrap) {
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-lg);
+  background: var(--ui-overlay);
+}
+
+:global(.erp-root) :global(table.list) th,
+:global(.erp-root) :global(table.list) td {
+  padding: 0.5rem 0.75rem;
+  border-color: var(--ui-border);
+  font-size: 0.875rem;
+}
+
+:global(.erp-root) :global(table.list) thead th {
+  background: var(--ui-muted);
+  color: var(--ui-muted-fg);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+:global(.erp-root) :global(table.list) tbody tr:hover > td {
+  background: color-mix(in oklab, var(--ui-muted) 75%, transparent);
+}
+
+:global(.erp-root) :global(.status) {
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+:global(.erp-root) :global(.action) {
+  min-block-size: 2.25rem;
+  border-radius: var(--radius-lg);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
 }

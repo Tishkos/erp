@@ -9097,6 +9097,7 @@
     }
   },
   "home": {
+    "table": "جدول",
     "widget": {
       "approvals_waiting": {
         "title": "بانتظار موافقتي",

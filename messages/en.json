@@ -9097,6 +9097,7 @@
     }
   },
   "home": {
+    "table": "Table",
     "widget": {
       "approvals_waiting": {
         "title": "Waiting for my approval",

@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { AdminPage } from '@/components/admin';
 import { SectionTabs } from '@/components/admin/section-tabs';
-import { ChartsBand, KpiRow, ListBand, QuietBand, UnavailableBand, homeText } from '@/components/admin/home-widgets';
+import { ChartsBand, KpiRow, ListBand, QuietBand, UnavailableBand, fullRows, homeText, listColumns } from '@/components/admin/home-widgets';
 import { formatBusinessDate } from '@/i18n/config';
 import { visibleRoute } from '@/server/delivered';
 import * as home from '@/server/services/home';
@@ -22,16 +22,23 @@ import { optionalContext, withCurrentUser } from '@/server/session';
  *
  * Order, top to bottom: the title and the few shortcuts this person's work
  * earns; the primary figures; the trends where there is something to draw; what
- * can be acted on; then, in one table, whatever the person may see that has
+ * can be acted on; then, together, whatever the person may see that has
  * nothing in it. Each figure opens the screen that proves it. A role without
  * a family's data is told so in a sentence at the foot, and a widget the person
  * may see but that has nothing in it says that, in its own words, rather than
  * drawing a zero.
  *
+ * Drawn in Intent UI's dashboard manner (2026-10-06): stat cards in a grid,
+ * chart cards two to a row, list cards two to a row on a wide screen — a list
+ * of five columns or more takes the whole row — in the registry's order.
+ *
  * The redirect is the one thing the blank version of this page did that
  * mattered: an unauthenticated visitor reaches the sign-in form, not a screen.
  */
 export const dynamic = 'force-dynamic';
+
+/** A list this wide reads badly in half a row. */
+const FULL_ROW_FROM_COLUMNS = 5;
 
 export default async function Home() {
   const context = await optionalContext();
@@ -45,6 +52,8 @@ export default async function Home() {
   // A widget with rows or a chart is drawn; one with nothing in it (or unreadable) is named in the quiet band.
   const drawn = (widget: (typeof view.list)[number]) => widget.outcome.state === 'ready';
   const quiet = [...view.chart, ...view.list].filter((widget) => !drawn(widget));
+  const lists = view.list.filter(drawn);
+  const wide = fullRows(lists.map((widget) => listColumns(widget) >= FULL_ROW_FROM_COLUMNS));
 
   return (
     <AdminPage
@@ -64,13 +73,19 @@ export default async function Home() {
       title={t('dashboard.title')}
       variant="sap"
     >
-      <KpiRow served={visibleRoute} widgets={view.kpi} x={x} />
-      <ChartsBand served={visibleRoute} widgets={view.chart} x={x} />
-      {view.list.filter(drawn).map((widget) => (
-        <ListBand key={widget.key} served={visibleRoute} widget={widget} x={x} />
-      ))}
-      <QuietBand widgets={quiet} x={x} />
-      <UnavailableBand families={view.unavailable} x={x} />
+      <div className="flex min-w-0 flex-col gap-6 text-sm">
+        <KpiRow served={visibleRoute} widgets={view.kpi} x={x} />
+        <ChartsBand served={visibleRoute} widgets={view.chart} x={x} />
+        {lists.length > 0 ? (
+          <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
+            {lists.map((widget, index) => (
+              <ListBand className={wide[index] ? 'xl:col-span-2' : undefined} key={widget.key} served={visibleRoute} widget={widget} x={x} />
+            ))}
+          </div>
+        ) : null}
+        <QuietBand widgets={quiet} x={x} />
+        <UnavailableBand families={view.unavailable} x={x} />
+      </div>
     </AdminPage>
   );
 }

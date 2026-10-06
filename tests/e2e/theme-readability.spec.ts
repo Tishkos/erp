@@ -5,10 +5,21 @@ import writeXlsxFile from 'write-excel-file/node';
 import { PALETTES as palettes, ACCENTS as accents } from '../../src/server/domain/appearance';
 
 const darkPalettes = ['midnight', 'carbon', 'ocean', 'obsidian_plum', 'evergreen', 'espresso', 'lunar_slate'];
+// The light canvases moved with the Intent UI redesign (2026-10-06): whiter cards, a lighter canvas under them.
 const newCanvases: Record<string, string> = {
   obsidian_plum: '#1b1622', evergreen: '#101e19', espresso: '#211914', lunar_slate: '#222935',
-  ivory_linen: '#f2ece0', glacier: '#eaf3f8', sage_white: '#edf3ec', porcelain_rose: '#f5eff1',
-  dune_bronze: '#c8b99f', harbor_mist: '#a5b5be',
+  ivory_linen: '#f7f2ea', glacier: '#f1f7fa', sage_white: '#f3f7f2', porcelain_rose: '#f9f4f6',
+  dune_bronze: '#d7ccb9', harbor_mist: '#becad0',
+};
+
+// Each accent's primary (admin.module.css › the accent blocks) and the ink drawn on it.
+const accentPrimary: Record<string, string> = {
+  gold: 'rgb(245, 158, 11)', red: 'rgb(220, 38, 38)', blue: 'rgb(21, 93, 252)',
+  green: 'rgb(21, 128, 61)', purple: 'rgb(147, 51, 234)',
+};
+const accentInk: Record<string, string> = {
+  gold: 'rgb(59, 29, 2)', red: 'rgb(255, 255, 255)', blue: 'rgb(255, 255, 255)',
+  green: 'rgb(255, 255, 255)', purple: 'rgb(255, 255, 255)',
 };
 
 async function signIn(page: Page) {
@@ -41,7 +52,7 @@ function contrast(a: string, b: string) {
   return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 }
 
-test('checkbox has a white tick in light themes and a dark tick in dark themes', async ({ page }) => {
+test('checkbox wears the accent, its tick the ink on it, in every palette', async ({ page }) => {
   await page.goto('/sign-in');
   const checkbox = page.locator('input[name="remember"]');
   for (const palette of palettes) {
@@ -52,8 +63,9 @@ test('checkbox has a white tick in light themes and a dark tick in dark themes',
       tick: getComputedStyle(el, '::before').backgroundColor,
       visibility: getComputedStyle(el, '::before').visibility,
     }));
-    expect(checked.background).toBe('rgb(233, 170, 36)');
-    expect(checked.tick).toBe(darkPalettes.includes(palette) ? 'rgb(23, 36, 31)' : 'rgb(255, 255, 255)');
+    expect(checked.background).toBe(accentPrimary.gold);
+    expect(checked.tick).toBe(accentInk.gold);
+    expect(contrast(checked.tick, checked.background), `${palette} tick`).toBeGreaterThanOrEqual(3);
     expect(checked.visibility).toBe('visible');
     await checkbox.focus();
     await page.keyboard.press('Space');
@@ -122,11 +134,8 @@ test('preview swatches do not recolor the workspace and dark text stays readable
       expect(contrast(colors.normal.text, colors.selected), `${palette}/${accent} selection`).toBeGreaterThanOrEqual(4.5);
       expect(contrast(colors.button.text, colors.button.bg), `${palette}/${accent} button`).toBeGreaterThanOrEqual(4.5);
       expect(contrast(colors.heading, colors.headingBg), `${palette}/${accent} heading`).toBeGreaterThanOrEqual(4.5);
-      const expectedAccents: Record<string, string> = {
-        gold: 'rgb(233, 170, 36)', red: 'rgb(217, 106, 80)', blue: 'rgb(111, 159, 206)',
-        green: 'rgb(109, 168, 104)', purple: 'rgb(151, 123, 201)',
-      };
-      if (expectedAccents[accent]) expect(colors.button.bg).toBe(expectedAccents[accent]);
+      if (accentPrimary[accent]) expect(colors.button.bg).toBe(accentPrimary[accent]);
+      if (accentInk[accent]) expect(colors.button.text).toBe(accentInk[accent]);
       if (darkPalettes.includes(palette)) {
         expect(colors.scheme).toBe('dark');
         expect(colors.heading).not.toBe('rgb(29, 49, 41)');

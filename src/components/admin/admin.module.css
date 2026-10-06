@@ -1829,23 +1829,25 @@
      These were four sets of hard-coded pastels, which is why every dark
      palette still drew a Draft chip in cream on a near-black window
      (reported 2026-09-29): a colour written as a hex cannot follow a theme.
-     Light values first, the same ones they always were; the dark palettes
+     Light values first — Intent UI's soft tints since the redesign
+     (2026-10-06): a neutral chip for the resting states (draft and its
+     kind), green, blue and red tints for the rest; the dark palettes
      override the whole set below, in one place. */
-  --chip-line: #c1aa67;
-  --chip-bg: #fff3bd;
-  --chip-ink: #654b06;
-  --chip-good-line: #86a28c;
-  --chip-good-bg: #e2f0df;
-  --chip-good-ink: #235b32;
-  --chip-info-line: #91a8bb;
-  --chip-info-bg: #e5eef5;
-  --chip-info-ink: #294f6d;
-  --chip-bad-line: #ca9b94;
-  --chip-bad-bg: #f7e5e2;
-  --chip-bad-ink: #7e332c;
-  --chip-warn-line: #b03a2e;
-  --chip-warn-bg: #f8d7d2;
-  --chip-warn-ink: #7d201a;
+  --chip-line: color-mix(in srgb, var(--w-text) 14%, var(--w-bg));
+  --chip-bg: var(--w-head-strong);
+  --chip-ink: var(--w-label);
+  --chip-good-line: #a7f3d0;
+  --chip-good-bg: #ecfdf5;
+  --chip-good-ink: #047857;
+  --chip-info-line: #bfdbfe;
+  --chip-info-bg: #eff6ff;
+  --chip-info-ink: #1d4ed8;
+  --chip-bad-line: #fecaca;
+  --chip-bad-bg: #fef2f2;
+  --chip-bad-ink: #b91c1c;
+  --chip-warn-line: #fca5a5;
+  --chip-warn-bg: #fee2e2;
+  --chip-warn-ink: #991b1b;
 
   /* ── Charts ──────────────────────────────────────────────────────────────
      Two categorical slots and a five-step ordinal ramp, both validated
@@ -4979,6 +4981,8 @@
   --w-selected-strong: color-mix(in srgb, var(--w-amber-b) 28%, var(--w-bg));
   --w-focus: color-mix(in srgb, var(--w-amber-b) 16%, var(--w-field));
   --w-title-line: var(--w-amber-b);
+  /* Text in the accent, on a dark ground, is the accent lifted (the redesign). */
+  --w-primary-strong: color-mix(in srgb, var(--w-primary) 55%, #ffffff);
   --status-rejected: #ff9b9b;
   --status-posted: #75d7a1;
   --status-approved: #9cbfff;
@@ -4991,9 +4995,9 @@
      belongs to whichever dark palette is on and not to a generic "dark mode".
      The mix is against `--w-field`, so Espresso's chips are warm and Ocean's
      are cool without either being written down. */
-  --chip-line: color-mix(in srgb, var(--status-submitted) 55%, var(--w-line-strong));
-  --chip-bg: color-mix(in srgb, var(--status-submitted) 16%, var(--w-field));
-  --chip-ink: var(--status-submitted);
+  --chip-line: var(--w-line-strong);
+  --chip-bg: var(--w-head-strong);
+  --chip-ink: var(--w-label);
   --chip-good-line: color-mix(in srgb, var(--status-posted) 55%, var(--w-line-strong));
   --chip-good-bg: color-mix(in srgb, var(--status-posted) 16%, var(--w-field));
   --chip-good-ink: var(--status-posted);
@@ -5038,7 +5042,8 @@
   min-block-size: 1rem;
   padding: 0;
   border: 1px solid var(--w-line-strong);
-  border-radius: var(--w-radius-sm);
+  /* Intent UI's checkbox: a small, softly rounded square (the redesign). */
+  border-radius: 0.3rem;
   background: var(--w-field);
   vertical-align: middle;
   cursor: pointer;
@@ -5056,7 +5061,7 @@
 :global([data-palette] input[type='checkbox']:checked),
 :global([data-palette] input[type='checkbox']:indeterminate) {
   background: var(--w-check);
-  border-color: #b77d0b;
+  border-color: var(--w-check);
 }
 
 :global([data-palette] input[type='checkbox']:checked)::before,
@@ -5895,4 +5900,1208 @@
 .chartWide .chartSvg {
   block-size: 12rem;
 }
+
+/* ══ The Intent UI redesign (2026-10-06) ══════════════════════════════════
+   By direction: "the current system looks extremely old — update the UI
+   completely … the invoicing forms are good but the UI is not … I want to see
+   Intent UI". Everything above is the old document-window look; this block
+   restyles the same classes in Intent UI's terms (docs/design/intent-ui.md).
+   Each selector repeats the one it replaces, so it wins by order alone; the
+   layout, the fields and the markup are unchanged. Colours are the --ui-*
+   theme (src/app/intent-theme.css), so every palette and accent follows. */
+
+/* ── The page ─────────────────────────────────────────────────────────── */
+.sapDoc,
+.sapPage {
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.sapPage {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.sapPage .sapPageHeader {
+  min-block-size: 0;
+  align-items: flex-end;
+  gap: 1rem;
+  margin-block-end: 1.25rem;
+  padding: 0.25rem 0 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.sapPage .sapPageHeader h1 {
+  color: var(--ui-fg);
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+:global(html[lang='ar']) .sapPage .sapPageHeader h1 {
+  letter-spacing: 0;
+}
+
+.sapPage .sapPageHeader p {
+  margin-block-start: 0.3rem;
+  color: var(--ui-muted-fg);
+  font-size: 0.875rem;
+}
+
+.sapPage .crumbs {
+  gap: 0.5rem;
+  margin-block-end: 0.75rem;
+  color: var(--ui-muted-fg);
+  font-size: 0.8125rem;
+}
+
+.sapPage .backButton {
+  min-block-size: 2rem;
+  padding-inline: 0.5rem 0.75rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-lg);
+  color: var(--ui-fg);
+  background: var(--ui-overlay);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.sapPage .backButton:hover {
+  border-color: var(--ui-input);
+  color: var(--ui-fg);
+  background: var(--ui-secondary);
+}
+
+.sapPage .crumbTrail,
+.sapPage .crumbTrail a {
+  color: var(--ui-muted-fg);
+}
+
+.sapPage .crumbTrail a:hover {
+  color: var(--ui-fg);
+}
+
+.sapPage .crumbTrail strong {
+  color: var(--ui-fg);
+  font-weight: 500;
+}
+
+/* ── Section tabs: Intent's underline tabs ──────────────────────────────── */
+.sapPage .tabsBar {
+  gap: 0.25rem;
+  margin-block-end: 1.25rem;
+  padding: 0;
+  border: 0;
+  border-block-end: 1px solid var(--ui-border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.sapPage .tabItem {
+  position: relative;
+  min-block-size: 2.5rem;
+  padding-inline: 0.75rem;
+  border: 0;
+  border-radius: 0;
+  color: var(--ui-muted-fg);
+  background: transparent;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.sapPage .tabItem::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0.5rem;
+  inset-block-end: -1px;
+  block-size: 2px;
+  border-radius: 2px 2px 0 0;
+  background: transparent;
+}
+
+.sapPage .tabItem:hover {
+  color: var(--ui-fg);
+  background: transparent;
+}
+
+.sapPage .tabItem:hover::after {
+  background: var(--ui-border);
+}
+
+.sapPage .tabItem[aria-current='page'] {
+  color: var(--ui-fg);
+  background: transparent;
+  box-shadow: none;
+}
+
+.sapPage .tabItem[aria-current='page']::after {
+  background: var(--ui-primary);
+}
+
+/* ── Windows, cards, panels ─────────────────────────────────────────────── */
+.sapWindow {
+  margin-block-end: 1.25rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-xl);
+  background: var(--ui-overlay);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
+}
+
+.sapTitle {
+  min-block-size: 3.25rem;
+  gap: 1rem;
+  padding: 0.75rem 1.25rem;
+  border-block-end: 1px solid var(--ui-border);
+  background: transparent;
+  color: var(--ui-fg);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.sapTitleMeta {
+  color: var(--ui-muted-fg);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.sapBody {
+  padding: 1.25rem;
+  background: transparent;
+}
+
+.sapTitleActions {
+  gap: 0.25rem;
+}
+
+/* The four doors — printer, paperclip, notes, clock — as Intent's plain icon buttons. */
+.sapDoc.sapDoc .sapIconButton,
+.sapDoc.sapDoc a.sapIconButton {
+  min-block-size: 2.25rem;
+  min-inline-size: 2.25rem;
+  justify-content: center;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--ui-muted-fg);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+.sapDoc.sapDoc .sapIconButton:hover,
+.sapDoc.sapDoc a.sapIconButton:hover {
+  border-color: transparent;
+  background: var(--ui-secondary);
+  color: var(--ui-fg);
+}
+
+.sapDoc .sapIconButton svg {
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+}
+
+.sapIconCount {
+  min-inline-size: 1.25rem;
+  min-block-size: 1.25rem;
+  padding-inline: 0.3rem;
+  background: var(--ui-primary);
+  color: var(--ui-primary-fg);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.sapDoc.sapDoc section {
+  padding: 1.25rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-xl);
+  background: var(--ui-overlay);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
+}
+
+.sapDoc.sapDoc section > header {
+  margin: -1.25rem -1.25rem 1rem;
+  padding: 0.75rem 1.25rem;
+  border-block-end: 1px solid var(--ui-border);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  background: transparent;
+}
+
+.sapDoc.sapDoc section > header h2 {
+  color: var(--ui-fg);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.sapPage :global(section.panel),
+.sapPage :global(section[class*='panel']) {
+  padding: 1.25rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-xl);
+  background: var(--ui-overlay);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
+}
+
+.sapPage :global(section[class*='panel']) > header {
+  margin: -1.25rem -1.25rem 1rem;
+  padding: 0.75rem 1.25rem;
+  border-block-end: 1px solid var(--ui-border);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.sapPage :global(section[class*='panel']) > header h2 {
+  color: var(--ui-fg);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.sapPage :global(section[class*='panelFlush']) {
+  padding: 0;
+  overflow: hidden;
+}
+
+.sapPage :global(section[class*='panelFlush']) > header {
+  margin: 0;
+}
+
+/* ── The field block ────────────────────────────────────────────────────── */
+.sapFields {
+  gap: 1rem 1.25rem;
+}
+
+.sapField {
+  gap: 0.375rem;
+}
+
+.sapLabel {
+  color: var(--ui-muted-fg);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.sapBox {
+  min-block-size: 2.25rem;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-lg);
+  background: var(--ui-muted);
+  color: var(--ui-fg);
+  font-size: 0.875rem;
+}
+
+/* A status in the field block is a badge, not a box. */
+.sapStatus {
+  inline-size: fit-content;
+  min-inline-size: 0;
+  min-block-size: 1.75rem;
+  align-self: start;
+  padding: 0.125rem 0.625rem;
+  border-radius: var(--radius-md);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.sapGridCaption {
+  min-block-size: 0;
+  gap: 0.5rem;
+  margin-block-start: 1.5rem;
+  padding: 0 0 0.625rem;
+  border: 0;
+  background: transparent;
+  color: var(--ui-fg);
+  font-weight: 600;
+}
+
+.sapDisclosure {
+  color: var(--ui-fg);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.sapGridCount {
+  min-inline-size: 1.5rem;
+  min-block-size: 1.5rem;
+  padding-inline: 0.45rem;
+  border: 0;
+  background: var(--ui-secondary);
+  color: var(--ui-muted-fg);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* ── Controls: Intent's Input and NativeSelect on the native elements ───── */
+.sapDoc.sapDoc input,
+.sapDoc.sapDoc select,
+.sapDoc.sapDoc textarea,
+.sapPage.sapPage .input,
+.sapPage.sapPage .select,
+.sapPage.sapPage .textarea {
+  min-block-size: 2.25rem;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--ui-input);
+  border-radius: var(--radius-lg);
+  background: var(--w-field, var(--ui-bg));
+  color: var(--ui-fg);
+  font: inherit;
+  font-size: 0.875rem;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+  transition: border-color 150ms, box-shadow 150ms;
+}
+
+.sapPage.sapPage .input,
+.sapPage.sapPage .select {
+  block-size: 2.25rem;
+}
+
+.sapPage.sapPage .textarea,
+.sapDoc.sapDoc textarea {
+  min-block-size: 5rem;
+}
+
+.sapDoc.sapDoc input::placeholder,
+.sapDoc.sapDoc textarea::placeholder,
+.sapPage.sapPage .input::placeholder,
+.sapPage.sapPage .textarea::placeholder {
+  color: var(--ui-muted-fg);
+  opacity: 0.8;
+}
+
+.sapDoc.sapDoc input:hover,
+.sapDoc.sapDoc select:hover,
+.sapDoc.sapDoc textarea:hover,
+.sapPage.sapPage .input:hover,
+.sapPage.sapPage .select:hover,
+.sapPage.sapPage .textarea:hover {
+  border-color: color-mix(in oklab, var(--ui-input) 70%, var(--ui-fg) 30%);
+}
+
+.sapDoc.sapDoc input:focus,
+.sapDoc.sapDoc select:focus,
+.sapDoc.sapDoc textarea:focus,
+.sapPage.sapPage .input:focus,
+.sapPage.sapPage .select:focus,
+.sapPage.sapPage .textarea:focus {
+  border-color: var(--ui-ring);
+  background: var(--w-field, var(--ui-bg));
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ui-ring) 20%, transparent);
+}
+
+.sapDoc.sapDoc input:disabled,
+.sapDoc.sapDoc select:disabled,
+.sapDoc.sapDoc textarea:disabled,
+.sapDoc.sapDoc input[readonly],
+.sapPage.sapPage .input:disabled,
+.sapPage.sapPage .select:disabled {
+  background: var(--ui-muted);
+  color: var(--ui-muted-fg);
+  box-shadow: none;
+}
+
+/* Native selects lose the browser's dated arrow for Intent's chevron. */
+.sapDoc.sapDoc select:not([multiple]):not([size]),
+.sapPage.sapPage .select:not([multiple]):not([size]) {
+  appearance: none;
+  padding-inline-end: 2rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a8a93' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 15 5 5 5-5'/%3E%3Cpath d='m7 9 5-5 5 5'/%3E%3C/svg%3E");
+  background-position: right 0.6rem center;
+  background-repeat: no-repeat;
+  background-size: 1rem;
+}
+
+:global(html[dir='rtl']) .sapDoc.sapDoc select:not([multiple]):not([size]),
+:global(html[dir='rtl']) .sapPage.sapPage .select:not([multiple]):not([size]) {
+  padding-inline-end: 0.75rem;
+  padding-inline-start: 2rem;
+  background-position: left 0.6rem center;
+}
+
+/* The checkbox and radio keep their own rules (the accent's colour); they must
+   not take the box above. */
+.sapDoc.sapDoc input:is([type='checkbox'], [type='radio']),
+.sapPage.sapPage input:is([type='checkbox'], [type='radio']) {
+  min-inline-size: 1rem;
+  min-block-size: 1rem;
+  inline-size: 1rem;
+  block-size: 1rem;
+  padding: 0;
+  box-shadow: none;
+}
+
+/* The checkbox is drawn by hand (appearance: none); the radio stays native, in the accent. */
+.sapDoc.sapDoc input[type='checkbox'],
+.sapPage.sapPage input[type='checkbox'] {
+  border: 1px solid var(--ui-input);
+  border-radius: 0.3rem;
+  background: var(--w-field, var(--ui-bg));
+}
+
+.sapDoc.sapDoc input[type='checkbox']:is(:checked, :indeterminate),
+.sapPage.sapPage input[type='checkbox']:is(:checked, :indeterminate) {
+  border-color: var(--w-check);
+  background: var(--w-check);
+}
+
+.sapDoc.sapDoc input[type='file'] {
+  padding: 0.3rem 0.5rem;
+}
+
+.sapPage .hint,
+.sapPage .uploadHint {
+  color: var(--ui-muted-fg);
+  font-size: 0.8125rem;
+}
+
+.sapPage .label,
+.sapDoc .label,
+.sapPage .dialog .label {
+  color: var(--ui-fg);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.sapPage .required {
+  color: var(--ui-danger-subtle-fg);
+}
+
+.sapDoc .field,
+.sapPage .dialog .field {
+  gap: 0.375rem;
+}
+
+.sapPage .grid,
+.sapPage .dialog .grid {
+  gap: 1rem 1.25rem;
+}
+
+.sapPage .dialog .form,
+.sapPage .form {
+  gap: 1.25rem;
+}
+
+/* ── Buttons: Intent's outline, primary and danger ──────────────────────── */
+.sapDoc.sapDoc button,
+.sapPage.sapPage .button,
+.sapPage :global(.action) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-inline-size: 0;
+  min-block-size: 2.25rem;
+  padding: 0.375rem 0.875rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-lg);
+  background: var(--ui-overlay);
+  color: var(--ui-fg);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: nowrap;
+  text-decoration: none;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
+  cursor: pointer;
+  transition: background-color 150ms, border-color 150ms, color 150ms, box-shadow 150ms;
+}
+
+.sapDoc.sapDoc button:hover,
+.sapPage.sapPage .button:hover,
+.sapPage :global(.action):hover {
+  border-color: var(--ui-input);
+  background: var(--ui-secondary);
+  color: var(--ui-fg);
+}
+
+.sapDoc.sapDoc button svg,
+.sapPage.sapPage .button svg {
+  inline-size: 1rem;
+  block-size: 1rem;
+  color: var(--ui-muted-fg);
+}
+
+.sapDoc.sapDoc .primary,
+.sapDoc.sapDoc :global(.action--primary),
+.sapPage.sapPage .primary,
+.sapPage :global(.action--primary) {
+  border-color: color-mix(in oklab, var(--ui-primary) 82%, var(--ui-fg) 18%);
+  background: var(--ui-primary);
+  color: var(--ui-primary-fg);
+}
+
+.sapDoc.sapDoc .primary:hover,
+.sapDoc.sapDoc :global(.action--primary):hover,
+.sapPage.sapPage .primary:hover,
+.sapPage :global(.action--primary):hover {
+  border-color: color-mix(in oklab, var(--ui-primary) 82%, var(--ui-fg) 18%);
+  background: color-mix(in oklab, var(--ui-primary) 90%, var(--ui-primary-fg) 10%);
+  color: var(--ui-primary-fg);
+}
+
+.sapDoc.sapDoc .primary svg,
+.sapDoc.sapDoc :global(.action--primary) svg,
+.sapPage.sapPage .primary svg {
+  color: color-mix(in oklab, var(--ui-primary-fg) 75%, transparent);
+}
+
+.sapDoc.sapDoc .danger,
+.sapPage.sapPage .danger {
+  border-color: color-mix(in oklab, var(--ui-danger) 30%, var(--ui-border));
+  background: var(--ui-overlay);
+  color: var(--ui-danger-subtle-fg);
+}
+
+.sapDoc.sapDoc .danger:hover,
+.sapPage.sapPage .danger:hover {
+  border-color: color-mix(in oklab, var(--ui-danger) 50%, var(--ui-border));
+  background: var(--ui-danger-subtle);
+  color: var(--ui-danger-subtle-fg);
+}
+
+.sapDoc.sapDoc .danger svg,
+.sapPage.sapPage .danger svg {
+  color: currentColor;
+}
+
+.sapPage.sapPage .small,
+.sapDoc.sapDoc .small {
+  min-block-size: 2rem;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.8125rem;
+}
+
+.sapDoc.sapDoc button:focus-visible,
+.sapPage.sapPage .button:focus-visible,
+.sapPage :global(.action):focus-visible,
+.sapPage .backButton:focus-visible,
+.sapPage .tabItem:focus-visible {
+  outline: 2px solid var(--ui-ring);
+  outline-offset: 2px;
+}
+
+.sapDoc.sapDoc button:disabled,
+.sapPage.sapPage .button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── The foot ───────────────────────────────────────────────────────────── */
+.sapFoot {
+  gap: 0.75rem 1.5rem;
+  padding: 0.875rem 1.25rem;
+  border-block-start: 1px solid var(--ui-border);
+  background: var(--ui-muted);
+}
+
+.sapFootActions {
+  gap: 0.5rem 0.75rem;
+}
+
+.sapDoc.sapDoc .sapFootActions button:not(:global(.action--primary)):not(.primary) {
+  border-color: var(--ui-border);
+  background: var(--ui-overlay);
+  color: var(--ui-fg);
+  font-weight: 500;
+}
+
+.sapDoc.sapDoc .sapFootActions button:not(:global(.action--primary)):not(.primary):hover {
+  background: var(--ui-secondary);
+  color: var(--ui-fg);
+}
+
+.sapFootTotal span {
+  color: var(--ui-muted-fg);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.sapFootTotal strong {
+  padding: 0.25rem 0.625rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-lg);
+  background: var(--ui-overlay);
+  color: var(--ui-fg);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+/* ── Grids and registers ────────────────────────────────────────────────── */
+.sapTableWrap {
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-lg);
+  background: var(--ui-overlay);
+  scrollbar-color: var(--ui-border) transparent;
+}
+
+.sapTable {
+  background: transparent;
+  color: var(--ui-fg);
+  font-size: 0.875rem;
+}
+
+.sapTable th,
+.sapTable td {
+  block-size: 2.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 0;
+  border-block-end: 1px solid var(--ui-border);
+}
+
+/* A typed grid keeps a hairline between its columns, so a row reads across. */
+.sapTable:not(.sapRegisterTable) th + th,
+.sapTable:not(.sapRegisterTable) td + td {
+  border-inline-start: 1px solid color-mix(in oklab, var(--ui-border) 70%, transparent);
+}
+
+.sapTable thead th {
+  background: var(--ui-muted);
+  color: var(--ui-muted-fg);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.sapTable thead tr:nth-child(2) th {
+  inset-block-start: 2.5rem;
+}
+
+.sapTable tbody tr:last-child > td {
+  border-block-end: 0;
+}
+
+.sapTable .sapGroup {
+  background: var(--ui-muted);
+}
+
+.sapTable tbody tr:not(.sapFiller):not(.sapEntryRow):hover > td {
+  background: color-mix(in oklab, var(--ui-muted) 75%, transparent);
+}
+
+.sapAccountCell {
+  color: var(--ui-fg);
+  font-weight: 500;
+}
+
+.sapTable .sapEntryRow > td {
+  padding: 0.25rem 0.375rem;
+  background: color-mix(in oklab, var(--ui-primary) 5%, transparent);
+}
+
+.sapTable .sapEntryRow input,
+.sapTable .sapEntryRow select {
+  min-block-size: 2rem;
+  padding-block: 0.25rem;
+}
+
+.sapTable .sapFiller > td {
+  background: transparent;
+}
+
+.sapTable .sapTotalRow > td {
+  border-block-start: 1px solid var(--ui-border);
+  background: var(--ui-muted);
+  font-weight: 600;
+}
+
+.sapRegisterTableWrap {
+  border: 0;
+  border-block-start: 1px solid var(--ui-border);
+  border-radius: 0;
+}
+
+.sapRegisterTable thead th {
+  background: var(--ui-muted);
+}
+
+.sapRegisterTable tbody tr:nth-child(even) > td {
+  background: transparent;
+}
+
+.sapRegisterTable tbody tr:hover > td,
+.sapRegisterTable tbody tr:focus-within > td {
+  background: color-mix(in oklab, var(--ui-muted) 75%, transparent);
+}
+
+.sapEmptyRow {
+  color: var(--ui-muted-fg);
+}
+
+.sapPage .toolbar,
+.sapRegister .toolbar {
+  gap: 0.75rem;
+  padding: 0.875rem 1.25rem;
+  border-block-end-color: var(--ui-border);
+  background: transparent;
+}
+
+.sapPage .toolbarMeta,
+.sapRegister .toolbarMeta {
+  color: var(--ui-muted-fg);
+  font-size: 0.8125rem;
+}
+
+.sapRegister .toolbarClear {
+  color: var(--ui-primary-subtle-fg);
+  font-weight: 500;
+}
+
+.sapPage .toolbarSearch input,
+.sapRegister .toolbarSearch input {
+  min-block-size: 2.25rem;
+  block-size: 2.25rem;
+  padding-inline: 0.75rem;
+  border-color: var(--ui-input);
+  background: var(--w-field, var(--ui-bg));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+}
+
+.sapRegister .toolbarSearch input {
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+}
+
+.sapPage .toolbarSearch button,
+.sapRegister.sapRegister .toolbarSearch button {
+  min-inline-size: 2.5rem;
+  inline-size: 2.5rem;
+  min-block-size: 2.25rem;
+  block-size: 2.25rem;
+  padding: 0;
+  border: 1px solid var(--ui-input);
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  background: var(--ui-overlay);
+  color: var(--ui-muted-fg);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+}
+
+.sapPage .toolbarSearch button:hover,
+.sapRegister.sapRegister .toolbarSearch button:hover {
+  background: var(--ui-secondary);
+  color: var(--ui-fg);
+}
+
+.sapPage .toolbarSearch button svg,
+.sapRegister.sapRegister .toolbarSearch button svg {
+  color: currentColor;
+}
+
+:global(html[dir='rtl']) .sapRegister .toolbarSearch input {
+  border-inline-start: 1px solid var(--ui-input);
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+}
+
+:global(html[dir='rtl']) .sapRegister.sapRegister .toolbarSearch button {
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+}
+
+.filterBar {
+  padding: 0.875rem 1.25rem 0;
+  border-block-end-color: var(--ui-border);
+  background: transparent;
+}
+
+.filterRow {
+  gap: 0.75rem;
+}
+
+/* The global list table, on the same terms. */
+.sapPage :global(.table-wrap) {
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-lg);
+  background: var(--ui-overlay);
+}
+
+.sapPage :global(table.list) {
+  background: transparent;
+  color: var(--ui-fg);
+  font-size: 0.875rem;
+}
+
+.sapPage :global(table.list) th,
+.sapPage :global(table.list) td {
+  block-size: 2.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 0;
+  border-block-end: 1px solid var(--ui-border);
+  font-size: 0.875rem;
+}
+
+.sapPage :global(table.list) thead th {
+  background: var(--ui-muted);
+  color: var(--ui-muted-fg);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.sapPage :global(table.list) tbody tr:nth-child(even) > td {
+  background: transparent;
+}
+
+.sapPage :global(table.list) tbody tr:hover > td,
+.sapPage :global(table.list) tbody tr:focus-within > td {
+  background: color-mix(in oklab, var(--ui-muted) 75%, transparent);
+}
+
+.sapPage :global(table.list) tfoot td,
+.sapPage :global(table.list) tfoot th {
+  background: var(--ui-muted);
+  font-weight: 600;
+}
+
+.sapPage :global(table.list) a {
+  color: var(--ui-primary-subtle-fg);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.sapPage :global(table.list) a:hover {
+  text-decoration: underline;
+}
+
+/* ── Status: Intent's badge, in every place a status is drawn ──────────── */
+.sapRegister .sapRegisterStatus,
+.sapPage :global(.status) {
+  min-block-size: 1.5rem;
+  padding: 0.0625rem 0.5rem;
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+/* ── Links, notes, notices ──────────────────────────────────────────────── */
+.sapLink {
+  gap: 0.25rem;
+  color: var(--ui-primary-subtle-fg);
+  font-weight: 500;
+}
+
+.sapLink:hover {
+  color: var(--ui-primary-subtle-fg);
+}
+
+.sapLink::before {
+  content: none;
+}
+
+.sapNote {
+  color: var(--ui-muted-fg);
+  font-size: 0.8125rem;
+}
+
+.sapWarn {
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--radius-md);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.sapPage .flash {
+  margin-block-end: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-lg);
+  font-size: 0.875rem;
+}
+
+.sapPage .sectionHint {
+  margin-block-end: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid color-mix(in oklab, var(--ui-primary) 22%, var(--ui-border));
+  border-radius: var(--radius-lg);
+  background: color-mix(in oklab, var(--ui-primary) 6%, var(--ui-overlay));
+  color: var(--ui-fg);
+  font-size: 0.875rem;
+}
+
+/* ── Dialogs: Intent's modal ────────────────────────────────────────────── */
+.sapPage .dialog {
+  padding: 0;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-2xl);
+  background: var(--ui-overlay);
+  color: var(--ui-fg);
+  box-shadow: 0 24px 64px -16px rgb(0 0 0 / 30%);
+}
+
+.sapPage .dialog::backdrop {
+  background: rgb(0 0 0 / 28%);
+  backdrop-filter: blur(2px);
+}
+
+.sapPage .dialogBody {
+  gap: 1rem;
+  padding: 1.25rem 1.5rem 1.5rem;
+}
+
+.sapPage .dialogHeader {
+  margin: -1.25rem -1.5rem 0;
+  padding: 1rem 1.25rem 0.875rem 1.5rem;
+  border-block-end: 1px solid var(--ui-border);
+  background: transparent;
+}
+
+.sapPage .dialogHeader h2 {
+  color: var(--ui-fg);
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+
+.sapPage.sapPage .dialogClose {
+  inline-size: 2rem;
+  min-inline-size: 2rem;
+  block-size: 2rem;
+  min-block-size: 2rem;
+  padding: 0;
+  border-color: transparent;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--ui-muted-fg);
+  box-shadow: none;
+}
+
+.sapPage.sapPage .dialogClose:hover {
+  border-color: transparent;
+  background: var(--ui-secondary);
+  color: var(--ui-fg);
+}
+
+.sapPage .confirmActions {
+  padding-block-start: 1rem;
+  border-block-start: 1px solid var(--ui-border);
+}
+
+/* ── Pagination ─────────────────────────────────────────────────────────── */
+.sapPage :global([class*='pageButton']) {
+  min-inline-size: 2.25rem;
+  min-block-size: 2.25rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-lg);
+  background: var(--ui-overlay);
+  color: var(--ui-fg);
+  font-size: 0.875rem;
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+}
+
+.sapPage :global(a[class*='pageButton']):hover {
+  border-color: var(--ui-input);
+  background: var(--ui-secondary);
+  color: var(--ui-fg);
+}
+
+.sapPage :global([class*='pageCurrent']) {
+  border-color: color-mix(in oklab, var(--ui-primary) 82%, var(--ui-fg) 18%);
+  background: var(--ui-primary);
+  color: var(--ui-primary-fg);
+}
+
+.sapPage :global([class*='pageDisabled']) {
+  border-color: var(--ui-border);
+  background: transparent;
+  color: var(--ui-muted-fg);
+  box-shadow: none;
+}
+
+/* ── Pills, key/value, the history, the files, profiles ─────────────────── */
+.pill {
+  gap: 0.3rem;
+  padding: 0.0625rem 0.5rem;
+  border-radius: var(--radius-md);
+  background: var(--ui-secondary);
+  color: var(--ui-secondary-fg);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.pillOn {
+  background: var(--ui-success-subtle);
+  color: var(--ui-success-subtle-fg);
+}
+
+.pillOff {
+  background: var(--ui-secondary);
+  color: var(--ui-muted-fg);
+}
+
+.kv dt {
+  color: var(--ui-muted-fg);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.kv dd {
+  color: var(--ui-fg);
+  font-size: 0.875rem;
+}
+
+.sapDoc .label {
+  color: var(--ui-fg);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.sapDoc .field {
+  gap: 0.375rem;
+}
+
+.sapDoc .timeline li {
+  padding: 0.625rem 0 0.625rem 1rem;
+  border-inline-start-color: var(--ui-border);
+}
+
+.sapDoc .timeline li::before {
+  inline-size: 0.625rem;
+  block-size: 0.625rem;
+  inset-inline-start: -0.35rem;
+  background: var(--ui-primary);
+  box-shadow: 0 0 0 3px var(--ui-overlay);
+}
+
+.sapDoc .timelineWhen,
+.sapDoc .timelineMeta {
+  color: var(--ui-muted-fg);
+  font-size: 0.8125rem;
+}
+
+.sapDoc .timelineAction {
+  color: var(--ui-fg);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.sapDoc .emptyState {
+  padding: 2rem 1rem;
+  color: var(--ui-muted-fg);
+}
+
+.sapDoc .emptyState svg {
+  color: var(--ui-muted-fg);
+}
+
+.sapDoc .emptyState strong {
+  color: var(--ui-fg);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.sapDoc .fileList li {
+  gap: 0.75rem;
+  padding: 0.625rem 0.25rem;
+  border-block-end-color: var(--ui-border);
+}
+
+.sapDoc .fileIcon {
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--ui-primary-subtle);
+  color: var(--ui-primary-subtle-fg);
+}
+
+.sapDoc .fileBody a {
+  color: var(--ui-fg);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.sapDoc .fileMeta {
+  color: var(--ui-muted-fg);
+  font-size: 0.8125rem;
+}
+
+.sapDoc .uploadForm {
+  gap: 0.75rem;
+  margin-block-start: 1rem;
+  padding-block-start: 1rem;
+  border-block-start-color: var(--ui-border);
+}
+
+.sapDoc .uploadPicker {
+  padding: 0.375rem 0.875rem;
+  border: 1px dashed var(--ui-input);
+  border-radius: var(--radius-lg);
+  background: var(--ui-overlay);
+  color: var(--ui-fg);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.sapDoc .uploadPicker:hover {
+  border-color: var(--ui-ring);
+  background: var(--ui-primary-subtle);
+  color: var(--ui-fg);
+}
+
+.profileCard {
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-xl);
+  background: var(--ui-overlay);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
+}
+
+.profileCard h2 {
+  color: var(--ui-fg);
+  font-weight: 600;
+}
+
+.profileCard p {
+  color: var(--ui-muted-fg);
+}
+
+.avatarLarge,
+.avatarSmall,
+.profileAvatar {
+  border-radius: 999px;
+  background: var(--ui-primary-subtle);
+  color: var(--ui-primary-subtle-fg);
+  font-weight: 600;
+}
+
+.profileFacts li {
+  border-block-end-color: var(--ui-border);
+}
+
+.profileFacts li > span:first-child {
+  color: var(--ui-muted-fg);
+}
+
+.profileFacts li > span:last-child {
+  color: var(--ui-fg);
+  font-weight: 500;
+}
+
+/* ── Phone ──────────────────────────────────────────────────────────────── */
+@media (max-width: 40rem) {
+  .sapTitle {
+    padding: 0.75rem 1rem;
+  }
+
+  .sapBody {
+    padding: 1rem;
+  }
+
+  .sapFoot {
+    padding: 0.75rem 1rem;
+  }
+
+  .sapPage .sapPageHeader h1 {
+    font-size: 1.25rem;
+  }
+}
+
 }

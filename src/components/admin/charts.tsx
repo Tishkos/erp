@@ -1,59 +1,74 @@
 import type { ReactNode } from 'react';
-import admin from './admin.module.css';
+import { ChevronDown, Table2 } from 'lucide-react';
+import { cn } from '@/components/intent/cn';
+import { INK } from '@/components/admin/dashboard-band';
 
 /**
- * The dashboard's charts — plain SVG, drawn on the server.
+ * The dashboard's charts, in Intent UI's look (2026-10-06, the redesign).
  *
- * No charting library and no client JavaScript. A chart here is a few hundred
- * bytes of markup the server already had the numbers for, which means it is in
- * the first paint, it prints, and it costs the browser nothing. The cost is
- * that there is no drag-zoom and no animated tooltip; what there is instead is
- * a native `<title>` on every mark (the browser's own hover text) and a table
- * under every chart, so no value is reachable only by pointing at it.
+ * Every chart is a card: a title, a hint, the link to the screen that proves
+ * it, the plot, and under it a `<details>` with the same figures as a table,
+ * so no value is reachable only by pointing at it. The trends over months are
+ * Intent's recharts `BarChart` (`components/home/trend-chart.tsx`, the one
+ * piece that needs the browser, for its tooltips); the ranked lists and the
+ * ageing bar are drawn here, on the server, in Intent's bar-list manner —
+ * they are in the first paint and they print.
  *
  * ── The rules these follow ────────────────────────────────────────────────
- * Marks are thin: bars cap at 24px and never fill their slot, lines are 2px,
- * a 2px gap in the surface colour separates touching fills rather than a
- * stroke drawn around them. Grid and axis are solid hairlines one step off the
- * surface — never dashed, which reads as "threshold" when it is just a grid.
- * Labels are selective: an endpoint, an extreme, the one series that matters —
- * never a number on every mark. Text never wears the series colour; identity
+ * Marks are thin: a ranked bar is an 8px track, a column caps at 24px, a 2px
+ * gap in the surface colour separates touching fills rather than a stroke
+ * drawn around them. Labels are the reader's words and figures beside the
+ * mark, never inside it, and text never wears the series colour — identity
  * comes from the swatch beside it.
  *
- * Colour is not chosen here. Every fill is a `--chart-*` token whose light and
- * dark steps are set once in `admin.module.css` and were validated against
- * this application's own surfaces rather than picked by eye.
+ * Colour: one series follows the palette's own accent (`--ui-primary`); two
+ * series that must be told apart, and the ordered ageing ramp, use the
+ * `--chart-*` steps that were validated for colour vision on this
+ * application's light and dark surfaces (admin.module.css).
  */
 
-const AXIS_INK = 'var(--chart-axis)';
-const GRID = 'var(--chart-grid)';
-
-/** A chart and the table that says the same thing. Named `Chart` because the
- * dashboard already has a `Figure` — a labelled box holding one number. */
+/** A chart and the table that says the same thing. */
 export function Chart({
   title,
   hint,
+  action,
   children,
   table,
+  tableLabel = 'Table',
   wide,
 }: {
   readonly title: string;
   readonly hint?: string | undefined;
+  /** At the end of the title: the screen that reads the chart properly. */
+  readonly action?: ReactNode;
   readonly children: ReactNode;
   /** The WCAG-clean twin. Every chart has one; nothing is gated behind hover. */
   readonly table: ReactNode;
+  readonly tableLabel?: string;
   /** Takes the whole row. For a chart whose x-axis needs the width. */
   readonly wide?: boolean;
 }) {
   return (
-    <figure className={wide ? `${admin.chartFigure} ${admin.chartWide}` : admin.chartFigure}>
-      <figcaption className={admin.chartCaption}>
-        <strong>{title}</strong>
-        {hint ? <span>{hint}</span> : null}
+    <figure
+      className={cn(
+        'm-0 flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-overlay text-overlay-fg shadow-xs',
+        wide && 'lg:col-span-2',
+      )}
+    >
+      <figcaption className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 px-4 pt-4 sm:px-5">
+        <div className="min-w-0">
+          <h3 className="m-0 font-semibold text-base text-fg">{title}</h3>
+          {hint ? <p className="m-0 mt-0.5 text-muted-fg text-sm">{hint}</p> : null}
+        </div>
+        {action ? <div className="shrink-0 pt-0.5">{action}</div> : null}
       </figcaption>
-      {children}
-      <details className={admin.chartTable}>
-        <summary>{table ? 'Table' : ''}</summary>
+      <div className="min-w-0 flex-1 px-4 pt-4 pb-4 sm:px-5">{children}</div>
+      <details className="group/table border-border border-t">
+        <summary className="flex cursor-pointer list-none items-center gap-1.5 px-4 py-2.5 font-medium text-muted-fg text-xs outline-none hover:text-fg focus-visible:bg-muted sm:px-5 [&::-webkit-details-marker]:hidden">
+          <Table2 aria-hidden="true" className="size-3.5" />
+          {tableLabel}
+          <ChevronDown aria-hidden="true" className="size-3.5 transition-transform group-open/table:rotate-180" />
+        </summary>
         {table}
       </details>
     </figure>
@@ -62,19 +77,18 @@ export function Chart({
 
 export interface Series {
   readonly label: string;
-  /** A `--chart-*` custom property name. */
+  /** A colour custom property name, e.g. `--chart-series-1`. */
   readonly token: string;
-  readonly values: readonly number[];
 }
 
 /** The identity channel that is not colour. Always present for two or more series. */
 export function Legend({ series }: { readonly series: readonly Series[] }) {
   if (series.length < 2) return null; // one series: the title already names it
   return (
-    <ul className={admin.chartLegend}>
+    <ul className="m-0 flex list-none flex-wrap items-center gap-x-4 gap-y-1 p-0 text-muted-fg text-xs">
       {series.map((one) => (
-        <li key={one.label}>
-          <span aria-hidden="true" style={{ background: `var(${one.token})` }} />
+        <li className="inline-flex items-center gap-1.5" key={one.label}>
+          <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full" style={{ background: `var(${one.token})` }} />
           {one.label}
         </li>
       ))}
@@ -82,225 +96,108 @@ export function Legend({ series }: { readonly series: readonly Series[] }) {
   );
 }
 
-const niceCeiling = (value: number): number => {
-  if (value <= 0) return 1;
-  const magnitude = 10 ** Math.floor(Math.log10(value));
-  for (const step of [1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10]) {
-    if (value <= step * magnitude) return step * magnitude;
-  }
-  return 10 * magnitude;
-};
-
-/**
- * Two series of columns over time — income against what it cost.
- *
- * Grouped rather than stacked: these two are compared with each other, not
- * added together, and a stack would invite reading the total as a figure that
- * means something. One baseline, one scale. Never a second y-axis.
- */
-export function GroupedColumns({
-  labels,
-  series,
-  format,
-  height = 168,
-}: {
-  readonly labels: readonly string[];
-  readonly series: readonly [Series, Series];
-  readonly format: (value: number) => string;
-  readonly height?: number;
-}) {
-  const width = 720;
-  const pad = { top: 14, right: 8, bottom: 22, left: 8 };
-  const plot = { w: width - pad.left - pad.right, h: height - pad.top - pad.bottom };
-  const top = niceCeiling(Math.max(1, ...series.flatMap((s) => s.values)));
-  const band = plot.w / labels.length;
-  // Two bars, a 2px gap between them, and the band's leftover left as air.
-  const barW = Math.min(24, Math.max(4, (band - 12) / 2));
-  const y = (value: number) => pad.top + plot.h - (value / top) * plot.h;
-  // The one label worth drawing: the tallest column. Its cap is by definition
-  // the highest point on the plot, so there is always room above it, and it is
-  // the figure a reader looks for first.
-  const peakValue = Math.max(0, ...series.flatMap((one) => one.values));
-  const peakAt = series
-    .flatMap((one) => one.values)
-    .indexOf(peakValue) % Math.max(1, labels.length);
-
-  return (
-    <svg
-      className={admin.chartSvg}
-      role="img"
-      viewBox={`0 0 ${width} ${height}`}
-    >
-      {[0.5, 1].map((fraction) => (
-        <line
-          key={fraction}
-          stroke={GRID}
-          strokeWidth="1"
-          x1={pad.left}
-          x2={width - pad.right}
-          y1={y(top * fraction)}
-          y2={y(top * fraction)}
-        />
-      ))}
-
-      {labels.map((label, index) => {
-        const centre = pad.left + band * index + band / 2;
-        return (
-          <g key={label}>
-            {series.map((one, s) => {
-              const value = one.values[index] ?? 0;
-              const barH = Math.max(value > 0 ? 2 : 0, (value / top) * plot.h);
-              const x = centre - barW - 1 + s * (barW + 2);
-              return (
-                <rect
-                  fill={`var(${one.token})`}
-                  height={barH}
-                  key={one.label}
-                  // 4px rounded data-end; the baseline end stays square because
-                  // the radius is smaller than the bar and the rect sits on it.
-                  rx={Math.min(4, barW / 2)}
-                  width={barW}
-                  x={x}
-                  y={pad.top + plot.h - barH}
-                >
-                  <title>{`${label} · ${one.label}: ${format(value)}`}</title>
-                </rect>
-              );
-            })}
-            <text
-              fill={AXIS_INK}
-              fontSize="10"
-              textAnchor="middle"
-              x={centre}
-              y={height - 7}
-            >
-              {label}
-            </text>
-          </g>
-        );
-      })}
-
-      {/* The baseline, and the one label that earns its place: the last month. */}
-      <line
-        stroke={AXIS_INK}
-        strokeWidth="1"
-        x1={pad.left}
-        x2={width - pad.right}
-        y1={pad.top + plot.h}
-        y2={pad.top + plot.h}
-      />
-      {peakValue > 0 ? (
-        <text
-          fill="var(--chart-ink)"
-          fontSize="11"
-          fontWeight="700"
-          textAnchor={peakAt > labels.length / 2 ? 'end' : 'start'}
-          x={
-            peakAt > labels.length / 2
-              ? Math.min(width - pad.right, pad.left + band * peakAt + band)
-              : Math.max(pad.left, pad.left + band * peakAt)
-          }
-          y={Math.max(10, y(peakValue) - 5)}
-        >
-          {format(peakValue)}
-        </text>
-      ) : null}
-    </svg>
-  );
-}
-
 export interface BarRow {
   readonly key: string;
   readonly label: string;
+  /** The plotted length — the last step before drawing, never added again. */
   readonly value: number;
+  /** The figure as the reader reads it, formatted from the service's own decimal string. */
+  readonly text: string;
 }
 
 /**
- * A ranked list as horizontal bars — one series, therefore one colour.
+ * A ranked list as horizontal bars — one series, therefore one colour, the
+ * palette's accent. The longest bar is the whole track; the figure sits at the
+ * end of the label line, not on the bar.
  *
  * Deliberately not a value ramp. Colouring each bar darker-where-bigger would
- * spend the only free channel on what the bar's length already says, and the
- * categories here (accounts, warehouses, customers) have no natural order
- * beyond the one the sort gives them.
+ * spend the only free channel on what the bar's length already says. A
+ * negative balance (an overdrawn account) is a real figure: it keeps its
+ * length by magnitude and wears the validated negative colour.
  */
-export function BarList({
-  rows,
-  format,
-  token = '--chart-series-1',
-}: {
-  readonly rows: readonly BarRow[];
-  readonly format: (value: number) => string;
-  readonly token?: string;
-}) {
-  const top = niceCeiling(Math.max(1, ...rows.map((row) => Math.abs(row.value))));
+export function BarList({ rows }: { readonly rows: readonly BarRow[] }) {
+  const top = Math.max(0, ...rows.map((row) => Math.abs(row.value)));
   return (
-    <ul className={admin.chartBars}>
-      {rows.map((row) => (
-        <li key={row.key}>
-          <span className={admin.chartBarLabel} title={row.label}>
-            {row.label}
-          </span>
-          <span className={admin.chartBarTrack}>
-            <span
-              className={admin.chartBarFill}
-              style={{
-                background: `var(${token})`,
-                // A negative balance is a real figure; it gets a visible sliver
-                // and the status colour, rather than disappearing at zero.
-                inlineSize: `${Math.max(1.5, (Math.abs(row.value) / top) * 100)}%`,
-                ...(row.value < 0 ? { background: 'var(--chart-negative)' } : {}),
-              }}
-            />
-          </span>
-          <span className={admin.chartBarValue}>
-            <bdi dir="ltr">{format(row.value)}</bdi>
-          </span>
-        </li>
-      ))}
+    <ul className="m-0 flex list-none flex-col gap-3 p-0">
+      {rows.map((row) => {
+        const share = top > 0 ? Math.max(1.5, (Math.abs(row.value) / top) * 100) : 0;
+        return (
+          <li className="min-w-0" key={row.key}>
+            <div className="flex items-baseline justify-between gap-3 text-sm">
+              <span className="min-w-0 truncate text-fg" title={row.label}>
+                <bdi dir="auto">{row.label}</bdi>
+              </span>
+              <span className={cn('shrink-0 font-medium tabular-nums', row.value < 0 ? INK.danger : 'text-fg')}>
+                <bdi dir="ltr">{row.text}</bdi>
+              </span>
+            </div>
+            <div aria-hidden="true" className="mt-1.5 h-2 overflow-hidden rounded-full bg-secondary">
+              <div
+                className={cn('h-full rounded-full', row.value < 0 ? 'bg-[var(--chart-negative)]' : 'bg-primary')}
+                style={{ inlineSize: `${share}%` }}
+              />
+            </div>
+          </li>
+        );
+      })}
     </ul>
   );
 }
 
+export interface StackBand {
+  readonly key: string;
+  readonly label: string;
+  /** The plotted share — never added again as money. */
+  readonly value: number;
+  /** 1 … 5, the ordinal ramp step: later is darker. */
+  readonly step: number;
+  readonly text: string;
+}
+
+const RAMP: Readonly<Record<number, string>> = {
+  1: 'var(--chart-ramp-1)',
+  2: 'var(--chart-ramp-2)',
+  3: 'var(--chart-ramp-3)',
+  4: 'var(--chart-ramp-4)',
+  5: 'var(--chart-ramp-5)',
+};
+
 /**
- * One stacked bar of ordered bands — how late the money is.
+ * One stacked bar of ordered bands — how late the money is — and its legend,
+ * one row a band, with the amount and its share of the whole.
  *
  * Ageing buckets are an *ordered* scale, so this is the ordinal ramp rather
- * than the categorical palette: one hue, getting darker as it gets later, which
+ * than categorical colours: one hue, getting darker as it gets later, which
  * reads as "worse" without a second colour being asked to mean anything. The
  * 2px gaps are the surface showing through, not strokes.
  */
-export function StackedBands({
-  bands,
-  format,
-}: {
-  readonly bands: readonly { readonly key: string; readonly label: string; readonly value: number; readonly step: number }[];
-  readonly format: (value: number) => string;
-}) {
-  const total = bands.reduce((sum, one) => sum + one.value, 0);
+export function StackedBands({ bands, locale }: { readonly bands: readonly StackBand[]; readonly locale: string }) {
+  const total = bands.reduce((sum, one) => sum + Math.max(0, one.value), 0);
   if (total <= 0) return null;
+  const percent = new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 });
   return (
     <>
-      <div className={admin.chartStack}>
+      <div aria-hidden="true" className="flex h-3 w-full gap-0.5 overflow-hidden rounded-full">
         {bands.map((one) => (
           <span
-            className={admin.chartStackSegment}
+            className="h-full min-w-1 first:rounded-s-full last:rounded-e-full"
             key={one.key}
-            style={{
-              background: `var(--chart-ramp-${one.step})`,
-              flexBasis: `${(one.value / total) * 100}%`,
-            }}
-            title={`${one.label}: ${format(one.value)}`}
+            style={{ background: RAMP[one.step] ?? RAMP[3], flexBasis: `${(Math.max(0, one.value) / total) * 100}%`, flexGrow: 0, flexShrink: 1 }}
+            title={`${one.label}: ${one.text}`}
           />
         ))}
       </div>
-      <ul className={admin.chartLegend}>
+      <ul className="m-0 mt-4 flex list-none flex-col divide-y divide-border p-0">
         {bands.map((one) => (
-          <li key={one.key}>
-            <span aria-hidden="true" style={{ background: `var(--chart-ramp-${one.step})` }} />
-            {one.label}
-            <strong>
-              <bdi dir="ltr">{format(one.value)}</bdi>
-            </strong>
+          <li className="flex items-center gap-3 py-2 text-sm first:pt-0 last:pb-0" key={one.key}>
+            <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full" style={{ background: RAMP[one.step] ?? RAMP[3] }} />
+            <span className="min-w-0 flex-1 truncate text-fg">{one.label}</span>
+            <span className="shrink-0 text-muted-fg text-xs tabular-nums">
+              <bdi dir="ltr">{percent.format(Math.max(0, one.value) / total)}</bdi>
+            </span>
+            <span className="shrink-0 font-medium text-fg tabular-nums">
+              <bdi dir="ltr">{one.text}</bdi>
+            </span>
           </li>
         ))}
       </ul>

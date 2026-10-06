@@ -165,7 +165,11 @@ html:has(.erp-root[data-palette]),
   --ui-primary: var(--w-primary);
   --ui-primary-fg: var(--w-primary-ink);
   --ui-primary-subtle: color-mix(in oklab, var(--w-primary) 14%, transparent);
-  --ui-primary-subtle-fg: var(--w-primary-strong);
+  /* Text on a tint is the tint's colour with some of the body text in it: the
+     status colours alone came out at 3.6–4.4:1 on their own tints on the light
+     palettes (measured over all 90 palette/accent pairs). Mixed with --w-text
+     they darken on a light palette and stay light on a dark one. */
+  --ui-primary-subtle-fg: color-mix(in oklab, var(--w-primary-strong) 78%, var(--w-text));
   --ui-secondary: var(--w-head-strong);
   --ui-secondary-fg: var(--w-text);
   --ui-overlay: var(--w-paper);
@@ -175,13 +179,13 @@ html:has(.erp-root[data-palette]),
   --ui-muted: var(--w-head);
   --ui-muted-fg: var(--w-muted);
   --ui-success-subtle: color-mix(in oklab, var(--status-posted) 15%, transparent);
-  --ui-success-subtle-fg: var(--status-posted);
+  --ui-success-subtle-fg: color-mix(in oklab, var(--status-posted) 70%, var(--w-text));
   --ui-info-subtle: color-mix(in oklab, var(--status-approved) 15%, transparent);
-  --ui-info-subtle-fg: var(--status-approved);
+  --ui-info-subtle-fg: color-mix(in oklab, var(--status-approved) 70%, var(--w-text));
   --ui-warning-subtle: color-mix(in oklab, var(--status-submitted) 16%, transparent);
-  --ui-warning-subtle-fg: var(--status-submitted);
+  --ui-warning-subtle-fg: color-mix(in oklab, var(--status-submitted) 62%, var(--w-text));
   --ui-danger-subtle: color-mix(in oklab, var(--status-rejected) 14%, transparent);
-  --ui-danger-subtle-fg: var(--status-rejected);
+  --ui-danger-subtle-fg: color-mix(in oklab, var(--status-rejected) 70%, var(--w-text));
   --ui-border: var(--w-line);
   --ui-input: var(--w-line-strong);
   --ui-ring: var(--w-primary);
@@ -190,7 +194,7 @@ html:has(.erp-root[data-palette]),
   --ui-sidebar: var(--w-canvas);
   --ui-sidebar-fg: var(--w-text);
   --ui-sidebar-primary: color-mix(in oklab, var(--w-primary) 14%, transparent);
-  --ui-sidebar-primary-fg: var(--w-primary-strong);
+  --ui-sidebar-primary-fg: color-mix(in oklab, var(--w-primary-strong) 78%, var(--w-text));
   --ui-sidebar-accent: var(--w-head-strong);
   --ui-sidebar-accent-fg: var(--w-text);
   --ui-sidebar-border: var(--w-line);
