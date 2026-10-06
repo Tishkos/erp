@@ -195,7 +195,8 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       // order", the same day): it is the document this company starts from.
       page('ap_invoices', 'ap_invoice', '/payables/invoices'),
       page('purchase_orders', 'purchase_order'),
-      page('goods_receipts', 'goods_receipt'),
+      // Goods Receipts went to the Inventory heading on 2026-10-06, by
+      // direction ("Goods Receipts should be in inventory"); route kept.
       // Labelled Expenses: an expense is a purchase invoice raised and
       // confirmed here (D12), route kept.
       page('service_receipts', 'service_receipt'),
@@ -272,6 +273,10 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     items: [
       page('availability', 'inventory_movement', '/inventory/availability'),
       page('opening_stock', 'opening_stock', '/inventory/opening-stock'),
+      // The purchase order's receipt — Payables' until 2026-10-06, by
+      // direction ("Goods Receipts should be in inventory"). Its address
+      // stayed where every link already points (D-FX-1).
+      page('goods_receipts', 'goods_receipt', '/payables/goods-receipts'),
       page('stock_receipts', 'stock_movement', '/inventory/stock-receipts'),
       page('stock_issues', 'stock_movement', '/inventory/stock-issues'),
       page('transfer_requests', 'warehouse_transfer', '/inventory/transfers'),

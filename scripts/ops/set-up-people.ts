@@ -122,6 +122,9 @@ const SALES = ['sales', 'finance_ar', 'crm'];
 const MONEY_OUT = ['treasury', 'money_transfer'];
 // The import application moved to Transfers & Applications on 2026-10-06; named so the roles keep it.
 const BUYING = ['payables', 'payables_transfers'];
+// Goods Receipts went to the Inventory heading the same day ("Goods Receipts
+// should be in inventory"); the purchasing roles keep the receipt by name.
+const RECEIVING = ['goods_receipt'];
 
 /**
  * Items and units of measure were the Inventory section's on 2026-10-03, when
@@ -260,17 +263,20 @@ const NEW_ROLES = [
       'Sales, the import application and logistics — and nothing else. A sale and a purchase invoice are raised for the CEO. Manar.',
     grants: restrict(
       grants(
-        objectsOf(
-          'sales',
-          'payables',
-          'payables_transfers',
-          'payables_suppliers',
-          'logistics',
-          'logistics_customs',
-          'logistics_shipping',
-          'logistics_in_transit',
-          'logistics_landed_costs',
-        ),
+        [
+          ...objectsOf(
+            'sales',
+            'payables',
+            'payables_transfers',
+            'payables_suppliers',
+            'logistics',
+            'logistics_customs',
+            'logistics_shipping',
+            'logistics_in_transit',
+            'logistics_landed_costs',
+          ),
+          ...RECEIVING,
+        ],
         FULL,
       ),
       /*
@@ -309,8 +315,9 @@ const NEW_ROLES = [
     description:
       'The import application and its papers, in full; inventory to look at. Nothing else. For Maki, when their address is known.',
     grants: restrict(
-      grants(objectsOf('payables', 'payables_transfers', 'logistics_customs', 'logistics_shipping', 'logistics_in_transit', 'logistics_landed_costs'), FULL),
-      grants([...objectsOf('inventory'), ...STOCK_MASTER, ...PAYING], READ),
+      grants([...objectsOf('payables', 'payables_transfers', 'logistics_customs', 'logistics_shipping', 'logistics_in_transit', 'logistics_landed_costs'), ...RECEIVING], FULL),
+      // Inventory to look at — but the goods receipt is theirs in full, so it is kept out of the narrowing.
+      grants([...objectsOf('inventory').filter((object) => !RECEIVING.includes(object)), ...STOCK_MASTER, ...PAYING], READ),
     ),
   },
 ] as const;

@@ -276,13 +276,13 @@ Nothing is saved from this screen. The page has no buttons to create, approve, c
 - "A purchase order with no lines commits the company to nothing." — the import invoice had no lines.
 
 ## Goods Receipts (استلامات البضائع)
-Path: Payables → Purchasing & Invoices → Goods Receipts   |   Arabic: الذمم الدائنة ← المشتريات والفواتير ← استلامات البضائع
+Path: Inventory → Inventory & Warehouses → Goods Receipts   |   Arabic: المخزون ← المخزون والمستودعات ← استلامات البضائع
 Address: /payables/goods-receipts (one receipt: /payables/goods-receipts/<receipt number>)
 Needs: `view` on `goods_receipt`
 What it is for: A read-only register of what arrived, against which purchase order, into which warehouse. Nothing is typed here.
 
 ### How to read the list — Goods Receipts
-1. Open Payables → Purchasing & Invoices → Goods Receipts. Use the page numbers for older receipts; there is no search box.
+1. Open Inventory → Inventory & Warehouses → Goods Receipts (moved there from Payables on 2026-10-06; the address /payables/goods-receipts is unchanged). Use the page numbers for older receipts; there is no search box.
 2. Columns: **Receipt** (الاستلام) — click to open; **Order** (الأمر) — link to the purchase order; **Supplier** (المورّد); **Date** (التاريخ); **Warehouse** (المخزن); **Lines** (البنود) — number of lines; **Status** (الحالة).
 
 ### How to open a record — Goods Receipts

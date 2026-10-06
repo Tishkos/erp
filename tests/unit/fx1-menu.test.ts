@@ -31,14 +31,16 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
     expect(MODULES.find((module) => module.key === 'transfers')?.sectionKeys).toEqual(['payables_transfers']);
     // The purchase invoice first — the document this company starts from
     // (by direction, 2026-10-06: "Purchase Invoices should come first").
-    expect(keysOf('payables').slice(0, 6)).toEqual([
+    expect(keysOf('payables').slice(0, 5)).toEqual([
       'ap_invoices',
       'purchase_orders',
-      'goods_receipts',
       'service_receipts',
       'recurring_contracts',
       'goods_returns',
     ]);
+    // Goods Receipts is Inventory's (by direction, 2026-10-06), at its old address.
+    expect(keysOf('payables')).not.toContain('goods_receipts');
+    expect(keysOf('inventory')).toContain('goods_receipts');
     expect(keysOf('payables_payments')).toEqual([
       'supplier_payments',
       'supplier_advances',
@@ -180,7 +182,7 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
     expect(route('payables_transfers', 'payment_applications')).toBe('/payables/payment-applications');
     expect(route('payables_transfers', 'payables_workbench')).toBe('/payables');
     expect(route('payables', 'purchase_orders')).toBe('/payables/purchase-orders');
-    expect(route('payables', 'goods_receipts')).toBe('/payables/goods-receipts');
+    expect(route('inventory', 'goods_receipts')).toBe('/payables/goods-receipts');
     expect(route('payables', 'service_receipts')).toBe('/payables/service-receipts');
     expect(route('payables_suppliers', 'suppliers')).toBe('/payables/suppliers');
     expect(route('sales', 'customers')).toBe('/sales/customers');
