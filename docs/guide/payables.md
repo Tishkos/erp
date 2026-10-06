@@ -305,7 +305,7 @@ What it is for: What the company has been billed. Every supplier bill is entered
 1. Open Payables → Purchasing & Invoices → Purchase Invoices.
 2. Search with the box "Search this list" (ابحث في هذه القائمة) — it matches any text on the row.
 3. Filter with **View** (العرض) and press **Show** (عرض): All invoices (جميع الفواتير), Imports (الاستيراد), Expenses (المصروفات), Unpaid (غير مدفوعة — unpaid, part paid or overdue), Overdue (متأخرة).
-4. Columns: **Reference** (المرجع) — the invoice number, and beside it the import application number when there is one (both are links); **Posting Date** (تاريخ الترحيل); **Due Date** (تاريخ الاستحقاق); **Supplier Code** (رمز المورّد); **Supplier Name** (اسم المورّد); **Amount** (المبلغ) — the total in IQD, zero until the invoice is posted; **Status** (الحالة); **Payment** (الدفع) — Not posted (غير مرحّلة), Not started (لم تبدأ), Part paid (مدفوعة جزئيًا), Paid (مدفوعة), or Overdue — N days (متأخرة — N يوم) with the latest note written on the invoice shown under it.
+4. Columns: **Reference** (المرجع) — the invoice number, and beside it the import application number when there is one (both are links); **Invoice Date** (تاريخ الفاتورة); **Due Date** (تاريخ الاستحقاق); **Supplier Code** (رمز المورّد); **Supplier Name** (اسم المورّد); **Amount** (المبلغ) — the total in IQD, zero until the invoice is posted; **Status** (الحالة); **Payment** (الدفع) — Not posted (غير مرحّلة), Not started (لم تبدأ), Part paid (مدفوعة جزئيًا), Paid (مدفوعة), or Overdue — N days (متأخرة — N يوم) with the latest note written on the invoice shown under it.
 
 ### How to enter a purchase invoice — Purchase Invoices
 Needs: `create` on `ap_invoice`. With Import ticked also `create` and `edit_draft` on `payable` and `create` and `submit` on `purchase_order`.
@@ -313,7 +313,7 @@ Needs: `create` on `ap_invoice`. With Import ticked also `create` and `edit_draf
 2. If the page says "Add a supplier first.", "Add a stock item first." or "Set up a warehouse first." (or that none of the existing ones is active and approved), that set-up must be done before an invoice can be entered.
 3. Choose the supplier by typing in **Supplier Code** or **Supplier Name** — filling one fills the other.
 4. Choose the **Currency** the supplier's invoice is in; the rate of the day is shown ("1 USD = … IQD").
-5. Check the **Posting Date**.
+5. Check the **Invoice Date**.
 6. Leave **Import** ticked for goods coming from abroad; untick it for a local purchase.
 7. In the lines type the item, quantity, unit price and (optionally) discount, and choose the warehouse. Filling a line opens the next one. The totals row shows the total in the invoice currency and what the ledger will carry in IQD.
 8. Check **Advance payment %** — 20 for an import unless you write another share or clear it — and **Advance paid from** / **Advance payment method**, which open on the first account in the invoice's currency and the first bank method; optionally type a **Note**.
@@ -322,7 +322,7 @@ Needs: `create` on `ap_invoice`. With Import ticked also `create` and `edit_draf
 ### Fields — Purchase Invoices
 - **Supplier Code** / **Supplier Name** (رمز المورّد / اسم المورّد) — required. Only suppliers that are Active (approved) and in use are offered.
 - **Currency** (العملة) — the currency the prices are typed in; opens on IQD. For another currency the system converts every price to dinars at the rate in force on the posting date; the invoice and its journal are in dinars, and the record later shows **Issued in** (محررة بـ) with that rate. If Import is ticked, the import application keeps this currency and it is what the bank is asked to pay.
-- **Posting Date** (تاريخ الترحيل) — required; today by default. It is the invoice date, the date of the journal and of the stock movement.
+- **Invoice Date** (تاريخ الفاتورة) — required; today by default. It is the invoice date, the date of the journal and of the stock movement.
 - **Payable account (statement)** (حساب الذمم الدائنة (كشف الحساب)) — optional. The supplier control account the debt is kept on; opens on the configured account. "As configured" (حسب الإعداد) means the posting mapping decides.
 - **Import** (استيراد) — tick box, ticked by default: "This is an import — open the import application behind it". Ticked: the goods are booked into the branch's In Process (transit) warehouse when the invoice is posted and wait there until the containers are received; the warehouse chosen on the lines is where they will finally be received. Unticked: the goods enter the chosen warehouse as soon as the invoice is posted.
 - **Import application** (معاملة الاستيراد) — "New — opened by this invoice" (جديدة — تفتحها هذه الفاتورة), or choose an open import to add this invoice to it. Used only when Import is ticked.
@@ -343,7 +343,7 @@ Needs: `create` on `ap_invoice`. With Import ticked also `create` and `edit_draf
 
 ### How to open a record and what it shows — Purchase Invoices
 1. Click the invoice number in the list.
-2. Header: **Invoice Number** (رقم الفاتورة); **Import application** (معاملة الاستيراد) — link, when there is one; **Type of fee** (نوع الرسوم) for an expense; **Payment** (الدفع) state; **Status** (الحالة); **Supplier Code** / **Supplier Name** (links to the supplier's profile); the invoice a debit note adjusts, when it is one; **Posting Date**; **Due Date** — shown only once a due date has been set on purpose; **Issued in** (محررة بـ) — currency and rate, for a foreign-currency invoice; **Advance payment %** with its amount, and under it **Advance paid from** — the account (link), the method, and the payment application the posting raised (link, with its status), or "payment application raised when the invoice posts" while it is still a draft; **Raised by** (أنشأها); **Payable account (statement)**; **Expense account (service lines)** (حساب المصروف (سطور الخدمات)); **Submitted by** (قدّمه); **Posted by** (رحّلها).
+2. Header: **Invoice Number** (رقم الفاتورة); **Import application** (معاملة الاستيراد) — link, when there is one; **Type of fee** (نوع الرسوم) for an expense; **Payment** (الدفع) state; **Status** (الحالة); **Supplier Code** / **Supplier Name** (links to the supplier's profile); the invoice a debit note adjusts, when it is one; **Invoice Date**; **Due Date** — shown only once a due date has been set on purpose; **Issued in** (محررة بـ) — currency and rate, for a foreign-currency invoice; **Advance payment %** with its amount, and under it **Advance paid from** — the account (link), the method, and the payment application the posting raised (link, with its status), or "payment application raised when the invoice posts" while it is still a draft; **Raised by** (أنشأها); **Payable account (statement)**; **Expense account (service lines)** (حساب المصروف (سطور الخدمات)); **Submitted by** (قدّمه); **Posted by** (رحّلها).
 3. Lines: #, Item Code, Item Name, Quantity, Unit Price, Discount, Total Price, Warehouse, with the total at the foot.
 4. Under the document, once the invoice is posted: a settlement panel (payment terms, what is paid, what is left, how late, and each payment against it); then **Credit and debit notes on this invoice** (إشعارات الدائن والمدين على هذه الفاتورة) — Kind, Note no., Date, Status, Amount.
 5. The four icons at the top: printer (the Purchase Invoice copy), paperclip (the supplier's PDF, packing list…), notes, clock — see Concepts.
@@ -531,7 +531,7 @@ What it is for: Goods sent back to a supplier, always against the purchase invoi
 
 ### How to read the list — Purchase Returns
 1. Open Payables → Purchasing & Invoices → Purchase Returns; search with the box at the top.
-2. Columns: **Reference** (المرجع) — the return number, click to open; **Posting Date**; **Supplier Code**; **Supplier Name**; **Original Purchase Invoice** (فاتورة الشراء الأصلية); **Offset Account** (الحساب المقابل) — Accounts Payable (الذمم الدائنة) or Bank (البنك); **Status**.
+2. Columns: **Reference** (المرجع) — the return number, click to open; **Invoice Date**; **Supplier Code**; **Supplier Name**; **Original Purchase Invoice** (فاتورة الشراء الأصلية); **Offset Account** (الحساب المقابل) — Accounts Payable (الذمم الدائنة) or Bank (البنك); **Status**.
 
 ### How to create a return — Purchase Returns
 Needs: `create` on `goods_return` to create, `approve` to approve, `post` to send back.
@@ -545,7 +545,7 @@ Needs: `create` on `goods_return` to create, `approve` to approve, `post` to sen
 
 ### Fields — Purchase Returns
 - **Supplier Code** / **Supplier Name** — read from the invoice; not editable.
-- **Posting Date** (تاريخ الترحيل) — required; today by default.
+- **Invoice Date** (تاريخ الفاتورة) — required; today by default.
 - **Offset Account** (الحساب المقابل) — required. **Accounts Payable** (الذمم الدائنة): the return reduces what is owed on the invoice. **Bank** (البنك): the supplier refunds the money.
 - **Bank or cash account** (حساب بنكي أو نقدي) — the account the refund arrives in; needed only when the offset is Bank.
 - **Supplier reimburses the landed cost** (المورّد يعوّض الكلفة الواصلة) — No (default) or Yes. It matters only for goods whose cost already includes freight, duty and clearance from a landed-cost lock: No sends that part to purchase variance; Yes parks it on return clearing until the supplier's credit clears it.
@@ -553,7 +553,7 @@ Needs: `create` on `goods_return` to create, `approve` to approve, `post` to sen
 - Line — Item Code, Item Name, Unit Price (IQD), **Warehouse** (the warehouse the invoice booked the goods into — fixed, not a choice), **Invoiced** (المفوتر), **Returnable** (القابل للإرجاع), **Return Quantity** (كمية الإرجاع).
 
 ### How to open a record — Purchase Returns
-The record shows Reference, Status, Supplier Code / Name, Posting Date, Branch, Original Purchase Invoice (link), the supplier credit note (link) when one exists, Offset Account, Supplier reimburses the landed cost (Yes/No) and Reason; lines: #, Item Code, Return Quantity, Warehouse Code. The four icons at the top work as described in Concepts; the printer gives the "purchase return" copy.
+The record shows Reference, Status, Supplier Code / Name, Invoice Date, Branch, Original Purchase Invoice (link), the supplier credit note (link) when one exists, Offset Account, Supplier reimburses the landed cost (Yes/No) and Reason; lines: #, Item Code, Return Quantity, Warehouse Code. The four icons at the top work as described in Concepts; the printer gives the "purchase return" copy.
 
 ### After you save — Purchase Returns
 - Draft (مسودة) → Approved (معتمد) → Posted (مرحّل).
@@ -580,7 +580,7 @@ What it is for: Money paid to suppliers, and — on each payment's page — whic
 
 ### How to read the list — Supplier Payments
 1. Open Payables → Supplier Payments & Credits → Supplier Payments; search with the box at the top.
-2. Columns: **Reference** (المرجع) — the payment number, click to open; **Posting Date** (تاريخ الترحيل); **Supplier Code**; **Supplier Name**; **Bank/Cash Code** (رمز البنك/الصندوق); **Bank/Cash Name** (اسم البنك/الصندوق); **Amount (IQD)** (المبلغ (د.ع)); **Allocated** (المخصص); **Status** (الحالة).
+2. Columns: **Reference** (المرجع) — the payment number, click to open; **Invoice Date** (تاريخ الفاتورة); **Supplier Code**; **Supplier Name**; **Bank/Cash Code** (رمز البنك/الصندوق); **Bank/Cash Name** (اسم البنك/الصندوق); **Amount (IQD)** (المبلغ (د.ع)); **Allocated** (المخصص); **Status** (الحالة).
 
 ### How to enter a payment — Supplier Payments
 Needs: `create` on `supplier_payment` to create; `post` on `supplier_payment` to allocate and to post.
@@ -593,13 +593,13 @@ Needs: `create` on `supplier_payment` to create; `post` on `supplier_payment` to
 ### Fields — Supplier Payments
 - **Supplier Code** / **Supplier Name** — required; active, approved suppliers only.
 - **Bank/Cash Code** / **Bank/Cash Name** — required; an active bank or cash account. A payment entered here is in dinars, so the account must hold IQD.
-- **Posting Date** (تاريخ الترحيل) — required; today by default.
+- **Invoice Date** (تاريخ الفاتورة) — required; today by default.
 - **Amount (IQD)** (المبلغ (د.ع)) — required; more than zero.
 - **Reference** (المرجع) — optional; the transfer reference, cheque number or voucher number.
 
 ### How to open a record and what it shows — Supplier Payments
 1. Click the payment number in the list.
-2. Header: **Number** (الرقم), **Status**, Supplier Code / Name (links), **Posting Date**, Bank/Cash Code / Name (links), **Branch**, **Amount (IQD)**, **Unallocated** (غير المخصص), **Reference**, and — for a payment confirmed from a payment application — the **Payment application** (طلب دفع) link and its amount.
+2. Header: **Number** (الرقم), **Status**, Supplier Code / Name (links), **Invoice Date**, Bank/Cash Code / Name (links), **Branch**, **Amount (IQD)**, **Unallocated** (غير المخصص), **Reference**, and — for a payment confirmed from a payment application — the **Payment application** (طلب دفع) link and its amount.
 3. Lines **Supplier Invoice** (فاتورة المورّد): the supplier's invoices still owing, oldest first.
 4. Section **Allocated** (المخصص): every invoice this payment was put against — Invoice Number, Due Date, Date, Allocated. The allocation of a payment to invoices is always kept here, never on the payment application.
 5. The four icons at the top work as described in Concepts.
@@ -975,7 +975,7 @@ What it is for: A read-only check that the supplier subledger (what the document
 1. Open Payables → Supplier Balances → Supplier Reconciliation.
 2. Set **As of** (حتى تاريخ) — today by default — and press **Show** (عرض).
 3. **Control accounts** (الحسابات الرقابية): one row per supplier control account — **Account** (الحساب, link), **Account name** (اسم الحساب), **Supplier subledger** (دفتر الموردين الفرعي), **A/P control account** (حساب الذمم الدائنة الرقابي), **Difference** (الفرق), with totals. Above the table one line says either "Subledger equals the control account: <amount>" or "Difference of <amount> — see the lines below".
-4. **Investigation** (التحقيق): every journal line that explains a difference — **Why** (السبب): No supplier on the line (لا مورّد على القيد), Amounts differ (المبالغ مختلفة), Filed under another account (مسجّل تحت حساب آخر), Journal not posted (القيد غير مرحّل); **Journal entry** (link); Posting Date; Status; Account; Supplier Code; Description; **Line (Dr − Cr)**; **Subledger (Dr − Cr)**. When there is none: "Every journal line on a supplier control account has its subledger entry, and they agree."
+4. **Investigation** (التحقيق): every journal line that explains a difference — **Why** (السبب): No supplier on the line (لا مورّد على القيد), Amounts differ (المبالغ مختلفة), Filed under another account (مسجّل تحت حساب آخر), Journal not posted (القيد غير مرحّل); **Journal entry** (link); Invoice Date; Status; Account; Supplier Code; Description; **Line (Dr − Cr)**; **Subledger (Dr − Cr)**. When there is none: "Every journal line on a supplier control account has its subledger entry, and they agree."
 5. **By supplier** (حسب المورّد): Supplier Code, Supplier Name, **A/P control account** (the supplier's ledger balance), **Open invoices** (الفواتير المفتوحة), **Unapplied Supplier Credits / Advances**, **Other Non-invoice Debits**, and a **Statement** (كشف الحساب) link; totals at the foot.
 6. To fix a difference open the journal entry named in Investigation and decide there (typically a manual journal posted to a supplier control account without naming the supplier). "Nothing here is corrected automatically: open the entry and decide."
 7. If the first table says "No account is designated as a supplier control account." the chart of accounts has no account marked as a supplier control account.

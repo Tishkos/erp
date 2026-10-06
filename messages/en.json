@@ -363,7 +363,7 @@
     "currency_restriction": "Currency",
     "entry_no": "Entry no.",
     "document_date": "Document date",
-    "posting_date": "Posting Date",
+    "posting_date": "Invoice Date",
     "description": "Description",
     "journal_type": "Journal type",
     "source": "Source",

@@ -135,7 +135,7 @@ What it is for: Billing a customer for goods sold from a warehouse. Posting the 
 ### How to raise a sales invoice — Sales Invoices
 1. Open Receivables → Sales & Receivables → Sales Invoices and press **New invoice** (فاتورة جديدة).
 2. In the header type the **Customer Code** (رمز العميل) or the **Customer Name** (اسم العميل) and pick the customer from the suggestions — either box fills the other. Only active, approved customers are offered.
-3. Check the **Posting Date** (تاريخ الترحيل) — it opens on today.
+3. Check the **Invoice Date** (تاريخ الفاتورة) — it opens on today.
 4. The **Due Date** (تاريخ الاستحقاق) fills itself from the customer's payment terms as soon as the customer and the date are known. Overtype it if this invoice has a different due date.
 5. Leave **Receivable account (statement)** (حساب الذمم المدينة (كشف الحساب)) and **Revenue account** (حساب الإيراد) as they open unless Finance told you otherwise.
 6. In **Lines** (البنود) type the **Item Code** (رمز الصنف) or **Item Name** (اسم الصنف), the **Quantity** (الكمية), the **Unit Price (IQD)** (سعر الوحدة (د.ع)) — it opens on the item's selling price — an optional **Discount** (الخصم), an optional **Supplier** (المورّد) and the **Warehouse** (المخزن). Under the quantity the screen shows **Available stock** (المخزون المتاح) for that item and warehouse.
@@ -170,8 +170,8 @@ The customer, the posting date and the due date cannot be changed after the invo
 Use a reversal when the invoice itself was a mistake; use a Sales Return when the customer sends goods back, and a credit note for a price allowance.
 
 ### How to open a record and what it shows — Sales Invoices
-1. In the list press the invoice number. List columns: Reference (المرجع), Posting Date (تاريخ الترحيل), Due Date (تاريخ الاستحقاق), Customer Code, Customer Name, Amount (المبلغ), Status (الحالة).
-2. The record shows the header (Invoice Number, Status, Customer Code and Name — links to the customer's profile — Posting Date, Due Date, the two accounts, **Raised by** (أنشأها), **Approved by** (اعتمدها), **Posted by** (رحّلها)), the lines and the **Total Price (IQD)**.
+1. In the list press the invoice number. List columns: Reference (المرجع), Invoice Date (تاريخ الفاتورة), Due Date (تاريخ الاستحقاق), Customer Code, Customer Name, Amount (المبلغ), Status (الحالة).
+2. The record shows the header (Invoice Number, Status, Customer Code and Name — links to the customer's profile — Invoice Date, Due Date, the two accounts, **Raised by** (أنشأها), **Approved by** (اعتمدها), **Posted by** (رحّلها)), the lines and the **Total Price (IQD)**.
 3. **Revenue accounts** (حسابات الإيرادات): for each line, the account its revenue goes to and **Selected by** (مصدر الاختيار) — Document account (حساب المستند), Configured exception (استثناء محاسبي مهيأ), Item sales account (حساب مبيعات الصنف), General mapping (الربط العام) or Recorded journal (القيد المسجل). On a posted invoice these are the accounts on its journal.
 4. **Settlement** (التسوية), once posted: Payment terms, Invoice Date, Due Date, Total Price, Paid (المدفوع), Outstanding (المتبقي), Last payment (آخر دفعة) and **Status against terms** (الحالة مقابل الشروط) — "Due in 6 days", "11 days overdue", "Paid 3 days late" or "Paid on time" — with each payment listed.
 5. **Receipts, credits and returns** (المقبوضات والأرصدة الدائنة والمرتجعات), once posted: every receipt applied, credit note or credit memo applied, debit note or credit note raised against it and sales return, each a link, with **Paid and credited** (المدفوع والمخصوم) and the **Remaining balance** (الرصيد المتبقي).
@@ -180,7 +180,7 @@ Use a reversal when the invoice itself was a mistake; use a Sales Return when th
 ### Fields — Sales Invoices
 Header:
 - **Customer Code** / **Customer Name** (رمز العميل / اسم العميل) — required. Type either one and choose from the list; what is typed must match a customer exactly. Decides whose account is charged.
-- **Posting Date** (تاريخ الترحيل) — required; default today. It is the invoice date, the date of the journal and of the stock movement, and it decides the accounting period.
+- **Invoice Date** (تاريخ الفاتورة) — required; default today. It is the invoice date, the date of the journal and of the stock movement, and it decides the accounting period.
 - **Due Date** (تاريخ الاستحقاق) — required; proposed from the customer's payment terms (with no terms: the posting date). Once you type in it yourself it stops following the terms. The ageing and "overdue" are counted from this date.
 - **Receivable account (statement)** (حساب الذمم المدينة (كشف الحساب)) — optional. **As configured** (حسب الإعداد) uses the company's accounting mapping; otherwise only customer control accounts are offered. It is the account the customer's debt is kept on.
 - **Revenue account** (حساب الإيراد) — optional; opens on **As configured**, which means each line's revenue goes to its item's own sales account, then to the general mapping. An account chosen here overrides that for every line. Only revenue accounts that are not control accounts are offered.
@@ -235,7 +235,7 @@ What it is for: Recording money received from a customer into a bank or cash acc
 1. Open Receivables → Sales & Receivables → Customer Receipts and press **New receipt** (مقبوض جديد).
 2. Type the **Customer Code** or **Customer Name** and pick the customer.
 3. Type the **Bank/Cash Code** (رمز البنك/الصندوق) or **Bank/Cash Name** (اسم البنك/الصندوق) and pick the account the money went into; the name shows the account's currency.
-4. Check the **Posting Date** (تاريخ الترحيل), type the **Amount (IQD)** (المبلغ (د.ع)), optionally choose the **Payment method** (طريقة الدفع) and type a **Reference** (المرجع).
+4. Check the **Invoice Date** (تاريخ الفاتورة), type the **Amount (IQD)** (المبلغ (د.ع)), optionally choose the **Payment method** (طريقة الدفع) and type a **Reference** (المرجع).
 5. Press **Create** (إنشاء). The receipt gets its number and opens as a **Draft**. Invoices are not chosen here: "Invoices are allocated on the receipt’s own page, once it is posted."
 
 ### How to approve and post a receipt — Customer Receipts
@@ -255,14 +255,14 @@ What it is for: Recording money received from a customer into a bank or cash acc
 3. If nothing is owed yet, do nothing: the remainder stays on the customer's account as an advance and is listed on Customer Credits & Advances until it is applied.
 
 ### How to open a record and what it shows — Customer Receipts
-1. In the list press the receipt number. List columns: Reference, Posting Date, Customer Code, Customer Name, Bank/Cash Code, Bank/Cash Name, Amount (IQD), **Allocated** (المخصص), Status.
-2. The record shows Number (الرقم), Status, Customer Code and Name (links to the profile), Posting Date, Bank/Cash Code and Name (links to the account), Branch (الفرع), Amount (IQD), Unallocated, Reference, Currency (العملة), Payment method; the open invoices; the totals Amount and Allocated; and the Applied to register.
+1. In the list press the receipt number. List columns: Reference, Invoice Date, Customer Code, Customer Name, Bank/Cash Code, Bank/Cash Name, Amount (IQD), **Allocated** (المخصص), Status.
+2. The record shows Number (الرقم), Status, Customer Code and Name (links to the profile), Invoice Date, Bank/Cash Code and Name (links to the account), Branch (الفرع), Amount (IQD), Unallocated, Reference, Currency (العملة), Payment method; the open invoices; the totals Amount and Allocated; and the Applied to register.
 3. The four icons in the title bar: see "The four icons at the top of a record — Receivables concepts". Ctrl+P prints the receipt sheet.
 
 ### Fields — Customer Receipts
 - **Customer Code** / **Customer Name** (رمز العميل / اسم العميل) — required on the form. Only active, approved customers are offered.
 - **Bank/Cash Code** / **Bank/Cash Name** (رمز البنك/الصندوق / اسم البنك/الصندوق) — required; the bank or cash account the money was received into. Only active accounts that have a ledger account behind them are offered. The receipt is in the account's currency, and it must be a dinar (IQD) account.
-- **Posting Date** (تاريخ الترحيل) — required; default today; the date of the receipt and of its journal. Lateness of the customer's payment is counted from this date.
+- **Invoice Date** (تاريخ الفاتورة) — required; default today; the date of the receipt and of its journal. Lateness of the customer's payment is counted from this date.
 - **Amount (IQD)** (المبلغ (د.ع)) — required, more than zero.
 - **Payment method** (طريقة الدفع) — optional; from the active Payment Methods, or **— not stated —** (— غير محددة —). Information only.
 - **Reference** (المرجع) — optional free text, e.g. the bank's reference or the cheque number.
@@ -432,7 +432,7 @@ What it is for: Adjusting a customer's account without goods moving. A **credit 
 ### How to raise a credit note — Credit Notes / Debit Notes
 1. Open Receivables → Sales & Receivables → Credit Notes / Debit Notes and press **New credit note** (إشعار دائن جديد).
 2. In **Customer Name** type the customer's code or name ("Customer code or name") and press **Choose** (اختر). The rest of the form appears with that customer's invoices.
-3. Check the **Posting Date** (تاريخ الترحيل).
+3. Check the **Invoice Date** (تاريخ الفاتورة).
 4. In **Invoice Number** (رقم الفاتورة) choose the invoice being corrected, or leave **No invoice — on the account** (دون فاتورة — على الحساب). Each invoice shows its total and what is still open.
 5. Type the **Amount** (المبلغ). Leave **Allowance account** (حساب الخصومات) on **As configured** unless Finance told you otherwise.
 6. Type the **Reason** (السبب) (required) and, if useful, a **Description** (الوصف).
@@ -441,7 +441,7 @@ What it is for: Adjusting a customer's account without goods moving. A **credit 
 ### How to raise a debit note — Credit Notes / Debit Notes
 1. Press **New debit note** (إشعار مدين جديد) on the register.
 2. Choose the customer as for a credit note and press **Choose**.
-3. Fill Posting Date; **Due Date** (تاريخ الاستحقاق) may be left empty — "Left empty, it comes from the customer’s payment terms."
+3. Fill Invoice Date; **Due Date** (تاريخ الاستحقاق) may be left empty — "Left empty, it comes from the customer’s payment terms."
 4. Optionally choose the invoice the charge belongs to (for tracing only), type the **Amount**, leave **Revenue account** (حساب الإيرادات) on As configured, type the **Reason**.
 5. Press **Raise debit note** (إنشاء إشعار مدين). The note opens as a Draft.
 
@@ -463,15 +463,15 @@ What it is for: Adjusting a customer's account without goods moving. A **credit 
 2. Customer Credits & Advances opens with this note chosen; apply it there to an invoice or a debit note.
 
 ### How to open a record and what it shows — Credit Notes / Debit Notes
-1. In the register press the number. Filter the register with **Kind** (النوع): **All kinds** (جميع الأنواع), **Credit note** (إشعار دائن), **Debit note** (إشعار مدين), **Credit memo (sales return)** (إشعار دائن (مرتجع مبيعات)), then **Filter** (تصفية). Columns: Reference, Kind, Posting Date, Due Date (debit notes only), Customer Code, Customer Name, Invoice Number, Amount, **Applied / received** (المخصص / المقبوض), Status.
-2. A note's record shows: Number, Status, Kind, Customer (links), Posting Date, Due Date, Invoice Number (link), the account, **Journal entry** (القيد اليومي — a link once posted), **Raised by** (أنشأه), **Approved by** (اعتمده), **Posted by** (رحّله), Branch, Reason, Description, and **Reversal** (العكس) when reversed. Its lines are **Applied to** (خُصّص على) for a credit note or **Settled by** (سُدّد بواسطة) for a debit note — date, document (link), amount. Totals: Amount, **Applied** (المخصص) or **Received** (المقبوض), **Remaining** (المتبقي).
+1. In the register press the number. Filter the register with **Kind** (النوع): **All kinds** (جميع الأنواع), **Credit note** (إشعار دائن), **Debit note** (إشعار مدين), **Credit memo (sales return)** (إشعار دائن (مرتجع مبيعات)), then **Filter** (تصفية). Columns: Reference, Kind, Invoice Date, Due Date (debit notes only), Customer Code, Customer Name, Invoice Number, Amount, **Applied / received** (المخصص / المقبوض), Status.
+2. A note's record shows: Number, Status, Kind, Customer (links), Invoice Date, Due Date, Invoice Number (link), the account, **Journal entry** (القيد اليومي — a link once posted), **Raised by** (أنشأه), **Approved by** (اعتمده), **Posted by** (رحّله), Branch, Reason, Description, and **Reversal** (العكس) when reversed. Its lines are **Applied to** (خُصّص على) for a credit note or **Settled by** (سُدّد بواسطة) for a debit note — date, document (link), amount. Totals: Amount, **Applied** (المخصص) or **Received** (المقبوض), **Remaining** (المتبقي).
 3. A credit memo's record is read-only: it shows the customer, the invoice, the **Sales return** (مرتجع المبيعات) that created it, its journal, what it was applied to, and the note "Raised and posted by its sales return. What is left on it can be applied from Customer Credits & Advances."
 4. The four icons in the title bar: see "The four icons at the top of a record — Receivables concepts".
 
 ### Fields — Credit Notes / Debit Notes
 - **Customer Name** (اسم العميل) — required; typed code or name, then Choose. Only active, approved customers.
 - **Kind** (النوع) — Credit note or Debit note; fixed by the button you pressed.
-- **Posting Date** (تاريخ الترحيل) — required; default today; the date of the note and of its journal.
+- **Invoice Date** (تاريخ الفاتورة) — required; default today; the date of the note and of its journal.
 - **Due Date** (تاريخ الاستحقاق) — debit notes only; optional. Empty = worked out from the customer's payment terms from the posting date. It cannot be before the posting date. The debit note ages from this date.
 - **Invoice Number** (رقم الفاتورة) — optional; one of the customer's posted invoices, or **No invoice — on the account**. For a credit note: "A credit note against an invoice settles it as far as it still owes when posted; the rest stays as the customer’s credit." For a debit note: "The invoice this charge belongs to, if any — for tracing; the debit note is owed on its own due date."
 - **Amount** (المبلغ) — required, above zero. A credit note against an invoice cannot be for more than the invoice total.
@@ -512,7 +512,7 @@ What it is for: Taking back goods a customer returns against a posted sales invo
 1. Open Receivables → Sales & Receivables → Sales Returns and press **New return** (مرتجع جديد).
 2. Optionally type the customer in **Customer Name** ("Customer name or code") — it only narrows the invoices suggested.
 3. In **Original Sales Invoice** (فاتورة المبيعات الأصلية) type the invoice number or part of it and press **Choose** (اختر). Only posted invoices can be returned against.
-4. The form appears with the customer filled in. Check the **Posting Date**.
+4. The form appears with the customer filled in. Check the **Invoice Date**.
 5. Choose the **Offset Account** (الحساب المقابل): **Accounts Receivable** (الذمم المدينة) to credit the customer's account, or **Bank** (البنك) to pay the money back. If Bank, also choose the **Bank or cash account** (حساب بنكي أو نقدي) the refund comes out of.
 6. Type the **Reason** (السبب) (required).
 7. In the lines table type the **Return Quantity** (كمية الإرجاع) for each item coming back. Leave the box empty for items the customer keeps. **Returnable** (القابل للإرجاع) is the most you may return on that line.
@@ -530,15 +530,15 @@ What it is for: Taking back goods a customer returns against a posted sales invo
 2. The status becomes **Rejected**. Nothing moved; the quantities can be returned again on a new return.
 
 ### How to open a record and what it shows — Sales Returns
-1. In the list press the return number. List columns: Reference, Posting Date, Customer Code, Customer Name, Original Sales Invoice (link), Offset Account, Status.
-2. The record shows Reference, Status, Customer (links), Posting Date, Invoice Number (link), Branch, Offset Account, Reason, and the lines: #, Item Code, Item Name, Return Quantity, Warehouse Code.
+1. In the list press the return number. List columns: Reference, Invoice Date, Customer Code, Customer Name, Original Sales Invoice (link), Offset Account, Status.
+2. The record shows Reference, Status, Customer (links), Invoice Date, Invoice Number (link), Branch, Offset Account, Reason, and the lines: #, Item Code, Item Name, Return Quantity, Warehouse Code.
 3. The four icons in the title bar: see "The four icons at the top of a record — Receivables concepts". Ctrl+P prints the return sheet.
 
 ### Fields — Sales Returns
 - **Customer Name** (first step) — optional; "Optional — narrows the invoices suggested below."
 - **Original Sales Invoice** (فاتورة المبيعات الأصلية) — required; a posted invoice, typed by number. Everything else is read from it.
 - **Customer Code** / **Customer Name** — read from the invoice; not typed.
-- **Posting Date** (تاريخ الترحيل) — required; default today; the date the return is requested.
+- **Invoice Date** (تاريخ الفاتورة) — required; default today; the date the return is requested.
 - **Offset Account** (الحساب المقابل) — required: **Accounts Receivable** (reduces what the customer owes) or **Bank** (the money is paid back).
 - **Bank or cash account** (حساب بنكي أو نقدي) — needed only when the offset is Bank; an active account. Ignored when the offset is Accounts Receivable.
 - **Reason** (السبب) — required; why the customer is returning the goods.
@@ -577,7 +577,7 @@ What it is for: A read-only check that the customers' balances (the subledger) a
 1. Open Receivables → Sales & Receivables → Customer Reconciliation. Set **As at** (كما في) and press **Show** (عرض); it opens as at today.
 2. **Customer subledger and A/R control** (دفتر العملاء الفرعي وحساب مراقبة الذمم): one row per customer control account — **Account code** (رمز الحساب — opens the account's ledger), **Account** (الحساب), **Customer subledger** (دفتر العملاء الفرعي), **A/R control (G/L)** (حساب المراقبة (الأستاذ العام)), **Difference** (الفرق). The foot totals the three.
 3. The strip gives the verdict: "Difference: 0 IQD ✅ — the subledger and the control account agree at <amount>." or "Difference: <amount> ⚠️ — the lines below are where it comes from. Nothing is corrected here."
-4. **Investigation — the lines that make the difference** (التحقيق — الأسطر التي تصنع الفرق): each journal line behind a difference with its **Finding** (النتيجة), Posting Date, **Journal entry** (a link), Account code, Customer Code, Description, **G/L line** (سطر الأستاذ العام) and **Subledger entry** (قيد الدفتر الفرعي). With no difference it says "Every line on the customer control accounts has its subledger entry, and every entry its line."
+4. **Investigation — the lines that make the difference** (التحقيق — الأسطر التي تصنع الفرق): each journal line behind a difference with its **Finding** (النتيجة), Invoice Date, **Journal entry** (a link), Account code, Customer Code, Description, **G/L line** (سطر الأستاذ العام) and **Subledger entry** (قيد الدفتر الفرعي). With no difference it says "Every line on the customer control accounts has its subledger entry, and every entry its line."
 5. **By customer — subledger and open documents** (حسب العميل — الدفتر الفرعي والمستندات المفتوحة): per customer, **Customer subledger**, **Open invoices & debit notes** (الفواتير والإشعارات المدينة المفتوحة), Unapplied Customer Credits / Advances, Other Non-invoice Debits, and a **Statement** (كشف الحساب) link.
 
 ### How to investigate a difference — Customer Reconciliation

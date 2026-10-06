@@ -750,7 +750,7 @@ First table, by import and item (read-only):
 - **Containers (open / total)** (الحاويات (مفتوحة / الكل)) — containers carrying this item not yet received / all.
 - **Customs (PDs)** — the import's standing PDs with their statuses; **Declaration** (البيان الجمركي) — the status of its furthest-advanced customs declaration.
 Second table (read-only): **Warehouse** (المخزن), **Stage** (المرحلة — In Process, On Board, At Port, or In transit), **Branch** (الفرع), **Item**, **In transit (ledger)** (قيد النقل (الدفتر)), **Available** (المتاح — always 0), **Value (IQD)**.
-Invoice Status Tracking: **Reference** (المرجع — the purchase invoice number), **Posting Date** (تاريخ الترحيل), **Supplier Code** (رمز المورّد), **Supplier Name** (اسم المورّد), **Amount** (المبلغ — in IQD), **Where the goods are** (موقع البضاعة — the warehouse), **Status** (الحالة). The warehouse box for In Bounded lists the active main warehouses and is required.
+Invoice Status Tracking: **Reference** (المرجع — the purchase invoice number), **Invoice Date** (تاريخ الفاتورة), **Supplier Code** (رمز المورّد), **Supplier Name** (اسم المورّد), **Amount** (المبلغ — in IQD), **Where the goods are** (موقع البضاعة — the warehouse), **Status** (الحالة). The warehouse box for In Bounded lists the active main warehouses and is required.
 
 ### After you save — In-Transit Inventory
 - The first two tables save nothing; they are read from the stock ledger each time.

@@ -149,7 +149,7 @@ test.describe('the Operations Build screens open', () => {
     await page.goto('/payables/invoices');
 
     await expect(page.getByRole('heading', { name: 'Purchase Invoices' }).first()).toBeVisible();
-    for (const column of ['Posting Date', 'Due Date', 'Supplier Code', 'Supplier Name']) {
+    for (const column of ['Invoice Date', 'Due Date', 'Supplier Code', 'Supplier Name']) {
       await expect(page.getByRole('columnheader', { name: column, exact: true })).toBeVisible();
     }
   });
@@ -241,7 +241,7 @@ test.describe('the Operations Build screens open', () => {
 
     // Today, as the form opens it — and thirty days after it, which is what
     // the due date should say once the supplier is named, and nothing else.
-    const posting = await page.getByLabel('Posting Date').inputValue();
+    const posting = await page.getByLabel('Invoice Date').inputValue();
     const thirtyDaysOn = new Date(`${posting}T00:00:00Z`);
     thirtyDaysOn.setUTCDate(thirtyDaysOn.getUTCDate() + 30);
 
@@ -749,7 +749,7 @@ test.describe('the Operations Build screens open', () => {
     await page.goto('/sales/ar-invoices');
 
     await expect(page.getByRole('heading', { name: 'Sales Invoices' }).first()).toBeVisible();
-    for (const column of ['Posting Date', 'Due Date', 'Customer Code', 'Customer Name']) {
+    for (const column of ['Invoice Date', 'Due Date', 'Customer Code', 'Customer Name']) {
       await expect(page.getByRole('columnheader', { name: column, exact: true })).toBeVisible();
     }
   });
