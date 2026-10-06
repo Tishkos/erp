@@ -194,7 +194,7 @@ export default async function CustomerReconciliationPage({ searchParams }: { sea
         title={t('investigation_title')}
       >
         {exceptions.length === 0 ? (
-          <p className={s.sapEmptyRow}>{t('no_exceptions')}</p>
+          <p className={`${s.sapEmptyRow} m-0 grid place-items-center px-4`}>{t('no_exceptions')}</p>
         ) : (
           <table className={`${s.sapTable} ${s.sapReportTable}`}>
             <thead>

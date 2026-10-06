@@ -49,10 +49,11 @@ export async function OpenItemsReport({
   invoiceHref,
   searchParams,
 }: OpenItemsPageProps) {
-  const [t, page, column, locale, context, params] = await Promise.all([
+  const [t, page, column, statusText, locale, context, params] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
     getTranslations('column'),
+    getTranslations('status_order'),
     getLocale(),
     requireContext(),
     searchParams,
@@ -349,7 +350,7 @@ export async function OpenItemsReport({
                     <td className={s.sapNum}><strong><bdi dir="ltr">{money(item.outstandingIqd)}</bdi></strong></td>
                     <td>
                       <span className={`status status--${item.status}`} data-status={item.status}>
-                        {item.status.replace(/_/g, ' ')}
+                        {statusText.has(item.status) ? statusText(item.status) : item.status.replace(/_/g, ' ')}
                       </span>
                     </td>
                     <td>{lateness(item)}</td>

@@ -185,7 +185,7 @@ export default async function CustomerCreditsPage({ searchParams }: { searchPara
     >
       <Flash error={outcome.error} errorTitle={admin('error_title')} saved={outcome.saved} savedLabel={admin('saved')} />
 
-      <section aria-labelledby="credits-list-title" className={`${s.sapDoc} ${s.sapRegister}`}>
+      <section aria-labelledby="credits-list-title" className={`${s.sapDoc} ${s.sapRegister} mb-5`}>
         <div className={s.sapWindow}>
           <h2 className={s.sapTitle} id="credits-list-title">
             <span>{t('title')}</span>

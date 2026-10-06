@@ -239,7 +239,7 @@ export default async function ExchangeRatesPage({ searchParams }: { searchParams
             <tbody>
               {moneys.map((c) => (
                 <tr key={c.code}>
-                  <td className={s.mono}>{c.code}</td>
+                  <td className="tabular-nums">{c.code}</td>
                   <td>{c.name}</td>
                   <td>{c.symbol ?? '—'}</td>
                   <td className="numeric">{c.decimals}</td>
@@ -277,7 +277,7 @@ export default async function ExchangeRatesPage({ searchParams }: { searchParams
       ) : (
         <>
           <Panel flush title={t('rates.in_force')}>
-            <p className={s.sectionHint}>
+            <p className={`${s.sectionHint} mx-4 mt-4 sm:mx-5`}>
               {t('rates.in_force_hint', { date: formatBusinessDate(today, locale as Locale) })}
             </p>
             <div className="table-wrap" style={{ border: 0 }}>
@@ -301,7 +301,7 @@ export default async function ExchangeRatesPage({ searchParams }: { searchParams
                   ) : null}
                   {applying.map((rate) => (
                     <tr key={rate.id}>
-                      <td className={s.mono}>{rate.currencyCode}</td>
+                      <td className="tabular-nums">{rate.currencyCode}</td>
                       <td className="numeric">{Number(rate.iqdPerUnit).toLocaleString(locale)}</td>
                       <td>{formatBusinessDate(rate.effectiveFrom, locale as Locale)}</td>
                       <td>{rate.source ?? '—'}</td>
@@ -319,7 +319,7 @@ export default async function ExchangeRatesPage({ searchParams }: { searchParams
               journals of its own period, the second is what will apply next. */}
           {alsoPublished.length > 0 ? (
             <Panel flush title={t('rates.also_published')}>
-              <p className={s.sectionHint}>{t('rates.also_published_hint')}</p>
+              <p className={`${s.sectionHint} mx-4 mt-4 sm:mx-5`}>{t('rates.also_published_hint')}</p>
               <div className="table-wrap" style={{ border: 0 }}>
                 <table className="list">
                   <thead>
@@ -336,7 +336,7 @@ export default async function ExchangeRatesPage({ searchParams }: { searchParams
                   <tbody>
                     {alsoPublished.map((rate) => (
                       <tr key={rate.id}>
-                        <td className={s.mono}>{rate.currencyCode}</td>
+                        <td className="tabular-nums">{rate.currencyCode}</td>
                         <td className="numeric">{Number(rate.iqdPerUnit).toLocaleString(locale)}</td>
                         <td>{formatBusinessDate(rate.effectiveFrom, locale as Locale)}</td>
                         <td>

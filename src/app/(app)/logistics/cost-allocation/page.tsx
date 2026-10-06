@@ -55,10 +55,10 @@ export default async function CostAllocationPage({ searchParams }: { searchParam
   return (
     <AdminPage back={{ href: '/', label: admin('dashboard_label') }} tabs={<SectionTabs route="/logistics/cost-allocation" />} subtitle={t('allocation_subtitle')} title={page('cost_allocation')} variant="sap">
       <Flash error={outcome.error} errorTitle={admin('error_title')} saved={outcome.saved} savedLabel={admin('saved')} />
-      <p className={s.sapNote}>{t('departures_note')}</p>
+      <p className={`${s.sapNote} mb-4`}>{t('departures_note')}</p>
 
       {/* ── The locks ──────────────────────────────────────────────────── */}
-      <section aria-labelledby="locks-title" className={`${s.sapDoc} ${s.sapRegister}`}>
+      <section aria-labelledby="locks-title" className={`${s.sapDoc} ${s.sapRegister} mb-5`}>
         <div className={s.sapWindow}>
           <h2 className={s.sapTitle} id="locks-title">
             <span>{t('locks_title')}</span>

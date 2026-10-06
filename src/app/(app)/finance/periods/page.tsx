@@ -218,7 +218,7 @@ export default async function PeriodsPage({ searchParams }: { searchParams: Sear
                   </SubmitRow>
                 </FilterRow>
               </form>
-              <p className={s.sectionHint}>
+              <p className={`${s.sectionHint} mx-4 mt-4 sm:mx-5`}>
                 {closeReport.mayClose
                   ? t('periods.close_checks_pass', { period: closeReport.period.name, asOf: formatBusinessDate(closeReport.asOf, locale as Locale) })
                   : t('periods.close_checks_fail', { period: closeReport.period.name, count: closeReport.blockingFailures.length })}
@@ -243,10 +243,10 @@ export default async function PeriodsPage({ searchParams }: { searchParams: Sear
                           </Link>
                         </td>
                         <td>{t(`periods.check_severity_${check.severity}`)}</td>
-                        <td className={s.mono}>
+                        <td className="tabular-nums">
                           <bdi dir="ltr">{check.figure}</bdi>
                         </td>
-                        <td>
+                        <td className="min-w-[16rem] whitespace-normal">
                           {check.detail.length === 0 ? '—' : null}
                           {check.detail.slice(0, 8).map((line) => (
                             <div key={line}>
@@ -281,7 +281,7 @@ export default async function PeriodsPage({ searchParams }: { searchParams: Sear
                 <tbody>
                   {calendar.map((period) => (
                     <tr key={period.id}>
-                      <td className={s.mono}>
+                      <td className="tabular-nums">
                         {/* The month opens its own journals. Invoices and the
                             rest join this link as later modules land them. */}
                         <Link

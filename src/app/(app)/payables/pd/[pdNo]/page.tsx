@@ -209,7 +209,7 @@ export default async function PdPage({
     >
       <Flash error={outcome.error} errorTitle={admin('error_title')} saved={outcome.saved} savedLabel={admin('saved')} />
       {found.otherYears.length > 0 ? (
-        <p className={s.sapNote}>
+        <p className={`${s.sapNote} mb-4`}>
           {t('other_years')}{' '}
           {found.otherYears.map((y) => (
             <Link className={s.sapLink} href={recordHref(pd.pdNo, y)} key={y}>

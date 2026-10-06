@@ -98,13 +98,15 @@ export default async function WarehouseRecordPage({
   return (
     <AdminPage
       actions={
-        <>
+        // Inside `sapDoc`, so the doors wear the same plain icon buttons they
+        // wear in a document window's title bar.
+        <span className={`${s.sapDoc} inline-flex items-center gap-1`}>
           {/* Notes and the clock — the profile's two doors (shared, 2026-10-04). */}
           <RecordNotesDoor notes={notes} object={warehouses.PERMISSION_OBJECT} recordId={row.code} />
           <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
             <RecordHistory objectId={row.code} objectType={warehouses.PERMISSION_OBJECT} />
           </HistoryButton>
-        </>
+        </span>
       }
       back={{ href: '/master-data/warehouses', label: t('back') }}
       title={`${row.code} · ${row.name}`}
@@ -122,8 +124,8 @@ export default async function WarehouseRecordPage({
         {/* Left: identity, facts, lifecycle */}
         <div className={s.profileStack}>
           <Panel>
-            <div className={s.profileCard}>
-              <span className={`${s.avatarLarge} ${s.profileAvatar}`}>
+            <div className={`${s.profileCard} border-0 bg-transparent shadow-none`}>
+              <span className={`${s.avatarLarge} ${s.profileAvatar} rounded-full border-0 bg-primary-subtle text-primary-subtle-fg`}>
                 <Warehouse aria-hidden="true" style={{ inlineSize: '2rem', blockSize: '2rem' }} />
               </span>
               <h2>{row.name}</h2>
@@ -203,8 +205,8 @@ export default async function WarehouseRecordPage({
                   <tr>
                     <th scope="col">{column('item_code')}</th>
                     <th scope="col">{column('item_name')}</th>
-                    <th scope="col">{column('quantity')}</th>
-                    <th scope="col">{column('total_price')}</th>
+                    <th className="numeric" scope="col">{column('quantity')}</th>
+                    <th className="numeric" scope="col">{column('total_price')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -217,8 +219,8 @@ export default async function WarehouseRecordPage({
                     <tr key={line.itemCode}>
                       <td>{line.itemCode}</td>
                       <td>{line.itemName}</td>
-                      <td>{units(line.quantity)}</td>
-                      <td>{money(line.valueIqd)}</td>
+                      <td className="numeric">{units(line.quantity)}</td>
+                      <td className="numeric">{money(line.valueIqd)}</td>
                     </tr>
                   ))}
                 </tbody>

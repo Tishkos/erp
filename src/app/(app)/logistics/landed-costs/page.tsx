@@ -54,7 +54,7 @@ export default async function LandedCostsPage({ searchParams }: { searchParams: 
       <p className={s.sapNote}>
         <strong>{t('chain_title')}</strong> {t('chain')}
       </p>
-      <p className={s.sapNote}>{t('final_value_note')}</p>
+      <p className={`${s.sapNote} mb-4`}>{t('final_value_note')}</p>
 
       <section aria-labelledby="landed-list-title" className={`${s.sapDoc} ${s.sapRegister}`}>
         <div className={s.sapWindow}>

@@ -55,7 +55,7 @@ export default async function ShipmentTrackingPage({ searchParams }: { searchPar
   return (
     <AdminPage back={{ href: '/', label: admin('dashboard_label') }} tabs={<SectionTabs route="/logistics/shipment-tracking" />} subtitle={t('tracking_subtitle')} title={page('shipment_tracking')} variant="sap">
       <Flash error={outcome.error} errorTitle={admin('error_title')} saved={outcome.saved} savedLabel={admin('saved')} />
-      <p className={s.sapNote}>
+      <p className={`${s.sapNote} mb-4`}>
         <strong>{t('chain_title')}</strong> {t('chain')}
       </p>
 

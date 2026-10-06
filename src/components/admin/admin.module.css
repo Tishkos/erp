@@ -4438,9 +4438,10 @@
 }
 
 .sapDoc.sapDoc .sapRowRemove button:hover {
-  border-color: #b03a2e;
-  background: #f8d7d2;
-  color: #7d201a;
+  /* The theme's danger tint (the Intent UI redesign): hex here ignored the dark palettes. */
+  border-color: color-mix(in oklab, var(--ui-danger) 50%, var(--ui-border));
+  background: var(--ui-danger-subtle);
+  color: var(--ui-danger-subtle-fg);
 }
 
 /* ── Record history, drawn like the rest of the window ────────────────────
@@ -6109,6 +6110,45 @@
   color: var(--ui-fg);
 }
 
+/* The doors drawn in a page's own header (outside a document window) look the same. */
+.sapPage.sapPage .sapIconButton,
+.sapPage.sapPage a.sapIconButton {
+  display: inline-flex;
+  min-block-size: 2.25rem;
+  min-inline-size: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--ui-muted-fg);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-decoration: none;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.sapPage.sapPage .sapIconButton:hover,
+.sapPage.sapPage a.sapIconButton:hover {
+  background: var(--ui-secondary);
+  color: var(--ui-fg);
+}
+
+.sapPage .sapIconButton svg {
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+}
+
+/* A table straight under a title bar is the window's own: one border, the window's. */
+.sapWindow > .sapTableWrap,
+.sapWindow > .sapReportWrap > .sapTableWrap {
+  border: 0;
+  border-radius: 0;
+}
+
 .sapDoc .sapIconButton svg {
   inline-size: 1.1rem;
   block-size: 1.1rem;
@@ -6148,6 +6188,7 @@
 
 .sapPage :global(section.panel),
 .sapPage :global(section[class*='panel']) {
+  margin-block-end: 1.25rem;
   padding: 1.25rem;
   border: 1px solid var(--ui-border);
   border-radius: var(--radius-xl);
@@ -6214,6 +6255,21 @@
   border-radius: var(--radius-md);
   font-size: 0.8125rem;
   font-weight: 500;
+}
+
+/* The families the register's badge already knew, on the record's too
+   (a partly paid invoice read as a blank badge). */
+.sapStatus[data-status='settled'] {
+  border-color: var(--chip-good-line);
+  background: var(--chip-good-bg);
+  color: var(--chip-good-ink);
+}
+
+.sapStatus[data-status='partially_executed'],
+.sapStatus[data-status='executed'] {
+  border-color: var(--chip-info-line);
+  background: var(--chip-info-bg);
+  color: var(--chip-info-ink);
 }
 
 .sapGridCaption {
@@ -6324,10 +6380,10 @@
   background-size: 1rem;
 }
 
+/* The room for the chevron is `padding-inline-end` above, already on the
+   left in Arabic; only the chevron itself moves. */
 :global(html[dir='rtl']) .sapDoc.sapDoc select:not([multiple]):not([size]),
 :global(html[dir='rtl']) .sapPage.sapPage .select:not([multiple]):not([size]) {
-  padding-inline-end: 0.75rem;
-  padding-inline-start: 2rem;
   background-position: left 0.6rem center;
 }
 
@@ -6562,9 +6618,12 @@
   border-block-end: 1px solid var(--ui-border);
 }
 
-/* A typed grid keeps a hairline between its columns, so a row reads across. */
-.sapTable:not(.sapRegisterTable) th + th,
-.sapTable:not(.sapRegisterTable) td + td {
+/* A document's line grid keeps a hairline between its columns, so a row
+   reads across; every other table is ruled by rows alone. */
+.sapLineTableWrap .sapTable th + th,
+.sapLineTableWrap .sapTable td + td,
+.sapLineGrid th + th,
+.sapLineGrid td + td {
   border-inline-start: 1px solid color-mix(in oklab, var(--ui-border) 70%, transparent);
 }
 
@@ -6675,6 +6734,7 @@
 }
 
 .sapPage .toolbarSearch button,
+.sapPage.sapPage .toolbarSearch button,
 .sapRegister.sapRegister .toolbarSearch button {
   min-inline-size: 2.5rem;
   inline-size: 2.5rem;
@@ -6689,6 +6749,7 @@
 }
 
 .sapPage .toolbarSearch button:hover,
+.sapPage.sapPage .toolbarSearch button:hover,
 .sapRegister.sapRegister .toolbarSearch button:hover {
   background: var(--ui-secondary);
   color: var(--ui-fg);
@@ -6917,22 +6978,28 @@
 }
 
 /* ── Pills, key/value, the history, the files, profiles ─────────────────── */
-.pill {
+/* `.sapPage .pill…` (earlier) outranks a bare class, so both are written. */
+.pill,
+.sapPage .pill {
   gap: 0.3rem;
   padding: 0.0625rem 0.5rem;
+  border: 0;
   border-radius: var(--radius-md);
   background: var(--ui-secondary);
   color: var(--ui-secondary-fg);
   font-size: 0.75rem;
   font-weight: 500;
+  letter-spacing: 0;
 }
 
-.pillOn {
+.pillOn,
+.sapPage .pillOn {
   background: var(--ui-success-subtle);
   color: var(--ui-success-subtle-fg);
 }
 
-.pillOff {
+.pillOff,
+.sapPage .pillOff {
   background: var(--ui-secondary);
   color: var(--ui-muted-fg);
 }
@@ -6966,6 +7033,7 @@
 .sapDoc .timeline li::before {
   inline-size: 0.625rem;
   block-size: 0.625rem;
+  border-radius: 999px;
   inset-inline-start: -0.35rem;
   background: var(--ui-primary);
   box-shadow: 0 0 0 3px var(--ui-overlay);
@@ -7065,11 +7133,22 @@
 
 .avatarLarge,
 .avatarSmall,
-.profileAvatar {
+.profileAvatar,
+.sapPage .avatarLarge,
+.sapPage .avatarSmall {
+  border: 0;
   border-radius: 999px;
   background: var(--ui-primary-subtle);
   color: var(--ui-primary-subtle-fg);
   font-weight: 600;
+}
+
+/* A profile card standing inside a panel is the panel's content, not a second card. */
+:global(.panel) > .profileCard,
+:global(section[class*='panel']) > .profileCard {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .profileFacts li {
@@ -7078,6 +7157,10 @@
 
 .profileFacts li > span:first-child {
   color: var(--ui-muted-fg);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .profileFacts li > span:last-child {
@@ -7101,6 +7184,454 @@
 
   .sapPage .sapPageHeader h1 {
     font-size: 1.25rem;
+  }
+
+  /* A verb with a reason box takes the row: at 40vw the box was ~150px. */
+  .sapFootActions > form {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+  }
+
+  .sapFootActions > form input[type='text'] {
+    flex: 1 1 12rem;
+    inline-size: auto;
+    max-inline-size: none;
+  }
+
+  /* An empty list's sentence starts where reading starts; centred in a table
+     that scrolls sideways it sat off-screen in Arabic. */
+  .sapEmptyRow {
+    text-align: start !important;
+  }
+}
+
+/* ══ The money screens' own pieces, in Intent UI's terms (2026-10-06) ══════
+   Accounting, treasury, receivables, payables, logistics and master data:
+   the classes below are drawn by those screens alone (and by the components
+   only they import — report-filter, statement-table, receivables-ageing,
+   open-items-report, account-statement, bank-cash-account, invoice-lines-grid,
+   journal-lines-grid …). The shared pieces are the block above; this one only
+   reaches what it did not. Colours are the --ui-* theme. */
+
+/* ── The report window (ReportWindow): the window is the card ───────────── */
+/* "A section inside a document is a card" (above) padded the report's own
+   window a second time: the title, the parameters and the grid sat inset in
+   a card within a card. The window itself carries no padding; its parts do. */
+.sapDoc.sapDoc > section.sapWindow:has(> .sapReportWrap) {
+  padding: 0;
+}
+
+.sapTableWrap.sapReportWrap {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.sapReportWrap ~ .sapFoot {
+  border-end-start-radius: var(--radius-xl);
+  border-end-end-radius: var(--radius-xl);
+}
+
+/* A report's figures in its foot never break across two lines, nor shrink
+   under their label: the label wraps instead. */
+.sapReportWrap ~ .sapFoot .sapFootTotal strong {
+  min-inline-size: max-content;
+  white-space: nowrap;
+}
+
+/* A field that draws its own label in a document's header (`bare` —
+   the new invoice, receipt, payment and loan) wears the header's label. */
+.sapFields > .field > .label {
+  color: var(--ui-muted-fg);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+/* A report reads across without column rules (only typed grids keep them). */
+.sapReportWrap .sapReportTable th + th,
+.sapReportWrap .sapReportTable td + td {
+  border-inline-start: 0;
+}
+
+/* The fold toggle and the name sit on one line, centred in the row: as an
+   inline-flex box the empty toggle of a leaf row raised its baseline and the
+   name stood higher than its amount. */
+.sapReportWrap .sapTreeCell,
+.sapFoldBar + .sapTableWrap .sapTreeCell {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+/* The parameter strip above a report. */
+.sapFilterBar {
+  gap: 0.75rem 1rem;
+  padding: 0.875rem 1.25rem;
+  border-block-end: 1px solid var(--ui-border);
+  background: transparent;
+}
+
+.sapFilterField {
+  gap: 0.375rem;
+}
+
+.sapDoc.sapDoc .sapFilterField input,
+.sapDoc.sapDoc .sapFilterField select,
+.sapDoc.sapDoc .sapFilterBar button {
+  min-block-size: 2.25rem;
+}
+
+/* The statements' rows: a section is a quiet band, a line is medium weight,
+   an account under it is the secondary text. */
+.sapTable .sapStatementHeader > td {
+  background: var(--ui-muted);
+  color: var(--ui-fg);
+  font-weight: 600;
+}
+
+.sapTable .sapStatementHeader[data-depth='2'] > td,
+.sapTable .sapStatementHeader[data-depth='3'] > td,
+.sapTable .sapStatementHeader[data-depth='4'] > td {
+  background: transparent;
+}
+
+.sapTable .sapMappingHeader > td {
+  font-weight: 600;
+}
+
+.sapTable .sapLineRow > td:first-child {
+  font-weight: 500;
+}
+
+.sapTable .sapAccountRow > td {
+  color: var(--ui-muted-fg);
+}
+
+/* ── Verdicts: Intent's success and danger badges ───────────────────────── */
+.sapBalanced {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 1.5rem;
+  padding: 0.125rem 0.5rem;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--ui-success-subtle);
+  color: var(--ui-success-subtle-fg);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.sapWarn {
+  border: 0;
+  background: var(--ui-danger-subtle);
+  color: var(--ui-danger-subtle-fg);
+}
+
+/* A figure box that is overdue keeps the box's size and takes the tint. */
+.sapBox.sapWarn {
+  min-block-size: 2.25rem;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid color-mix(in oklab, var(--ui-danger) 30%, var(--ui-border));
+  border-radius: var(--radius-lg);
+  font-size: 0.875rem;
+}
+
+/* ── The invoice and container line grids: room for the new type size ──── */
+/* Their columns were measured for 0.72rem headers; at Intent's size
+   "Unit Price (IQD)" and "Total Price (IQD)" were cut, and the supplier and
+   warehouse pickers showed half a word. Only the grids that carry a
+   warehouse column (invoice-lines-grid, container-rows-grid) are widened; a
+   width a person dragged (the inline style) still wins. */
+@media (min-width: 64.0625rem) {
+  /* The invoice's (it has a total); the container grid has a quantity per
+     model and stays compact. */
+  .sapLineGrid:has(.colWarehouse):has(.colTotal) .colQty {
+    inline-size: 6rem;
+  }
+
+  .sapLineGrid:has(.colWarehouse) .colPrice,
+  .sapLineGrid:has(.colWarehouse) .colTotal {
+    inline-size: 8.5rem;
+  }
+
+  .sapLineGrid:has(.colWarehouse) .colDiscount {
+    inline-size: 6.5rem;
+  }
+
+  .sapLineGrid:has(.colWarehouse) .colSupplier,
+  .sapLineGrid:has(.colWarehouse) .colWarehouse {
+    inline-size: 10rem;
+  }
+}
+
+/* ── Small print in the grids ───────────────────────────────────────────── */
+.sapEnteredNote,
+.sapLineGrid .sapCellNote {
+  color: var(--ui-muted-fg);
+  font-size: 0.75rem;
+}
+
+.sapRowError {
+  color: var(--ui-danger-subtle-fg);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.sapBalanceLine {
+  margin-block-start: 0.75rem;
+}
+
+/* ── Does the ageing tie to the statement? ──────────────────────────────── */
+.tieStrip {
+  gap: 0.5rem 1.5rem;
+  margin: 0.75rem 0.75rem 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-lg);
+  background: var(--ui-muted);
+  font-size: 0.8125rem;
+}
+
+.tieStrip > span {
+  color: var(--ui-muted-fg);
+}
+
+.tieStrip strong {
+  color: var(--ui-fg);
+  font-weight: 600;
+}
+
+.tieVerdict {
+  font-weight: 600;
+}
+
+/* Alone in the strip, the verdict reads from the start, as a sentence would. */
+.tieVerdict:only-child {
+  margin-inline-start: 0;
+}
+
+.tieStrip[data-ties='yes'] .tieVerdict {
+  color: var(--ui-success-subtle-fg);
+}
+
+.tieStrip[data-ties='no'] .tieVerdict {
+  color: var(--ui-warning-subtle-fg);
+}
+
+/* ── The receivables ageing's headline figures: Intent stat cards ───────── */
+.statRow {
+  gap: 1rem;
+  margin-block-end: 1.25rem;
+}
+
+.stat,
+.sapPage .stat {
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-xl);
+  background: var(--ui-overlay);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
+}
+
+.stat strong,
+.sapPage .stat strong {
+  color: var(--ui-fg);
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat span,
+.sapPage .stat span {
+  margin-block-start: 0.25rem;
+  color: var(--ui-muted-fg);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+/* ── A bank or cash account's holdings ──────────────────────────────────── */
+.holdingsHead {
+  border-block-end-color: var(--ui-border);
+}
+
+.holdingsHead > span:first-child,
+.holdingsFlow > span {
+  color: var(--ui-muted-fg);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.holdingsAmount {
+  color: var(--ui-fg);
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.holdingsFlow {
+  gap: 0.25rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-lg);
+  background: var(--ui-muted);
+}
+
+.holdingsFlow > strong {
+  color: var(--ui-fg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.holdingsIn > span > svg {
+  color: var(--ui-success-subtle-fg);
+}
+
+.holdingsOut > span > svg {
+  color: var(--ui-danger-subtle-fg);
+}
+
+.holdingsPending > span > svg {
+  color: var(--ui-warning-subtle-fg);
+}
+
+/* ── Accounting periods: where the books stand today ────────────────────── */
+.docBand {
+  gap: 1rem 2rem;
+  margin-block-end: 1.25rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-xl);
+  background: var(--ui-overlay);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
+}
+
+.docIdentity {
+  gap: 0.75rem;
+}
+
+.docNumber {
+  color: var(--ui-fg);
+  font-family: inherit;
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.docTotal span {
+  color: var(--ui-muted-fg);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.docTotal strong {
+  color: var(--ui-fg);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* ── Posting mappings ───────────────────────────────────────────────────── */
+.mapStack {
+  gap: 1.25rem;
+}
+
+.mapTable {
+  color: var(--ui-fg);
+  font-size: 0.875rem;
+}
+
+.mapTable th,
+.mapTable td {
+  padding: 0.75rem 1.25rem;
+  border-block-end-color: var(--ui-border);
+  vertical-align: middle;
+}
+
+.mapTable th {
+  padding-block: 0.625rem;
+  background: var(--ui-muted);
+  color: var(--ui-muted-fg);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.mapTable tbody tr:hover > td {
+  background: color-mix(in oklab, var(--ui-muted) 75%, transparent);
+}
+
+.mapSide {
+  color: var(--ui-fg);
+  font-weight: 600;
+}
+
+.mapLineName {
+  color: var(--ui-fg);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+/* The account picker is a native select a form posts: Intent's NativeSelect. */
+.mapAccount select {
+  appearance: none;
+  min-block-size: 2.25rem;
+  padding-block: 0.375rem;
+  padding-inline: 0.75rem 2rem;
+  border: 1px solid var(--ui-input);
+  border-radius: var(--radius-lg);
+  background-color: var(--w-field, var(--ui-bg));
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a8a93' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 15 5 5 5-5'/%3E%3Cpath d='m7 9 5-5 5 5'/%3E%3C/svg%3E");
+  /* The picker is written left to right (dir="ltr" on it), so its chevron
+     stands on the right in both languages. */
+  background-position: right 0.6rem center;
+  background-repeat: no-repeat;
+  background-size: 1rem;
+  color: var(--ui-fg);
+  font: inherit;
+  font-size: 0.875rem;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+  transition: border-color 150ms, box-shadow 150ms;
+}
+
+.mapAccount select:hover {
+  border-color: color-mix(in oklab, var(--ui-input) 70%, var(--ui-fg) 30%);
+}
+
+.mapAccount select:focus {
+  border-color: var(--ui-ring);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ui-ring) 20%, transparent);
+}
+
+.mapReadiness {
+  min-block-size: 2.25rem;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid color-mix(in oklab, var(--ui-success) 30%, var(--ui-border));
+  border-radius: var(--radius-lg);
+  background: var(--ui-success-subtle);
+  color: var(--ui-success-subtle-fg);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.mapReadiness[data-ready='false'] {
+  border-color: color-mix(in oklab, var(--ui-danger) 30%, var(--ui-border));
+  background: var(--ui-danger-subtle);
+  color: var(--ui-danger-subtle-fg);
+}
+
+@media (max-width: 40rem) {
+  .mapTable th,
+  .mapTable td {
+    padding-inline: 1rem;
   }
 }
 

@@ -206,7 +206,7 @@ export default async function ContainerPage({
     >
       <Flash error={outcome.error} errorTitle={admin('error_title')} saved={outcome.saved} savedLabel={admin('saved')} />
       {found.others.length > 0 ? (
-        <p className={s.sapNote}>
+        <p className={`${s.sapNote} mb-4`}>
           {t('other_trips')}{' '}
           {found.others.map((other) => (
             <Link

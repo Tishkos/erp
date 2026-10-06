@@ -86,7 +86,7 @@ export default async function SupplierReconciliationPage({ searchParams }: { sea
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
 
       {/* ── 1. The control accounts ──────────────────────────────────── */}
-      <section aria-labelledby="ap-reconciliation-controls" className={`${s.sapDoc} ${s.sapRegister}`}>
+      <section aria-labelledby="ap-reconciliation-controls" className={`${s.sapDoc} ${s.sapRegister} mb-5`}>
         <div className={s.sapWindow}>
           <h2 className={s.sapTitle} id="ap-reconciliation-controls">
             <span>{x('control_title')}</span>
@@ -104,7 +104,7 @@ export default async function SupplierReconciliationPage({ searchParams }: { sea
             </FilterRow>
           </form>
 
-          <p className={s.sapNote}>
+          <p className={`${s.sapNote} m-0 px-4 py-3 sm:px-5`}>
             {difference === 0n ? x('ties', { amount: money(subledgerTotal) }) : x('does_not_tie', { amount: money(difference) })}
           </p>
 
@@ -183,7 +183,7 @@ export default async function SupplierReconciliationPage({ searchParams }: { sea
             <span>{x('investigation_title')}</span>
             <span className={s.sapTitleMeta}>{x('exceptions_meta', { count: exceptions.length })}</span>
           </h2>
-          <p className={s.sapNote}>{x('no_repair')}</p>
+          <p className={`${s.sapNote} m-0 px-4 py-3 sm:px-5`}>{x('no_repair')}</p>
           <div className={s.sapTableWrap}>
             <table className={s.sapTable}>
               <thead>

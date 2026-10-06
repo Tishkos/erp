@@ -307,7 +307,7 @@ export default async function PaymentApplicationPage({
       {/* Owner's decision 4.6 (2026-10-04): a payment application is the request
           to the bank; the allocation to invoices lives on the supplier payment
           its confirmation creates. Said on the record, so nobody looks for it here. */}
-      <p className={s.sapNote}>
+      <p className={`${s.sapNote} mb-4`}>
         {t('meaning')}
         {documentHref && found.documentNo ? (
           <>

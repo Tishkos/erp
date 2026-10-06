@@ -81,8 +81,8 @@ export default async function PaymentMethodPage({
       <div className={s.profileGrid}>
         <div className={s.profileStack}>
           <Panel>
-            <div className={s.profileCard}>
-              <span className={`${s.avatarLarge} ${s.profileAvatar}`}>
+            <div className={`${s.profileCard} border-0 bg-transparent shadow-none`}>
+              <span className={`${s.avatarLarge} ${s.profileAvatar} rounded-full border-0 bg-primary-subtle text-primary-subtle-fg`}>
                 <CreditCard aria-hidden="true" style={{ inlineSize: '2rem', blockSize: '2rem' }} />
               </span>
               <h2>{row.name}</h2>

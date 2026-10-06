@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
-import { AdminPage, admin as s } from '@/components/admin';
+import { AdminPage } from '@/components/admin';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
@@ -74,10 +74,10 @@ export default async function ReversalsPage() {
               ) : (
                 rows.map((row) => (
                   <tr key={row.reversalId}>
-                    <td className={s.mono}>{link(row.originalNo)}</td>
+                    <td className="tabular-nums">{link(row.originalNo)}</td>
                     <td>{formatBusinessDate(row.originalPostingDate, locale as Locale)}</td>
                     <td className="numeric">{money(row.originalAmount)}</td>
-                    <td className={s.mono}>{link(row.reversalNo)}</td>
+                    <td className="tabular-nums">{link(row.reversalNo)}</td>
                     <td>{formatBusinessDate(row.reversalPostingDate, locale as Locale)}</td>
                     <td>{row.reason ?? '—'}</td>
                   </tr>

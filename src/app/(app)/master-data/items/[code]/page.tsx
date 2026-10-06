@@ -122,13 +122,15 @@ export default async function ItemPage({
   return (
     <AdminPage
       actions={
-        <>
+        // Inside `sapDoc`, so the doors wear the same plain icon buttons they
+        // wear in a document window's title bar.
+        <span className={`${s.sapDoc} inline-flex items-center gap-1`}>
           {/* Notes and the clock — the profile's two doors (shared, 2026-10-04). */}
           <RecordNotesDoor notes={notes} object={items.PERMISSION_OBJECT} recordId={row.code} />
           <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
             <RecordHistory objectId={row.code} objectType={items.PERMISSION_OBJECT} />
           </HistoryButton>
-        </>
+        </span>
       }
       back={{ href: '/inventory/items', label: t('back') }}
       title={`${row.code} · ${row.name}`}
@@ -145,8 +147,8 @@ export default async function ItemPage({
       <div className={s.profileGrid}>
         <div className={s.profileStack}>
           <Panel>
-            <div className={s.profileCard}>
-              <span className={`${s.avatarLarge} ${s.profileAvatar}`}>
+            <div className={`${s.profileCard} border-0 bg-transparent shadow-none`}>
+              <span className={`${s.avatarLarge} ${s.profileAvatar} rounded-full border-0 bg-primary-subtle text-primary-subtle-fg`}>
                 <Package aria-hidden="true" style={{ inlineSize: '2rem', blockSize: '2rem' }} />
               </span>
               <h2>{row.name}</h2>

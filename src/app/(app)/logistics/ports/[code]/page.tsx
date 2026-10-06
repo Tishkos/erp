@@ -94,7 +94,7 @@ export default async function PortPage({ params, searchParams }: { params: Promi
       variant="sap"
     >
       <Flash error={outcome.error} errorTitle={admin('error_title')} saved={outcome.saved} savedLabel={admin('saved')} />
-      {!port.active ? <p className={s.sapNote}>{t('port_not_served')}</p> : null}
+      {!port.active ? <p className={`${s.sapNote} mb-4`}>{t('port_not_served')}</p> : null}
 
       <DocumentWindow
         titleActions={

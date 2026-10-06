@@ -145,12 +145,12 @@ export default async function TreasuryReportingPage({ searchParams }: { searchPa
                     <th scope="col">{column('account')}</th>
                     <th scope="col">{column('account_type')}</th>
                     <th scope="col">{column('currency')}</th>
-                    <th scope="col">{t('treasury_reporting.opening')}</th>
-                    <th scope="col">{t('treasury_reporting.money_in')}</th>
-                    <th scope="col">{t('treasury_reporting.money_out')}</th>
-                    <th scope="col">{t('treasury_reporting.transfers_in')}</th>
-                    <th scope="col">{t('treasury_reporting.transfers_out')}</th>
-                    <th scope="col">{t('treasury_reporting.closing')}</th>
+                    <th className="numeric" scope="col">{t('treasury_reporting.opening')}</th>
+                    <th className="numeric" scope="col">{t('treasury_reporting.money_in')}</th>
+                    <th className="numeric" scope="col">{t('treasury_reporting.money_out')}</th>
+                    <th className="numeric" scope="col">{t('treasury_reporting.transfers_in')}</th>
+                    <th className="numeric" scope="col">{t('treasury_reporting.transfers_out')}</th>
+                    <th className="numeric" scope="col">{t('treasury_reporting.closing')}</th>
                     <th scope="col">{t('treasury_reporting.last_movement')}</th>
                   </tr>
                 </thead>
@@ -178,22 +178,22 @@ export default async function TreasuryReportingPage({ searchParams }: { searchPa
                       <td>
                         <bdi dir="ltr">{row.currency}</bdi>
                       </td>
-                      <td>
+                      <td className="numeric">
                         <bdi dir="ltr">{money(row.openingIqd)}</bdi>
                       </td>
-                      <td>
+                      <td className="numeric">
                         <bdi dir="ltr">{money(row.moneyInIqd)}</bdi>
                       </td>
-                      <td>
+                      <td className="numeric">
                         <bdi dir="ltr">{money(row.moneyOutIqd)}</bdi>
                       </td>
-                      <td>
+                      <td className="numeric">
                         <bdi dir="ltr">{money(row.transfersInIqd)}</bdi>
                       </td>
-                      <td>
+                      <td className="numeric">
                         <bdi dir="ltr">{money(row.transfersOutIqd)}</bdi>
                       </td>
-                      <td>
+                      <td className="numeric">
                         <strong>
                           <bdi dir="ltr">{money(row.closingIqd)}</bdi>
                         </strong>
@@ -217,7 +217,7 @@ export default async function TreasuryReportingPage({ searchParams }: { searchPa
                         (row: reports.AccountPosition) => row.closingIqd,
                       ] as const
                     ).map((pick, index) => (
-                      <td key={index}>
+                      <td className="numeric" key={index}>
                         <strong>
                           <bdi dir="ltr">{money(String(sum(pick)))}</bdi>
                         </strong>
@@ -249,9 +249,9 @@ export default async function TreasuryReportingPage({ searchParams }: { searchPa
                     <th scope="col">{column('description')}</th>
                     <th scope="col">{column('raised_by')}</th>
                     <th scope="col">{t('treasury_reporting.approved_by')}</th>
-                    <th scope="col">{t('treasury_reporting.money_in')}</th>
-                    <th scope="col">{t('treasury_reporting.money_out')}</th>
-                    <th scope="col">{t('treasury_reporting.running_balance')}</th>
+                    <th className="numeric" scope="col">{t('treasury_reporting.money_in')}</th>
+                    <th className="numeric" scope="col">{t('treasury_reporting.money_out')}</th>
+                    <th className="numeric" scope="col">{t('treasury_reporting.running_balance')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -262,7 +262,7 @@ export default async function TreasuryReportingPage({ searchParams }: { searchPa
                     <td colSpan={8}>
                       <strong>{t('treasury_reporting.opening')}</strong>
                     </td>
-                    <td>
+                    <td className="numeric">
                       <strong>
                         <bdi dir="ltr">{money(ledger.openingIqd)}</bdi>
                       </strong>
@@ -301,13 +301,13 @@ export default async function TreasuryReportingPage({ searchParams }: { searchPa
                             somebody here would claim one nobody gave. */}
                         <bdi dir="auto">{line.approvedBy ?? '—'}</bdi>
                       </td>
-                      <td>
+                      <td className="numeric">
                         <bdi dir="ltr">{Number(line.debitIqd) === 0 ? '' : money(line.debitIqd)}</bdi>
                       </td>
-                      <td>
+                      <td className="numeric">
                         <bdi dir="ltr">{Number(line.creditIqd) === 0 ? '' : money(line.creditIqd)}</bdi>
                       </td>
-                      <td>
+                      <td className="numeric">
                         <bdi dir="ltr">{money(line.balanceIqd)}</bdi>
                       </td>
                     </tr>
@@ -319,17 +319,17 @@ export default async function TreasuryReportingPage({ searchParams }: { searchPa
                     <td colSpan={6}>
                       <strong>{t('treasury_reporting.closing')}</strong>
                     </td>
-                    <td>
+                    <td className="numeric">
                       <strong>
                         <bdi dir="ltr">{money(ledger.totalInIqd)}</bdi>
                       </strong>
                     </td>
-                    <td>
+                    <td className="numeric">
                       <strong>
                         <bdi dir="ltr">{money(ledger.totalOutIqd)}</bdi>
                       </strong>
                     </td>
-                    <td>
+                    <td className="numeric">
                       <strong>
                         <bdi dir="ltr">{money(ledger.closingIqd)}</bdi>
                       </strong>

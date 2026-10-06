@@ -184,7 +184,7 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
             </span>
           </h2>
 
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', padding: '0.75rem 0.75rem 0' }}>
+          <div className="flex flex-wrap gap-2 px-4 pt-4 sm:px-5">
             {TABS.map((entry) => (
               <LinkButton
                 href={`/master-data/statement-mapping?statement=${entry}`}
@@ -196,7 +196,7 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
             ))}
           </div>
 
-          <div style={{ padding: '0.75rem' }}>
+          <div className="p-4 sm:p-5">
             <Flash error={error} errorTitle={t('error_title')} saved={saved} savedLabel={t('saved')} />
 
             <StatementMappingTree

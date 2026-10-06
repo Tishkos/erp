@@ -168,7 +168,7 @@ export default async function CustomsDeclarationPage({
       variant="sap"
     >
       <Flash error={outcome.error} errorTitle={admin('error_title')} saved={outcome.saved} savedLabel={admin('saved')} />
-      {found.isFinal ? <p className={s.sapNote}>{t('final_note', { status: ds(declaration.status) })}</p> : null}
+      {found.isFinal ? <p className={`${s.sapNote} mb-4`}>{t('final_note', { status: ds(declaration.status) })}</p> : null}
 
       <DocumentWindow
         titleActions={

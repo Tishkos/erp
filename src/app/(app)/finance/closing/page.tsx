@@ -121,7 +121,10 @@ export default async function ClosingPage({ searchParams }: { searchParams: Sear
             <>
               <div className={s.sapFootActions}>
                 {mayClose && period.status !== 'closed' ? (
-                  <form action={closePeriodAction} className={s.inline}>
+                  <form
+                    action={closePeriodAction}
+                    className={`${s.inline} items-end *:shrink-0 *:basis-auto max-sm:w-full max-sm:[&_input]:w-full max-sm:[&_input]:max-w-none`}
+                  >
                     {Object.entries(hidden).map(([name, value]) => (
                       <Hidden key={name} name={name} value={value} />
                     ))}
@@ -149,7 +152,7 @@ export default async function ClosingPage({ searchParams }: { searchParams: Sear
               <div className={s.sapFootTotals}>
                 <div className={s.sapFootTotal}>
                   <span>{t('period_state')}</span>
-                  <strong>
+                  <strong className="min-w-0 border-0 bg-transparent p-0">
                     <span className={`status status--${stateChip(period.status)}`} data-status={stateChip(period.status)}>
                       {p(`state_${period.status}`)}
                     </span>
@@ -213,7 +216,7 @@ export default async function ClosingPage({ searchParams }: { searchParams: Sear
                   <td>
                     <bdi dir="ltr">{check.figure}</bdi>
                   </td>
-                  <td>
+                  <td className="min-w-[16rem] whitespace-normal">
                     {check.detail.length === 0 ? '—' : null}
                     {check.detail.slice(0, 8).map((line) => (
                       <div key={line}>
@@ -234,7 +237,7 @@ export default async function ClosingPage({ searchParams }: { searchParams: Sear
         </ReportWindow>
       ) : (
         <ReportWindow title={t('no_calendar_title')}>
-          <p className={s.sectionHint}>
+          <p className={`${s.sectionHint} m-4 sm:m-5`}>
             {t('no_calendar')}{' '}
             <Link className={s.sapLink} href="/finance/periods">
               {page('soft_close')}

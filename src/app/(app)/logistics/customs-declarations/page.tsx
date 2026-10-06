@@ -111,7 +111,7 @@ export default async function CustomsDeclarationsPage({ searchParams }: { search
       variant="sap"
     >
       <Flash error={outcome.error} errorTitle={admin('error_title')} saved={outcome.saved} savedLabel={admin('saved')} />
-      <p className={s.sapNote}>
+      <p className={`${s.sapNote} mb-4`}>
         <strong>{t('chain_title')}</strong> {t('chain')}
       </p>
 

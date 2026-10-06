@@ -97,15 +97,15 @@ export default async function DepartmentPage({
         {/* Left: identity, facts, lifecycle */}
         <div className={s.profileStack}>
           <Panel>
-            <div className={s.profileCard}>
-              <span className={`${s.avatarLarge} ${s.profileAvatar}`}>
+            <div className={`${s.profileCard} border-0 bg-transparent shadow-none`}>
+              <span className={`${s.avatarLarge} ${s.profileAvatar} rounded-full border-0 bg-primary-subtle text-primary-subtle-fg`}>
                 <Network aria-hidden="true" style={{ inlineSize: '2rem', blockSize: '2rem' }} />
               </span>
               <h2>{row.name}</h2>
               <p>
                 {t('code')}: {row.code}
               </p>
-              <span style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+              <span className="flex flex-wrap justify-center gap-1.5">
                 <Pill label={row.active ? t('active') : t('inactive')} on={row.active} />
                 {row.isFinance ? <Pill label={t('departments.is_finance')} on={true} /> : null}
               </span>
@@ -186,7 +186,7 @@ export default async function DepartmentPage({
         <div className={s.profileStack}>
           <Panel flush title={`${t('departments.members')} · ${members.length}`}>
             {members.length === 0 ? (
-              <p className="muted" style={{ padding: '1.4rem' }}>
+              <p className="muted p-5">
                 {t('departments.members_empty')}
               </p>
             ) : (
@@ -205,7 +205,7 @@ export default async function DepartmentPage({
                       <tr key={m.userId}>
                         <td>
                           <Link href={`/administration/users/${m.userId}`}>{m.displayName}</Link>
-                          <span className="muted" style={{ display: 'block', fontSize: '0.72rem' }}>
+                          <span className="muted block text-xs">
                             {m.email}
                           </span>
                         </td>
@@ -215,7 +215,7 @@ export default async function DepartmentPage({
                         </td>
                         {mayAssign ? (
                           <td>
-                            <span style={{ display: 'inline-flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                            <span className="inline-flex flex-wrap gap-1.5">
                               {m.isManager ? (
                                 <ActionButton
                                   action={setDepartmentManager}

@@ -1225,7 +1225,7 @@ export default async function PayablePage({
             </h2>
 
             {contract ? (
-              <p className={s.sapNote}>
+              <p className={`${s.sapNote} m-0 px-4 py-3 sm:px-5`}>
                 <Link
                   className={s.sapLink}
                   href={`/payables/contracts/${encodeURIComponent(contract.contractNo)}`}

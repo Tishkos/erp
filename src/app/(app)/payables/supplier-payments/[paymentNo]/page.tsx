@@ -292,7 +292,7 @@ export default async function PaymentPage({
             <span>{t('supplier_payments.allocated')}</span>
             <span className={s.sapTitleMeta}>{t('payables_orders.rows', { count: allocations.length })}</span>
           </h2>
-          <p className={s.sapNote}>{t('payables_record.allocation_note')}</p>
+          <p className={`${s.sapNote} m-0 px-4 py-3 sm:px-5`}>{t('payables_record.allocation_note')}</p>
           <div className={s.sapTableWrap}>
             <table className={s.sapTable}>
               <thead>
