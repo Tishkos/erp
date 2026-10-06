@@ -58,8 +58,12 @@ export async function AuthShell({
         />
       </header>
 
-      <div className="flex flex-1 flex-col items-center justify-center gap-8 px-4 pt-2 pb-10 sm:pt-4 sm:pb-14">
-        <div className="flex w-full max-w-[26rem] flex-col gap-6">
+      {/* On a wide screen the form keeps the middle and what the system is sits
+          in the top start corner, so nothing waits below the fold (2026-10-06,
+          by direction: "this should be on the left side, no need for scrolling
+          down … move top left"). The form stays first in the reading order. */}
+      <div className="grid flex-1 content-center justify-items-center gap-8 px-4 pt-2 pb-10 sm:pt-4 sm:pb-14 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)_minmax(0,1fr)] lg:content-stretch lg:gap-10 lg:px-6 lg:pt-1 lg:pb-6">
+        <div className="flex w-full max-w-[26rem] flex-col gap-6 lg:col-start-2 lg:row-start-1 lg:self-center">
           <div className="flex flex-col items-center gap-2 text-center">
             {/* Deep blue on transparent; on a dark palette it is knocked out to white. */}
             <Image
@@ -76,7 +80,7 @@ export async function AuthShell({
         </div>
 
         {pillars ? (
-          <ul className="m-0 hidden w-full max-w-[38rem] list-none gap-x-8 gap-y-4 p-0 sm:grid sm:grid-cols-2">
+          <ul className="m-0 hidden w-full max-w-[38rem] list-none gap-x-8 gap-y-4 p-0 sm:grid sm:grid-cols-2 lg:col-start-1 lg:row-start-1 lg:max-w-[19rem] lg:grid-cols-1 lg:gap-y-5 lg:self-start lg:justify-self-start">
             {(
               [
                 ['pillar_one', Blocks],
