@@ -44,6 +44,10 @@ export const MODULES = [
   // Administration's; the supplier master heads Supplier Balances (by
   // direction, 2026-10-04), as Customers heads Sales & Receivables.
   { key: 'payables', sectionKeys: ['payables', 'payables_payments', 'payables_suppliers'] },
+  // Transfers & Applications (by direction, 2026-10-06): the import
+  // application and the payment application, beside Payables in the top bar
+  // — "these two for now".
+  { key: 'transfers', sectionKeys: ['payables_transfers'] },
   // Everything logistics in the system (by direction, 2026-10-02) — the
   // owner's four headings (REQ-LOG-001). The client jobs (`logistics`) are
   // out of the dropdown until they have a screen (Q3).

@@ -114,7 +114,7 @@ What it is for: Getting to any screen. From left to right (right to left in Arab
 1. Press a module name in the bar. A panel drops down with the module's headings and, under each, its screens.
 2. Press a screen name. The panel closes and the screen opens. The module you are in is highlighted in the bar and the open screen is marked in the panel.
 3. Press the module name again, press anywhere outside, or press Esc to close the panel without going anywhere.
-The modules, in order, are: Dashboard (الرئيسية), Accounting (المحاسبة), Receivables (الذمم المدينة), Payables (الذمم الدائنة), Logistics (اللوجستيات), Money Transfer (التحويلات), CRM, Projects (المشاريع), Inventory (المخزون), HR, Documents (المستندات), Monitoring (المتابعة), Reports (التقارير), Settings (الإعدادات). You see only those that hold a built screen you may open.
+The modules, in order, are: Dashboard (الرئيسية), Accounting (المحاسبة), Receivables (الذمم المدينة), Payables (الذمم الدائنة), Transfers & Applications (التحويلات والطلبات) — the import applications and the payment applications, Logistics (اللوجستيات), Money Transfer (التحويلات), CRM, Projects (المشاريع), Inventory (المخزون), HR, Documents (المستندات), Monitoring (المتابعة), Reports (التقارير), Settings (الإعدادات). You see only those that hold a built screen you may open.
 A few screen names in the panels are drawn in a lighter grey and show "Not yet built" (لم تُنشأ بعد) when you hover over them. Some of these work normally all the same (for example Sales Invoices, Customer Receipts and Sales Returns); the Monitoring screens really are empty.
 
 ### How to move between the screens of one heading — Top bar and module menu

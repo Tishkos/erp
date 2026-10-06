@@ -120,7 +120,8 @@ const EVERY_SECTION = MENU.map((section) => section.key);
  */
 const SALES = ['sales', 'finance_ar', 'crm'];
 const MONEY_OUT = ['treasury', 'money_transfer'];
-const BUYING = ['payables'];
+// The import application moved to Transfers & Applications on 2026-10-06; named so the roles keep it.
+const BUYING = ['payables', 'payables_transfers'];
 
 /**
  * Items and units of measure were the Inventory section's on 2026-10-03, when
@@ -200,6 +201,7 @@ const NEW_ROLES = [
         [
           ...objectsOf(
             'payables',
+            'payables_transfers',
             'payables_suppliers',
             'logistics_customs',
             'logistics_shipping',
@@ -261,6 +263,7 @@ const NEW_ROLES = [
         objectsOf(
           'sales',
           'payables',
+          'payables_transfers',
           'payables_suppliers',
           'logistics',
           'logistics_customs',
@@ -306,7 +309,7 @@ const NEW_ROLES = [
     description:
       'The import application and its papers, in full; inventory to look at. Nothing else. For Maki, when their address is known.',
     grants: restrict(
-      grants(objectsOf('payables', 'logistics_customs', 'logistics_shipping', 'logistics_in_transit', 'logistics_landed_costs'), FULL),
+      grants(objectsOf('payables', 'payables_transfers', 'logistics_customs', 'logistics_shipping', 'logistics_in_transit', 'logistics_landed_costs'), FULL),
       grants([...objectsOf('inventory'), ...STOCK_MASTER, ...PAYING], READ),
     ),
   },

@@ -337,7 +337,7 @@ Needs: `view` on the record the chain starts from — `payable` for an import, `
 What it is for: Shows how the real records around one import, supplier, customer or item connect — for an import: its purchase invoices, bills of lading, containers, customs papers, landed cost, receipts and the stock they became. Every line is a record that exists and opens its own page. Read-only.
 
 ### How to open the related records of a record — Related records
-1. Open the record: an import application (Payables → Purchasing & Invoices → Import Applications, click its number), a supplier (Payables → Supplier Balances → Suppliers), a customer (Receivables → Sales & Receivables → Customers) or an item (Accounting → Master Data — Inventory Reference → Items).
+1. Open the record: an import application (Transfers & Applications → Import Applications, click its number), a supplier (Payables → Supplier Balances → Suppliers), a customer (Receivables → Sales & Receivables → Customers) or an item (Accounting → Master Data — Inventory Reference → Items).
 2. Scroll down to the section **Related records** (السجلات المرتبطة). On an import it sits above the Status log; on a supplier or customer profile above the Audit log; on an item at the foot of the page.
 3. To see the chain alone on a page, press **Open the whole chain** (افتح السلسلة كاملة). The page is titled "<Import | Supplier | Customer | Item> <number>: related records"; the back button **Back to <number>** (العودة إلى <number>) returns to the record.
 4. Press any record's number in the table to open that record.

@@ -8,6 +8,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import {
   ArrowLeftRight,
+  ClipboardList,
   BarChart3,
   Bell,
   Boxes,
@@ -138,6 +139,7 @@ const MODULE_ICONS: Readonly<Record<ModuleKey, LucideIcon>> = {
   accounting: Calculator,
   sales: ShoppingCart,
   payables: ShoppingBag,
+  transfers: ClipboardList,
   logistics: Truck,
   money_transfer: ArrowLeftRight,
   crm: Handshake,

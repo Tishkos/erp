@@ -32,14 +32,14 @@ The books are kept in Iraqi dinars (IQD). An invoice typed in another currency (
 Only a supplier whose status is Active and who is in use is offered in the supplier pickers on these screens. A supplier entered by somebody without approval rights is a "Prospect" until it is approved on its profile (see Suppliers).
 
 ## Import Applications (معاملات الاستيراد)
-Path: Payables → Purchasing & Invoices → Import Applications   |   Arabic: الذمم الدائنة ← المشتريات والفواتير ← معاملات الاستيراد
+Path: Transfers & Applications → Transfers & Applications → Import Applications   |   Arabic: التحويلات والطلبات ← التحويلات والطلبات ← معاملات الاستيراد
 Address: /payables (one application: /payables/<application number>)
 Needs: `view` on `payable` to open the list and a record. Creating needs `create` on `payable` (and `create` on `ap_invoice` for the invoice form).
 What it is for: One record per import — from the supplier's invoice to the warehouse. The list shows every open import with its stage, what is paid, how many containers are in, and whether it is stopped. The record page is the one place where the payments, the customs PD, the shipment, the landed cost and the quantities of an import are read side by side.
 
 ### How to read the list — Import Applications
 Needs: `view` on `payable`.
-1. Open Payables → Purchasing & Invoices → Import Applications. The list shows up to 50 rows and has no page buttons — use the search and the filters to narrow it. It is sorted for attention: applications stopped with no reason first, then the oldest stop, then the nearest due date.
+1. Open Transfers & Applications → Import Applications (its own module in the top bar since 2026-10-06, beside Payables). The list shows up to 50 rows and has no page buttons — use the search and the filters to narrow it. It is sorted for attention: applications stopped with no reason first, then the oldest stop, then the nearest due date.
 2. Use the search box (Search this list — ابحث في هذه القائمة) to find by application number, supplier reference (PO / INV number) or description.
 3. Use the filters and press **Filter** (تصفية): **Views** (العروض) — All open, Stopped — reason required, Stopped, Imports, Rent & contracts; **Type** (النوع) — empty means All types (كل الأنواع), the list opens on Import application; **Stopped?** (متوقف؟) — Stopped (متوقف), Reason required (السبب مطلوب), Moving (يتقدم), or All rows (كل الصفوف).
 4. Columns: **No.** (الرقم) — click it to open the record; **Type** (النوع); **PO / INV no.** (رقم الطلب / الفاتورة) — the supplier's reference; **Supplier** (المورد); **Amount** (المبلغ) in the import's currency; **Paid** (المدفوع) — what confirmed payment applications have paid, with **Remaining** (المتبقي) under it once something is paid; **Stage** (المرحلة) — stage number, name and days in that stage; **Containers** (الحاويات) — "X of Y" received; **Stopped?** (متوقف؟) — red "Reason required", or the stop's reason code and days, or "Moving"; **Due** (الاستحقاق); **Branch** (الفرع).
@@ -623,13 +623,13 @@ Needs: `create` on `supplier_payment` to create; `post` on `supplier_payment` to
 - "Supplier payment … is 'posted': it has already posted." — it was posted already.
 
 ## Payment Applications (طلبات الدفع)
-Path: Payables → Supplier Payments & Credits → Payment Applications   |   Arabic: الذمم الدائنة ← مدفوعات الموردين وأرصدتهم الدائنة ← طلبات الدفع
+Path: Transfers & Applications → Transfers & Applications → Payment Applications   |   Arabic: التحويلات والطلبات ← التحويلات والطلبات ← طلبات الدفع
 Address: /payables/payment-applications (one application: /payables/payment-applications/<application number>)
 Needs: `view` on `payment_application`. Create needs `create`; Approve and Reject need `approve`; Send needs `execute`; Confirm and Record debit need `post`; Cancel needs `edit_draft` for a draft and `reverse_cancel` once approved or sent — all on `payment_application`.
 What it is for: A payment application is the company's request to its bank or cashier to pay a supplier for an import. It is prepared, approved by a second person (which reserves the money), sent to the bank, confirmed when the bank has paid (which posts the payment), and finally marked when the debit shows on the bank statement. The list is sorted longest waiting first. The allocation to invoices is not kept here — it is on the supplier payment the confirmation creates.
 
 ### How to read the list — Payment Applications
-1. Open Payables → Supplier Payments & Credits → Payment Applications; search with the box at the top.
+1. Open Transfers & Applications → Payment Applications (its own module in the top bar since 2026-10-06); search with the box at the top.
 2. Filter with **View** (العرض) and press **Show** (عرض): All (الكل), To approve (بانتظار الاعتماد) — drafts, To send to the bank (للإرسال إلى البنك) — approved, Waiting for the bank (بانتظار البنك) — sent, Paid (مدفوعة), Rejected or cancelled (مرفوضة أو ملغاة).
 3. Columns: **Application no.** (رقم الطلب); **Import** (الاستيراد) — the import application and its supplier reference; **Supplier** (المورد); **Method** (الطريقة); **Paid from** (يُدفع من) — the account and its bank; **Amount** (المبلغ) in the import's currency; **Sent to bank** (أُرسل إلى البنك) — the date; **Days waiting** (أيام الانتظار); **Status** (الحالة).
 

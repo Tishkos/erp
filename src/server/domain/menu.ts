@@ -188,9 +188,9 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     key: 'payables',
     ordinal: 4,
     items: [
-      // The import application is born at its purchase invoice (D12/D13);
-      // the list of them is the module's front door.
-      page('payables_workbench', 'payable', '/payables'),
+      // The import application (`payables_workbench`, /payables) led this
+      // heading until 2026-10-06, when it went to the Transfers &
+      // Applications module below, by direction.
       page('purchase_orders', 'purchase_order'),
       page('goods_receipts', 'goods_receipt'),
       page('ap_invoices', 'ap_invoice', '/payables/invoices'),
@@ -211,12 +211,29 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     ordinal: 22,
     items: [
       page('supplier_payments', 'supplier_payment', '/payables/supplier-payments'),
-      page('payment_applications', 'payment_application', '/payables/payment-applications'),
+      // Payment Applications went to Transfers & Applications (2026-10-06).
       page('supplier_advances', 'supplier_advance', '/payables/advances'),
       // Read from the payments, advances and credit notes themselves — the
       // money of ours the supplier still holds, never a balance kept apart.
       page('supplier_credits', 'supplier_payment', '/payables/supplier-credits'),
       page('supplier_credit_memos', 'supplier_credit_memo', '/payables/credit-memos'),
+    ],
+  },
+  {
+    /*
+     * Transfers & Applications — its own module in the top bar, by direction
+     * 2026-10-06 ("I want to make Transfers and Applications; the import
+     * application goes there; it contains Import Applications and Payment
+     * Applications, these two for now"). The two screens that ask for money
+     * to move: the import application (born at its purchase invoice,
+     * D12/D13) and the request to the bank. Routes did not move (D-FX-1).
+     * "For now": more screens may join this heading.
+     */
+    key: 'payables_transfers',
+    ordinal: 31,
+    items: [
+      page('payables_workbench', 'payable', '/payables'),
+      page('payment_applications', 'payment_application', '/payables/payment-applications'),
     ],
   },
   {

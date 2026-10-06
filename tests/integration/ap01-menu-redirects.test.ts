@@ -30,7 +30,7 @@ describe('ap01 · one module, one place, nothing bookmarked breaks', () => {
     // Ledger is Supplier Statements, Advances and Payments are Supplier
     // Advances and Supplier Payments, Allocations is each payment's own
     // table, Ageing is Payables Ageing — so they left the tree.
-    const keys = MENU.filter((section) => ['payables', 'payables_payments', 'payables_suppliers'].includes(section.key)).flatMap((section) =>
+    const keys = MENU.filter((section) => ['payables', 'payables_transfers', 'payables_payments', 'payables_suppliers'].includes(section.key)).flatMap((section) =>
       section.items.map((item) => item.key),
     );
     for (const kept of ['ap_statements', 'supplier_advances', 'supplier_payments', 'ap_open_items', 'ap_reconciliation']) {

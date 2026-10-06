@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { MENU } from '@domain/menu';
+import { MODULES } from '@domain/modules';
 import { routeFor } from '@domain/screens';
 
 const section = (key: string) => {
@@ -24,8 +25,11 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
     // what is bought and invoiced, how the supplier is paid and what they hold
     // of ours, and the balances. The setup went to Administration; the
     // supplier master heads the balances (by direction, 2026-10-04).
-    expect(keysOf('payables').slice(0, 7)).toEqual([
-      'payables_workbench',
+    // Transfers & Applications (by direction, 2026-10-06) took the import
+    // application and the payment application into a module of its own.
+    expect(keysOf('payables_transfers')).toEqual(['payables_workbench', 'payment_applications']);
+    expect(MODULES.find((module) => module.key === 'transfers')?.sectionKeys).toEqual(['payables_transfers']);
+    expect(keysOf('payables').slice(0, 6)).toEqual([
       'purchase_orders',
       'goods_receipts',
       'ap_invoices',
@@ -35,7 +39,6 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
     ]);
     expect(keysOf('payables_payments')).toEqual([
       'supplier_payments',
-      'payment_applications',
       'supplier_advances',
       'supplier_credits',
       'supplier_credit_memos',
@@ -56,7 +59,7 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
     expect(everywhere).toEqual(['payables_suppliers']);
     expect(keysOf('master_data')).not.toContain('suppliers');
     expect(keysOf('administration')).toEqual(expect.arrayContaining(['payables_settings', 'payables_migration']));
-    const payables = ['payables', 'payables_payments', 'payables_suppliers'].flatMap(keysOf);
+    const payables = ['payables', 'payables_transfers', 'payables_payments', 'payables_suppliers'].flatMap(keysOf);
     for (const gone of ['payables_settings', 'payables_migration']) {
       expect(payables, gone).not.toContain(gone);
     }
@@ -70,7 +73,7 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
   });
 
   it('nothing logistics or banking is left under Payables', () => {
-    const payables = ['payables', 'payables_payments', 'payables_suppliers'].flatMap(keysOf);
+    const payables = ['payables', 'payables_transfers', 'payables_payments', 'payables_suppliers'].flatMap(keysOf);
     for (const gone of ['pds', 'asycuda_update', 'shipments', 'containers', 'in_transit', 'loans', 'bank_deposits']) {
       expect(payables, gone).not.toContain(gone);
     }
@@ -172,7 +175,8 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
     expect(route('treasury', 'loans')).toBe('/treasury/loans');
     expect(route('master_banking', 'bank_cash_accounts')).toBe('/master-data/bank-accounts');
     expect(route('master_banking', 'cash_accounts')).toBe('/master-data/cash-accounts');
-    expect(route('payables_payments', 'payment_applications')).toBe('/payables/payment-applications');
+    expect(route('payables_transfers', 'payment_applications')).toBe('/payables/payment-applications');
+    expect(route('payables_transfers', 'payables_workbench')).toBe('/payables');
     expect(route('payables', 'purchase_orders')).toBe('/payables/purchase-orders');
     expect(route('payables', 'goods_receipts')).toBe('/payables/goods-receipts');
     expect(route('payables', 'service_receipts')).toBe('/payables/service-receipts');
