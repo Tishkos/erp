@@ -17,6 +17,7 @@ import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as ap from '@/server/services/ap-invoice';
+import * as journal from '@/server/services/journal';
 import * as items from '@/server/services/items';
 import * as coa from '@/server/services/chart-of-accounts';
 import * as partners from '@/server/services/partners';
@@ -116,6 +117,15 @@ export default async function ApInvoicePage({
       // credit and debit notes that adjust this invoice (PAY8/PAY9).
       doors: await readDoors(tx, principal, { object: ap.PERMISSION_OBJECT, recordId: document.invoice.id }),
       adjustments: await supplierNotes.adjustmentsOf(tx, document.invoice.id),
+      // The invoice's own journal — every debit and credit the posting wrote —
+      // and the reversal's when it was reversed (2026-10-06, by direction:
+      // "under the purchase invoice show debit and credit, nicely").
+      entries: await (async () => {
+        if (!document.journalEntryNo) return null;
+        const posted = await journal.detail(tx, document.journalEntryNo);
+        const reversal = posted.linked?.relation === 'reversed_by' ? await journal.detail(tx, posted.linked.entryNo) : null;
+        return { posted, reversal };
+      })(),
       adjusts: document.invoice.adjustsInvoiceId ? await ap.view(tx, document.invoice.adjustsInvoiceId).then((seen) => seen.invoice.invoiceNo).catch(() => null) : null,
       // D12 / D13 — the accounts a payment may leave from, and the import
       // application behind this invoice, if any.
@@ -649,6 +659,109 @@ export default async function ApInvoicePage({
           service the Receivables and Payables reports use, so an invoice and
           the report listing it cannot disagree about its own due date. */}
       <InvoiceSettlement invoiceNo={invoice.invoiceNo} side="supplier" />
+
+      {/* The accounting behind it — every debit and credit the posting wrote,
+          totalled, and the reversal's journal under it when there is one
+          (2026-10-06, by direction: "under the purchase invoice show debit
+          and credit, nicely"). Read from the journal itself, so this table and
+          the Journal Entries screen cannot disagree. */}
+      <section aria-labelledby="ap-invoice-entries-title" className={s.sapDoc}>
+        <div className={s.sapWindow}>
+          <h2 className={s.sapTitle} id="ap-invoice-entries-title">
+            <span>{t('payables_record.entries')}</span>
+            <span className={s.sapTitleMeta}>
+              {found.entries ? (
+                <>
+                  <ProfileLink code={found.entries.posted.header.entryNo} kind="journal" />
+                  {' · '}
+                  <span className={`status status--${found.entries.posted.header.status}`} data-status={found.entries.posted.header.status}>
+                    {status.has(found.entries.posted.header.status) ? status(found.entries.posted.header.status) : found.entries.posted.header.status}
+                  </span>
+                </>
+              ) : (
+                t('payables_record.entries_pending')
+              )}
+            </span>
+          </h2>
+          {found.entries ? (
+            [found.entries.posted, ...(found.entries.reversal ? [found.entries.reversal] : [])].map((entry) => {
+              const nil = (value: string) => /^0(\.0+)?$/.test(value);
+              const total = (side: 'debitIqd' | 'creditIqd') =>
+                toDecimalString(entry.lines.reduce((sum, line) => sum + parseDecimal(line[side], MONEY_SCALE), 0n), MONEY_SCALE);
+              return (
+                <div className={s.sapTableWrap} key={entry.header.entryNo}>
+                  <table aria-label={entry.header.entryNo} className={s.sapTable}>
+                    {found.entries?.reversal ? (
+                      <caption className={s.sapTitleMeta}>
+                        <ProfileLink code={entry.header.entryNo} kind="journal" />
+                      </caption>
+                    ) : null}
+                    <thead>
+                      <tr>
+                        <th scope="col">#</th>
+                        <th scope="col">{column('account')}</th>
+                        <th scope="col">{column('description')}</th>
+                        <th className={s.sapNum} scope="col">
+                          {column('debit')}
+                        </th>
+                        <th className={s.sapNum} scope="col">
+                          {column('credit')}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {entry.lines.map((line) => (
+                        <tr key={line.id}>
+                          <td className={s.sapNum}>{line.lineNo}</td>
+                          <td className={s.sapAccountCell}>
+                            <ProfileLink code={line.accountCode} dir="auto" kind="gl_account" name={line.accountName} />
+                          </td>
+                          <td>
+                            <bdi dir="auto">{line.description ?? '—'}</bdi>
+                          </td>
+                          <td className={s.sapNum}>
+                            <bdi dir="ltr">{nil(line.debitIqd) ? '' : money(line.debitIqd)}</bdi>
+                          </td>
+                          <td className={s.sapNum}>
+                            <bdi dir="ltr">{nil(line.creditIqd) ? '' : money(line.creditIqd)}</bdi>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td colSpan={3}>
+                          <strong>{t('journals.balanced')}</strong>
+                        </td>
+                        <td className={s.sapNum}>
+                          <strong>
+                            <bdi dir="ltr">{money(total('debitIqd'))}</bdi>
+                          </strong>
+                        </td>
+                        <td className={s.sapNum}>
+                          <strong>
+                            <bdi dir="ltr">{money(total('creditIqd'))}</bdi>
+                          </strong>
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              );
+            })
+          ) : (
+            <div className={s.sapTableWrap}>
+              <table className={s.sapTable}>
+                <tbody>
+                  <tr>
+                    <td className={s.sapEmptyRow}>{t('payables_record.no_entries')}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </section>
 
       {/* PAY8/PAY9 — what adjusts this invoice: credit notes applied to it,
           debit notes raised on it. Each is its own record; this is the index. */}
