@@ -149,7 +149,7 @@ export const warehouse = pgTable(
      * block 8. Null for an ordinary warehouse. A property of the warehouse the
      * way being a transit warehouse already is.
      */
-    shipmentStage: text('shipment_stage', { enum: ['in_process', 'on_board', 'on_port'] }),
+    shipmentStage: text('shipment_stage', { enum: ['without_swift', 'in_process', 'on_board', 'on_port'] }),
     /** §9.1 — transit stock is owned but not available for sale. */
     isTransit: boolean('is_transit').notNull().default(false),
     /**

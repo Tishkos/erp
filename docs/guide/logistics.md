@@ -22,7 +22,7 @@ What it is for: the ideas every Logistics screen shares — the chain, "in trans
 The same sentence is printed at the top of several Logistics screens under **Where this sits in the chain** (موقع هذه الشاشة في السلسلة).
 
 ### In transit is owned but not available — Logistics
-- Goods standing in a **transit warehouse** or in a **stage warehouse** (In Process, On Board, At Port) belong to the company and are counted in the value of stock, but they are **never on hand and never available to sell, issue or pick**. Their available quantity is always shown as 0.
+- Goods standing in a **transit warehouse** or in a **stage warehouse** (On Process (Without SWIFT), In Process, On Board, At Port) belong to the company and are counted in the value of stock, but they are **never on hand and never available to sell, issue or pick**. Their available quantity is always shown as 0.
 - An import's goods are booked into a transit warehouse by its posted purchase invoice. They leave it only in two ways: a **container receipt** (the goods move into a real warehouse and become available), or a **shortage claim** (a purchase return to the supplier straight out of transit).
 - So after 500 units are shipped and 300 received: In transit 200, Received 300, On hand 300 (until some are sold).
 - Goods of an ordinary (non-import) purchase invoice that was received into the In Process warehouse move stage by stage on the In-Transit Inventory screen; they become available only at the last stage, **In Bounded**, when a real warehouse is chosen.
@@ -749,7 +749,7 @@ First table, by import and item (read-only):
 - **On hand** (في اليد) — what of that is still there.
 - **Containers (open / total)** (الحاويات (مفتوحة / الكل)) — containers carrying this item not yet received / all.
 - **Customs (PDs)** — the import's standing PDs with their statuses; **Declaration** (البيان الجمركي) — the status of its furthest-advanced customs declaration.
-Second table (read-only): **Warehouse** (المخزن), **Stage** (المرحلة — In Process, On Board, At Port, or In transit), **Branch** (الفرع), **Item**, **In transit (ledger)** (قيد النقل (الدفتر)), **Available** (المتاح — always 0), **Value (IQD)**.
+Second table (read-only): **Warehouse** (المخزن), **Stage** (المرحلة — On Process (Without SWIFT), In Process, On Board, At Port, or In transit), **Branch** (الفرع), **Item**, **In transit (ledger)** (قيد النقل (الدفتر)), **Available** (المتاح — always 0), **Value (IQD)**.
 Invoice Status Tracking: **Reference** (المرجع — the purchase invoice number), **Invoice Date** (تاريخ الفاتورة), **Supplier Code** (رمز المورّد), **Supplier Name** (اسم المورّد), **Amount** (المبلغ — in IQD), **Where the goods are** (موقع البضاعة — the warehouse), **Status** (الحالة). The warehouse box for In Bounded lists the active main warehouses and is required.
 
 ### After you save — In-Transit Inventory

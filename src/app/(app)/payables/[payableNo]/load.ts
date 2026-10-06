@@ -4,7 +4,6 @@ import * as events from '@/server/services/payable-events';
 import * as payables from '@/server/services/payables';
 import * as paymentApplications from '@/server/services/payment-applications';
 import * as customs from '@/server/services/customs-pd';
-import * as banksService from '@/server/services/banks';
 import * as shipmentsService from '@/server/services/shipments';
 import * as loansService from '@/server/services/loans';
 import * as landedService from '@/server/services/landed-cost';
@@ -14,6 +13,7 @@ import * as contracts from '@/server/services/recurring-contracts';
 import * as serviceReceipts from '@/server/services/service-receipt';
 import * as users from '@/server/services/users';
 import * as exchange from '@/server/services/import-exchange';
+import * as advanceHold from '@/server/services/advance-hold';
 import { readAttachments } from '@/components/admin/attachments';
 import { readHistory } from '@/components/admin/history';
 
@@ -95,21 +95,23 @@ export async function loadPayableRecord(tx: Tx, input: PayableRecordInput) {
     const instalments = isImport ? await paymentApplications.instalmentsFor(tx, view.payable.id) : [];
     const applied = isImport ? await paymentApplications.list(tx, { payableId: view.payable.id }) : [];
     const paymentTotals = isImport ? await paymentApplications.totalsFor(tx, view.payable.id) : null;
+    // What waits in On Process (Without SWIFT) for the advance (2026-10-06).
+    const held = isImport ? await advanceHold.heldOf(tx, view.payable.id) : [];
     // REQ-FIX-001 FX8 — an import agreed in another currency, fully paid in it:
     // what its dinars still have to close on (read only then; none for IQD).
     const exchangeResidual =
       paymentTotals?.fullyPaid && view.payable.currency !== 'IQD' ? await exchange.residualOf(tx, view.payable.id) : null;
     // §15.7 — the loans that fund it, with the commission each draw carries.
     const funding = isImport && may.viewLoans ? await loansService.forPayable(tx, view.payable.id) : [];
-    const pickers = isImport && may.pay && open ? await paymentApplications.pickersFor(tx, view.payable.id) : null;
+    // The windows that raised an application, a PD and a B/L are sheets of their own since 2026-10-06:
+    // the page only says whether to offer them, and reads none of their pickers.
+    const pickers = isImport && may.pay && open;
     // §16 — the PD / ASYCUDA section.
     const pds = isImport && may.viewPd ? await customs.list(tx, { payableId: view.payable.id, view: 'all' }) : [];
-    const pdPickers = isImport && may.registerPd && open ? { banks: await banksService.listActive(tx), statuses: await customs.statuses(tx) } : null;
+    const pdPickers = isImport && may.registerPd && open;
     // §17 — the Shipment & containers section.
     const shipment = isImport && may.viewShipment ? await shipmentsService.forPayable(tx, view.payable.id) : null;
-    const blPorts = isImport && may.createBl && open ? await shipmentsService.ports(tx) : null;
-    // IM2 — the B/L's table: each model of the import with what is left to ship of it.
-    const blModels = blPorts ? await shipmentsService.modelsToShip(tx, view.payable.id) : [];
+    const blPorts = isImport && may.createBl && open;
     // §20.2 — the landed cost: its charges, the locks, what a lock would do.
     const landed = isImport && may.viewLanded ? await landedFor(tx, view, { addCharge: may.addCharge, lock: may.lock }) : null;
     // G3 — the attachments and the history, in this same transaction.
@@ -120,7 +122,6 @@ export async function loadPayableRecord(tx: Tx, input: PayableRecordInput) {
       landed,
       shipment,
       blPorts,
-      blModels,
       log,
       reasons,
       people,
@@ -129,6 +130,7 @@ export async function loadPayableRecord(tx: Tx, input: PayableRecordInput) {
       instalments,
       applied,
       paymentTotals,
+      held,
       exchangeOpen: exchangeResidual !== null && exchange.isOpen(view.payable.currency, exchangeResidual) ? exchangeResidual : null,
       funding,
       pickers,

@@ -42,6 +42,7 @@ import {
   supplierCreditMemo,
   warehouse,
   bankCashAccount,
+  partnerBankAccount,
   paymentApplication,
   paymentMethod,
   purchaseOrder,
@@ -79,6 +80,7 @@ import { assertResultAccount, assertStatementAccount } from '../domain/posting-m
 import { allocateDocumentNumber } from './numbering';
 import * as execution from './project-execution';
 import * as advances from './supplier-advance';
+import * as advanceHold from './advance-hold';
 import * as units from './item-units';
 import { dispatch as dispatchAutomation } from './automation-dispatch';
 import * as workflow from './workflow';
@@ -1738,6 +1740,28 @@ export async function post(
   let varianceIqd = 0n;
   let payableIqd = 0n;
 
+  /*
+   * An import that agrees an advance waits for it (2026-10-06, by direction:
+   * "the advanced option has one extra warehouse, On Process (Without SWIFT) —
+   * once its payment application is done it goes In Process"). Its lines bound
+   * for In Process land in the branch's hold instead; `advance-hold.release`
+   * moves them on when a payment application of the import is Paid.
+   */
+  const agreesAdvance =
+    invoice.isImport &&
+    Boolean(invoice.payableId) &&
+    advanceOf(lines.reduce((sum, line) => sum + lineValue(line), 0n), invoice.advancePercent) !== null;
+  const inProcessHouse = agreesAdvance ? await advanceHold.inProcessWarehouseOf(tx, invoice.branchCode) : null;
+  const holdsGoods = agreesAdvance && inProcessHouse !== null && lines.some((line) => line.warehouseCode === inProcessHouse);
+  const holdHouse = holdsGoods ? await advanceHold.holdWarehouseOf(tx, invoice.branchCode) : null;
+  if (holdsGoods && !holdHouse) {
+    throw new Error(
+      `${invoice.invoiceNo} agrees an advance, so its goods wait in On Process (Without SWIFT) until the advance is paid — ` +
+        `and ${invoice.branchCode} has no such warehouse. Set up the shipment-stage warehouses (Warehouses) and post again.`,
+    );
+  }
+  const landingOf = (warehouseCode: string | null) => (holdHouse && warehouseCode === inProcessHouse ? holdHouse : warehouseCode);
+
   for (const line of lines) {
     const invoicedValue = lineValue(line);
     payableIqd += invoicedValue;
@@ -1776,7 +1800,8 @@ export async function post(
       const baseQuantity = await units.toBaseQuantity(tx, line.itemCode!, line.uomCode, parseQuantity(line.quantity));
       await inventory.receive(tx, ctx, {
         itemCode: line.itemCode!,
-        warehouseCode: line.warehouseCode,
+        // In Process — or, for an import that agrees an advance, its hold until the advance is paid.
+        warehouseCode: landingOf(line.warehouseCode)!,
         branchCode: invoice.branchCode,
         quantity: baseQuantity,
         // A *unit* cost, and the discount is part of it: stock is worth what
@@ -1798,8 +1823,8 @@ export async function post(
         role: 'inventory',
         accountId: account,
         debit: amount(invoicedValue),
-        criteria: { ...criteria, warehouseCode: line.warehouseCode },
-        dimensions: { ...dimensions, warehouse: line.warehouseCode },
+        criteria: { ...criteria, warehouseCode: landingOf(line.warehouseCode)! },
+        dimensions: { ...dimensions, warehouse: landingOf(line.warehouseCode)! },
       });
       continue;
     }
@@ -1945,19 +1970,34 @@ export async function post(
   await advances.applyToPostedInvoice(tx, ctx, id);
 
   /*
-   * §15.3 — the advance this invoice is paid in front, raised and approved
-   * (2026-10-03, by direction).
+   * §15.3 — the advance this invoice is paid in front, raised as a draft
+   * (2026-10-03, by direction; a draft since 2026-10-06: "draft, send for
+   * approval, approved").
    *
    * The accountant wrote a percentage on the invoice; the share of the total
    * just committed is what the bank is asked for, against this invoice's own
-   * import, and the request carries the invoice's approval rather than waiting
-   * for another. Send is untouched: the PD, the funds, the verified supplier
-   * account and the instalment trigger are all still asked there, so this
-   * moves no money.
+   * import. A person sends it for approval and another approves it; then its
+   * papers move it — sent to the bank, paid, rejected or cancelled — and Paid
+   * releases the goods held for it. Send still asks the PD, the funds, the
+   * verified supplier account and the instalment trigger, so this moves no
+   * money.
    */
   const advanceIqd = advanceOf(payableIqd, invoice.advancePercent);
   // "20%", not "20.0000%": the column keeps four places, a sentence does not.
   const advancePercent = (invoice.advancePercent ?? '').replace(/(\.\d*?[1-9])0+$|\.0+$/, '$1');
+  if (holdHouse && invoice.payableId && advanceIqd !== null) {
+    await payableEvents.record(tx, {
+      payableId: invoice.payableId,
+      eventCode: 'ADVANCE_HELD',
+      sourceType: PERMISSION_OBJECT,
+      sourceId: id,
+      sourceNo: invoice.invoiceNo,
+      summary:
+        `${invoice.invoiceNo} agrees ${advancePercent}% in front, so its goods wait in ${holdHouse} — ` +
+        'On Process (Without SWIFT) — until a payment application of this import is Paid; then they move to In Process.',
+      actorUserId: ctx.principal.userId,
+    });
+  }
   if (advanceIqd !== null && !invoice.advanceApplicationId) {
     if (!invoice.payableId) {
       // A payment application belongs to an import application; an invoice
@@ -2025,21 +2065,36 @@ export async function post(
         const asked = `${owner.currency} ${toDecimalString(advanceTxn, 4n)}`;
         let raised: { id: string; applicationNo: string } | null = null;
         let refusal: string | null = null;
+        // Whom the bank pays: the supplier's verified account in the import's currency, the default first —
+        // Send asks for it (§15.3), and the draft should not need a second form to get it.
+        const [payee] = await tx
+          .select({ id: partnerBankAccount.id })
+          .from(partnerBankAccount)
+          .where(
+            and(
+              eq(partnerBankAccount.partnerId, invoice.supplierId),
+              eq(partnerBankAccount.isActive, true),
+              eq(partnerBankAccount.approvalStatus, 'approved'),
+              eq(partnerBankAccount.currency, owner.currency),
+              isNull(partnerBankAccount.deactivatedAt),
+            ),
+          )
+          .orderBy(desc(partnerBankAccount.isDefault))
+          .limit(1);
         try {
           raised = await tx.transaction(async (sp) => {
             const inner = sp as unknown as typeof tx;
+            // A draft, sent for approval by a person and approved by another (2026-10-06, by direction).
             const made = await applications.create(inner, ctx, {
               payableId: invoice.payableId!,
               paymentMethodCode: invoice.advancePaymentMethodCode!,
               bankCashAccountId: invoice.advancePaidFromAccountId!,
+              payeeBankAccountId: payee?.id ?? null,
               amountTxn: advanceTxn,
               note:
                 `${advancePercent}% advance on ${invoice.invoiceNo}, ` +
                 `raised when it posted (${say(toDecimalString(payableIqd, 4n))} total).`,
             });
-            // "not drafts": approved on the invoice's own approval, which a second
-            // person gave when they posted it.
-            await applications.approve(inner, ctx, made.id, { inheritedFrom: invoice.invoiceNo });
             return { id: made.id, applicationNo: made.applicationNo };
           });
         } catch (error) {
@@ -2061,8 +2116,8 @@ export async function post(
             sourceId: id,
             sourceNo: invoice.invoiceNo,
             summary:
-              `${raised.applicationNo} raised for ${advancePercent}% of ${invoice.invoiceNo} — ` +
-              `${asked} (${say(toDecimalString(advanceIqd, 4n))}), approved on the invoice's own approval.`,
+              `${raised.applicationNo} drafted for ${advancePercent}% of ${invoice.invoiceNo} — ` +
+              `${asked} (${say(toDecimalString(advanceIqd, 4n))}). Send it for approval; once it is Paid the goods move to In Process.`,
             actorUserId: ctx.principal.userId,
           });
         } else {

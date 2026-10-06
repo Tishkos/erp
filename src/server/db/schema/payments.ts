@@ -38,6 +38,7 @@ import { bankCashAccount } from './item';
 import { paymentMethod } from './pricing';
 import { exchangeRate } from './fiscal';
 import { bankStatementLine } from './bank-statement';
+import { attachment } from './attachments';
 import { supplierPayment } from './supplier-payment';
 import { supplierAdvance } from './supplier-advance';
 import { payable } from './payables';
@@ -101,6 +102,8 @@ export const fundingSource = pgTable('funding_source', {
 
 export const PAYMENT_APPLICATION_STATUSES = [
   'draft',
+  // Sent for approval (2026-10-06, by direction: "draft, send for approval, approved").
+  'submitted',
   'approved',
   'sent',
   'confirmed',
@@ -191,6 +194,38 @@ export const paymentApplication = pgTable(
     uniqueIndex('payment_application_no_uniq').on(t.applicationNo),
     index('payment_application_payable_idx').on(t.payableId),
     index('payment_application_status_idx').on(t.status, t.applicationDate),
+  ],
+);
+
+/**
+ * What each paper on a payment application is, and so what it did — by
+ * direction 2026-10-06 ("whenever someone updates the attachments it has to be
+ * pointed out what this attachment is: sent to the bank, rejected / cancelled,
+ * paid, or other"). Append-only (0406).
+ */
+export const PAYMENT_PAPER_KINDS = ['sent_to_bank', 'rejected_cancelled', 'paid', 'other'] as const;
+export type PaymentPaperKind = (typeof PAYMENT_PAPER_KINDS)[number];
+
+export const paymentApplicationPaper = pgTable(
+  'payment_application_paper',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    paymentApplicationId: uuid('payment_application_id')
+      .notNull()
+      .references(() => paymentApplication.id),
+    attachmentId: uuid('attachment_id')
+      .notNull()
+      .references(() => attachment.id),
+    kind: text('kind').$type<PaymentPaperKind>().notNull(),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('payment_application_paper_application_idx').on(t.paymentApplicationId),
+    uniqueIndex('payment_application_paper_attachment_uniq').on(t.attachmentId),
+    check('payment_application_paper_kind', sql`${t.kind} in ('sent_to_bank', 'rejected_cancelled', 'paid', 'other')`),
   ],
 );
 

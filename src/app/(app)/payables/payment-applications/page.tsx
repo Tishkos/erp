@@ -35,7 +35,9 @@ import { STATUS_CHIP, statusKey } from './status';
 export const dynamic = 'force-dynamic';
 
 const VIEWS: Readonly<Record<string, readonly string[]>> = {
-  to_approve: ['draft'],
+  drafts: ['draft'],
+  // Sent for approval (2026-10-06): what an approver acts on.
+  to_approve: ['submitted'],
   to_send: ['approved'],
   waiting: ['sent'],
   paid: ['confirmed', 'debited'],

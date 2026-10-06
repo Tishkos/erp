@@ -356,7 +356,7 @@ const LOADERS_BY_KEY: Record<WidgetKey, Loader> = {
 
   async pending_payments(ctx) {
     const result = await ctx.tx.execute(sql`
-      select count(*) filter (where status = 'draft')::int as draft, count(*) filter (where status = 'approved')::int as approved
+      select count(*) filter (where status in ('draft', 'submitted'))::int as draft, count(*) filter (where status = 'approved')::int as approved
         from payment_application`);
     const row = result.rows[0] as { draft: number; approved: number };
     return kpi(count(row.draft + row.approved), '/payables/payment-applications', { note: { key: 'pending_split', values: { draft: row.draft, approved: row.approved } } });

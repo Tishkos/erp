@@ -629,6 +629,7 @@ export async function resetTestData(): Promise<void> {
     await client.query('delete from loan_commission_treatment where created_by is not null');
     await client.query('update loan_commission_treatment set active = true where created_by is null');
     // Stage 3 (0232) — applications and the plan they pay; fixture banks.
+    await client.query('delete from payment_application_paper');
     await client.query('delete from payment_application');
     await client.query('delete from payable_instalment');
     // Stage 5 (0234) — B/Ls, containers and their receipts (append-only in

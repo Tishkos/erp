@@ -30,6 +30,7 @@ import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { ProfileLink } from '@/components/admin/profile-link';
 import { formatBusinessDate, formatMoney, formatQuantity, type Locale } from '@/i18n/config';
+import { formatQuantity as quantityText } from '@/server/domain/uom';
 import { can } from '@domain/permissions';
 import { PENDING_REASON } from '@domain/payables';
 import { visibleRoute } from '@/server/delivered';
@@ -158,6 +159,7 @@ export default async function PayablePage({
     instalments,
     applied,
     paymentTotals,
+    held,
     exchangeOpen,
     funding,
     pickers,
@@ -165,7 +167,6 @@ export default async function PayablePage({
     pdPickers,
     shipment,
     blPorts,
-    blModels,
     landed,
   } = found;
 
@@ -768,6 +769,15 @@ export default async function PayablePage({
                 <RecordAttachmentsDoor object="payable_payments" recordId={row.id} />
               </span>
             </h2>
+            {held.length > 0 ? (
+              // The goods wait for the advance (2026-10-06, by direction).
+              <p className={s.sapNote}>
+                {pa('held_note', {
+                  items: held.map((one) => `${one.itemCode} ${formatQuantity(quantityText(one.quantity), locale as Locale)}`).join(', '),
+                  warehouse: held[0]!.warehouseCode,
+                })}
+              </p>
+            ) : null}
 
             {exchangeOpen ? (
               // REQ-FIX-001 FX8 — fully paid in its currency, the dinars still to close.

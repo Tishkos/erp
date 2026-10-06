@@ -318,7 +318,8 @@ export const stockReservation = pgTable(
 // ---------------------------------------------------------------------------
 
 /** The stages goods pass through between an invoice abroad and a shelf here. */
-export const shipmentStage = pgEnum('shipment_stage', ['in_process', 'on_board', 'on_port']);
+// `without_swift` (0405): an import bought with an advance waits there until the advance is paid.
+export const shipmentStage = pgEnum('shipment_stage', ['without_swift', 'in_process', 'on_board', 'on_port']);
 
 /**
  * One tracked purchase invoice.

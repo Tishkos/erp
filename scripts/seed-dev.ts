@@ -408,6 +408,7 @@ async function main() {
     // REQ-AP-001 §17.4: goods at sea are owned, not available for sale.
     await tx.execute(sql`
       INSERT INTO warehouse (code, name, branch_code, warehouse_type, is_transit, shipment_stage) VALUES
+        ('WH-NOSWIFT', 'On Process (Without SWIFT)', 'HQ', 'transit', true, 'without_swift'),
         ('WH-INPROC', 'In Process', 'HQ', 'transit', true, 'in_process'),
         ('WH-BOARD', 'On Board', 'HQ', 'transit', true, 'on_board'),
         ('WH-PORT', 'At Port', 'HQ', 'transit', true, 'on_port')

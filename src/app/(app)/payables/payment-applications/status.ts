@@ -4,6 +4,8 @@
  */
 export const STATUS_CHIP: Readonly<Record<string, string>> = {
   draft: 'draft',
+  // Sent for approval (2026-10-06).
+  submitted: 'submitted',
   approved: 'approved',
   sent: 'submitted',
   confirmed: 'posted',

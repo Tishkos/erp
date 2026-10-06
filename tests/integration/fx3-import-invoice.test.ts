@@ -101,7 +101,7 @@ async function pay(payableId: string, input: { amountTxn: string; on: string; ba
       ...(input.instalmentId ? { instalmentId: input.instalmentId } : {}),
     }),
   );
-  await withScope(scope(world.manager), (tx) => applications.approve(tx, world.manager, made.id));
+  await withScope(scope(world.manager), async (tx) => { await applications.submit(tx, world.manager, made.id); return applications.approve(tx, world.manager, made.id); });
   // A manager may send ahead of a missing document with a reason (A11).
   const sender = input.overrideReason ? world.manager : world.clerk;
   await withScope(scope(sender), (tx) => applications.send(tx, sender, made.id, { applicationDate: input.on, bankReference: `B-${input.reference}`, overrideReason: input.overrideReason ?? null }));
@@ -374,8 +374,9 @@ describe('FX10 · the advance\u2019s payment application is raised when the invo
     });
     await post(invoiceId);
     // 100 × 10,000 = 1,000,000; a fifth is 200,000, asked for and approved on the invoice's own approval.
+    // A draft since 2026-10-06: sent for approval by a person, approved by another.
     expect(await applicationOf(invoiceId)).toMatchObject({
-      status: 'approved',
+      status: 'draft',
       currency: 'IQD',
       amount_txn: '200000.0000',
       payment_method_code: SWIFT,
@@ -383,7 +384,7 @@ describe('FX10 · the advance\u2019s payment application is raised when the invo
     });
     const log = await logOf(payableId);
     expect(log.map((row) => row.event_code)).toEqual(['ADVANCE_RAISED']);
-    expect(log[0].summary).toMatch(/raised for 20% of .* IQD 200000\.0000/);
+    expect(log[0].summary).toMatch(/drafted for 20% of .* IQD 200000\.0000/);
     // The import's cap counts it: the rest that can be asked for is 800,000.
     const totals = await withScope(scope(world.clerk), (tx) => applications.totalsFor(tx, payableId));
     expect(totals.fullyPaid).toBe(false);
@@ -412,7 +413,7 @@ describe('FX10 · the advance\u2019s payment application is raised when the invo
     expect(await payableRow(payableId)).toMatchObject({ currency: 'USD', amount_txn: '1000.0000' });
     await post(invoiceId);
     // USD 200 — the supplier's own figure, not a conversion somebody had to choose.
-    expect(await applicationOf(invoiceId)).toMatchObject({ status: 'approved', currency: 'USD', amount_txn: '200.0000', bank_cash_account_id: usd.id });
+    expect(await applicationOf(invoiceId)).toMatchObject({ status: 'draft', currency: 'USD', amount_txn: '200.0000', bank_cash_account_id: usd.id });
     const log = await logOf(payableId);
     expect(log.map((row) => row.event_code)).toEqual(['ADVANCE_RAISED']);
     expect(log[0].summary).toMatch(/USD 200\.0000/);

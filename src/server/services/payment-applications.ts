@@ -46,6 +46,8 @@ import {
   payable,
   payableInstalment,
   paymentApplication,
+  paymentApplicationPaper,
+  attachment,
   paymentApplicationTransition,
   paymentMethod,
   shipmentContainer,
@@ -89,6 +91,8 @@ import * as payments from './supplier-payment';
 import * as rateService from './exchange-rates';
 import * as treasury from './treasury';
 import * as exchange from './import-exchange';
+import * as advanceHold from './advance-hold';
+import * as attachments from './attachments';
 import { allocateDocumentNumber } from './numbering';
 import { registerPage, searchOf, type RegisterPaging } from './register-page';
 import { businessDateOf, businessToday } from '../domain/business-date';
@@ -524,6 +528,40 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateInput) {
 // ---------------------------------------------------------------------------
 // §15.3 — approve: the money is reserved
 // ---------------------------------------------------------------------------
+
+/**
+ * Send for approval — Draft → Submitted (2026-10-06, by direction: "once they
+ * fill the form they draft, send for approval, approved"). Whoever may raise an
+ * application may send it; another person approves it (`approve`).
+ */
+export async function submit(tx: Tx, ctx: ActorContext, id: string) {
+  const row = await lock(tx, id);
+  await authz.authorize(ctx.principal, 'submit', PERMISSION_OBJECT, { branchCode: row.branchCode });
+  await move(tx, row, 'submitted');
+  await openPayable(tx, row.payableId);
+  await tx.update(paymentApplication).set({ status: 'submitted', updatedAt: new Date() }).where(eq(paymentApplication.id, id));
+  await events.record(tx, {
+    payableId: row.payableId,
+    eventCode: 'PAYMENT_SUBMITTED',
+    summary: `${row.applicationNo} sent for approval — ${row.currency} ${shown(parseDecimal(row.amountTxn, MONEY_SCALE))}`,
+    sourceType: PERMISSION_OBJECT,
+    sourceId: row.id,
+    sourceNo: row.applicationNo,
+    actorUserId: ctx.principal.userId,
+  });
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'payment_application.submitted',
+    objectType: PERMISSION_OBJECT,
+    objectId: id,
+    branchCode: row.branchCode,
+    before: { status: row.status },
+    after: { status: 'submitted' },
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+  await payables.recomputeStage(tx, row.payableId, ctx.principal.userId);
+}
 
 export async function approve(
   tx: Tx,
@@ -1004,6 +1042,10 @@ export async function confirm(tx: Tx, ctx: ActorContext, id: string, input: Conf
     if (owner.currency !== 'IQD') await exchange.settleIfFullyPaid(tx, ctx, row.payableId, input.confirmedOn);
   }
 
+  // Paid: whatever the import holds for its advance in On Process (Without
+  // SWIFT) moves to In Process, and the import goes on as any other (2026-10-06).
+  await advanceHold.release(tx, ctx, row.payableId, { applicationNo: row.applicationNo, on: input.confirmedOn });
+
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,
     action: 'payment_application.confirmed',
@@ -1204,7 +1246,7 @@ async function close(
   const row = await lock(tx, id);
   // The bank's refusal, or the manager's, is an approver's act; withdrawing
   // one's own draft is the maker's.
-  const verb = to === 'rejected' ? 'approve' : row.status === 'draft' ? 'edit_draft' : 'reverse_cancel';
+  const verb = to === 'rejected' ? 'approve' : row.status === 'draft' || row.status === 'submitted' ? 'edit_draft' : 'reverse_cancel';
   await authz.authorize(ctx.principal, verb, PERMISSION_OBJECT, { branchCode: row.branchCode });
   await move(tx, row, to);
   const text = reason?.trim() ?? '';
@@ -1232,6 +1274,21 @@ async function close(
   });
   // §15.7 — the loan's draw goes back to it.
   if (row.loanId) await loans.release(tx, ctx, row, `${to}: ${text}`);
+  // The import knows: what it holds for its advance stays where it is (2026-10-06).
+  const held = await advanceHold.heldOf(tx, row.payableId);
+  if (held.length > 0) {
+    await events.record(tx, {
+      payableId: row.payableId,
+      eventCode: 'ADVANCE_HELD',
+      summary:
+        `${row.applicationNo} ${to} — the goods held for the advance stay in ${held[0]!.warehouseCode}, ` +
+        'On Process (Without SWIFT), until another payment application of this import is Paid.',
+      sourceType: PERMISSION_OBJECT,
+      sourceId: row.id,
+      sourceNo: row.applicationNo,
+      actorUserId: ctx.principal.userId,
+    });
+  }
   if (isReserved(row.status)) {
     await events.record(tx, {
       payableId: row.payableId,
@@ -1262,6 +1319,117 @@ export const reject = (tx: Tx, ctx: ActorContext, id: string, reason: string) =>
   close(tx, ctx, id, 'rejected', reason);
 export const cancel = (tx: Tx, ctx: ActorContext, id: string, reason: string) =>
   close(tx, ctx, id, 'cancelled', reason);
+
+// ---------------------------------------------------------------------------
+// The papers — what each attachment is, and what it does (2026-10-06)
+// ---------------------------------------------------------------------------
+
+/** What a paper on a payment application may be, in the order the screen offers them. */
+export const PAPER_KINDS = ['sent_to_bank', 'paid', 'rejected_cancelled', 'other'] as const;
+export type PaperKind = (typeof PAPER_KINDS)[number];
+
+/** Which papers an application in this status takes — the next step and "other". */
+export function papersFor(status: string): readonly PaperKind[] {
+  if (status === 'approved') return ['sent_to_bank', 'rejected_cancelled', 'other'];
+  if (status === 'sent') return ['paid', 'rejected_cancelled', 'other'];
+  if (status === 'submitted') return ['rejected_cancelled', 'other'];
+  return ['other'];
+}
+
+export interface PaperInput {
+  readonly kind: string;
+  readonly fileName: string;
+  readonly content: Buffer;
+  /** Sent: the day it went to the bank. Paid: the SWIFT / transfer / voucher date. */
+  readonly date?: string | null;
+  /** Sent: the bank's reference. Paid: the MT103 / transfer / voucher reference — required. */
+  readonly reference?: string | null;
+  /** Rejected / cancelled: why — required. */
+  readonly reason?: string | null;
+  /** Sent although a check fails: a manager's reason (§15.3). */
+  readonly overrideReason?: string | null;
+}
+
+/**
+ * A paper on a payment application, said what it is — and the step it is the
+ * proof of, taken in the same transaction (2026-10-06, by direction: "once
+ * posted it has attachments; whenever someone updates the attachments it has
+ * to be pointed out what this attachment is"):
+ *
+ *   sent to the bank    → Send: the application waits for the bank
+ *   paid                → Confirm: posted, and the goods held for the advance
+ *                         move from On Process (Without SWIFT) to In Process
+ *   rejected / cancelled → rejected (awaiting approval, or refused by the bank)
+ *                         or cancelled (approved, not sent); the import is told
+ *                         its held goods stay where they are
+ *   other               → kept, nothing moves
+ *
+ * The step runs first, with every check and refusal it always had; only then
+ * is the file stored and its kind written down, so a refused step keeps no
+ * paper that claims it happened.
+ */
+export async function addPaper(tx: Tx, ctx: ActorContext, id: string, input: PaperInput) {
+  const row = await lock(tx, id);
+  const kind = (PAPER_KINDS as readonly string[]).includes(input.kind) ? (input.kind as PaperKind) : null;
+  if (!kind) throw new PaymentApplicationError('Say what this paper is: sent to the bank, paid, rejected / cancelled, or other.');
+  if (!papersFor(row.status).includes(kind)) {
+    throw new PaymentApplicationError(
+      `${row.applicationNo} is ${row.status}; a "${kind.replace(/_/g, ' ')}" paper is not its next step. ` +
+        'Sent to the bank follows approval; paid follows sent.',
+    );
+  }
+  const date = input.date?.trim() || null;
+  if (kind === 'sent_to_bank') {
+    await send(tx, ctx, id, { applicationDate: date ?? businessToday(), bankReference: input.reference?.trim() || null, overrideReason: input.overrideReason?.trim() || null });
+  } else if (kind === 'paid') {
+    if (!date) throw new PaymentApplicationError('Give the date the money went — the SWIFT, transfer or voucher date on the paper.');
+    if (!input.reference?.trim()) throw new PaymentApplicationError('Give the reference on the paper — the MT103, transfer or voucher number.');
+    await confirm(tx, ctx, id, { confirmedOn: date, reference: input.reference.trim() });
+  } else if (kind === 'rejected_cancelled') {
+    const reason = input.reason?.trim() ?? '';
+    if (!reason) throw new PaymentApplicationError(`Say why ${row.applicationNo} is rejected or cancelled.`);
+    if (row.status === 'approved') await cancel(tx, ctx, id, reason);
+    else await reject(tx, ctx, id, reason);
+  }
+
+  const stored = await attachments.upload(tx, ctx, {
+    objectType: PERMISSION_OBJECT,
+    objectId: row.id,
+    fileName: input.fileName,
+    content: input.content,
+  });
+  await tx.insert(paymentApplicationPaper).values({
+    paymentApplicationId: row.id,
+    attachmentId: stored.attachmentId,
+    kind,
+    createdBy: ctx.principal.userId,
+  });
+  await events.record(tx, {
+    payableId: row.payableId,
+    eventCode: 'PAPER_ADDED',
+    summary: `${input.fileName} attached to ${row.applicationNo} as "${kind.replace(/_/g, ' ')}"`,
+    sourceType: PERMISSION_OBJECT,
+    sourceId: row.id,
+    sourceNo: row.applicationNo,
+    actorUserId: ctx.principal.userId,
+  });
+  return { attachmentId: stored.attachmentId, kind };
+}
+
+/** The papers of an application with what each is, newest first. */
+export async function papersOf(tx: Tx, id: string) {
+  return tx
+    .select({
+      attachmentId: paymentApplicationPaper.attachmentId,
+      kind: paymentApplicationPaper.kind,
+      createdAt: paymentApplicationPaper.createdAt,
+      fileName: attachment.fileName,
+    })
+    .from(paymentApplicationPaper)
+    .innerJoin(attachment, eq(attachment.id, paymentApplicationPaper.attachmentId))
+    .where(eq(paymentApplicationPaper.paymentApplicationId, id))
+    .orderBy(desc(paymentApplicationPaper.createdAt));
+}
 
 // ---------------------------------------------------------------------------
 // §15.5 — Applied / Paid / Remaining

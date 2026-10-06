@@ -237,7 +237,7 @@ describe('A11 · the bank pays only against a validated PD', () => {
         onDate: '2026-09-10',
       }),
     );
-    await withScope(scope(world.manager), (tx) => applications.approve(tx, world.manager, made.id));
+    await withScope(scope(world.manager), async (tx) => { await applications.submit(tx, world.manager, made.id); return applications.approve(tx, world.manager, made.id); });
     return made;
   };
   const send = (id: string, by = world.clerk, overrideReason: string | null = null) =>

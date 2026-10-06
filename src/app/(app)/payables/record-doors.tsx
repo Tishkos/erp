@@ -6,6 +6,7 @@ import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import { ExportIcon } from '@/components/print/export-menu';
 import type { Tx } from '@/server/db/client';
 import { can, type Principal } from '@/server/domain/permissions';
+import type { ReactNode } from 'react';
 import type { ExportKey } from '@/server/print/access';
 import * as recordNotes from '@/server/services/record-notes';
 import { attachToPurchaseRecord } from './attach-action';
@@ -48,6 +49,7 @@ export async function PurchaseDoors({
   recordId,
   doors,
   returnTo,
+  attach,
 }: {
   readonly exportKey: ExportKey;
   /** The number the export route is addressed by. */
@@ -61,6 +63,15 @@ export async function PurchaseDoors({
   readonly doors: DoorsRead;
   /** This page's path (and query), where the paperclip's form returns. */
   readonly returnTo: string;
+  /**
+   * A record whose papers move it (the payment application, 2026-10-06) asks
+   * what each paper is: its own action, fields and hidden values.
+   */
+  readonly attach?: {
+    readonly action: (formData: FormData) => Promise<void>;
+    readonly hidden: Readonly<Record<string, string>>;
+    readonly formExtra: ReactNode;
+  };
 }) {
   const t = await getTranslations('admin');
   return (
@@ -69,8 +80,9 @@ export async function PurchaseDoors({
       <ExportIcon exportKey={exportKey} id={exportId} title={title} />
       <AttachmentsButton closeLabel={t('close')} count={doors.files.rows.length} label={t('attachments.title')} title={t('attachments.title')}>
         <Attachments
-          action={attachToPurchaseRecord}
-          hidden={{ object_type: object, object_id: recordId, return_to: returnTo }}
+          action={attach?.action ?? attachToPurchaseRecord}
+          formExtra={attach?.formExtra}
+          hidden={attach?.hidden ?? { object_type: object, object_id: recordId, return_to: returnTo }}
           mayAttach={doors.mayAttach}
           objectId={recordId}
           objectType={object}

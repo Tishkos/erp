@@ -71,6 +71,8 @@ export function pendingCheckFor(kind: ConfirmationKind): 'swift_pending' | 'tran
 
 export const PAYMENT_APPLICATION_STATUSES = [
   'draft',
+  // Sent for approval (2026-10-06, by direction: "draft, send for approval, approved").
+  'submitted',
   'approved',
   'sent',
   'confirmed',

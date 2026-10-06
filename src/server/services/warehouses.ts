@@ -217,6 +217,10 @@ export async function setActive(
  * Goods at sea are kept out of reach by the stage they are in, not by a type.
  */
 export const SHIPMENT_STAGE_WAREHOUSES = [
+  // Before In Process for an import bought with an advance: its goods wait here
+  // until the advance's payment application is paid (2026-10-06, by direction;
+  // the name is the owner's own).
+  { stage: 'without_swift', name: 'On Process (Without SWIFT)' },
   { stage: 'in_process', name: 'In Process' },
   { stage: 'on_board', name: 'On Board' },
   // "At Port", by direction (2026-10-06: "the warehouse spelling is not correct"); the stage code stays `on_port`.

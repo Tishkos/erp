@@ -175,7 +175,7 @@ const draft = (amount: string, loanId: string | null, onPayable = payableId) =>
       ...(loanId ? { fundingSourceCode: 'loan', loanId } : {}),
     }),
   );
-const approveApp = (id: string) => withScope(scope(world.manager), (tx) => applications.approve(tx, world.manager, id));
+const approveApp = (id: string) => withScope(scope(world.manager), async (tx) => { await applications.submit(tx, world.manager, id); return applications.approve(tx, world.manager, id); });
 
 const eventsOf = async (id = payableId) =>
   (

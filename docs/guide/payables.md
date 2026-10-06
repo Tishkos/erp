@@ -127,7 +127,11 @@ Paying an import is always a payment application raised from its Payments sectio
 4. Press **Create** (إنشاء). The application opens as a Draft on its own page; continue there (see Payment Applications: approve → send → confirm → record debit).
 5. A part payment is normal: 20% with the order, the rest against the bill of lading — raise one application per part.
 6. **Deposit before the invoice is posted:** if the application is confirmed while no invoice of the import is posted yet, confirming posts a **supplier advance** (a deposit) against the import's purchase order instead of a supplier payment. When the invoice is later posted the deposit is applied to it automatically.
-7. **Advance payment % on the invoice:** an import's purchase invoice opens with **Advance payment %** at 20 (the accountant may write another share or clear it), **Advance paid from** on the first bank or cash account in the invoice's currency, and **Advance payment method** on the first bank method. When the invoice is **posted**, the payment application for that share is raised and approved by itself, in the import's currency (a dollar invoice asks for dollars, worked back at the rate on the invoice's face), and the import's log records "ADVANCE_RAISED" with its number; Send, with its four checks, stays a person's step (steps 3–4). The log records "ADVANCE_NOT_RAISED" instead — and the application is then raised by hand (steps 2–4) — when the invoice names no account or method, when the invoice was typed in dinars against an import in another currency (a rate would have to be chosen), or when the application was refused (the account taken out of use, nothing left to ask for).
+7. **Advance payment % on the invoice — the goods wait for the advance (since 2026-10-06):** an import's purchase invoice opens with **Advance payment %** at 20 (write another share or clear it), **Advance paid from** on the first bank or cash account in the invoice's currency, and **Advance payment method** on the first bank method. When the invoice is **posted**:
+   - its goods go to the **On Process (Without SWIFT)** warehouse (قيد المعالجة — بدون سويفت), not In Process; the import's log says so (ADVANCE_HELD), and its Payments section shows "Waiting for the advance: … in On Process (Without SWIFT)";
+   - the payment application for that share is raised as a **Draft**, in the import's currency (a dollar invoice asks for dollars, worked back at the rate on the invoice's face), with the supplier's verified bank account in that currency (ADVANCE_RAISED). If the invoice names no account or method, or was typed in dinars against an import in another currency, the log says ADVANCE_NOT_RAISED and the application is raised by hand.
+   - The application then goes the ordinary way: **Send for approval** → **Approve** by another person → the papers (see Payment Applications): **Sent to the bank** → waiting for the bank; **Paid** → posted, and the goods move from On Process (Without SWIFT) to **In Process** (ADVANCE_RELEASED) and the import continues like any other; **Rejected / cancelled** → the goods stay in On Process (Without SWIFT) and the log says so — a new application raised by hand and paid releases them.
+   - B/Ls can be recorded meanwhile; a container cannot be received while the goods still wait for the advance.
 8. Under the applications, **Loans funding this import** (القروض الممولة لهذا الاستيراد) lists each loan draw: Bank (البنك), Payment application (طلب الدفع), Drawn (المسحوب), Commission share (حصة العمولة) — "Capitalised into the funded imports" or "Expensed", Next due (الاستحقاق التالي), with an "Overdue" (متأخر) flag.
 
 ### How to settle the exchange difference — Import Applications
@@ -656,25 +660,37 @@ Four checks are shown, each with a result: **OK** (سليم), **Refuses Send** (
 - **Instalment trigger** (شرط القسط) — only for an application tied to an instalment (for example "against the B/L" needs a B/L recorded on the import).
 The checks run again with the day's figures when you press Send.
 
+### How to send for approval — Payment Applications
+Needs: `submit` on `payment_application`.
+1. Open the Draft and press **Send for approval** (إرسال للموافقة). The status becomes "Sent for approval" (أُرسل للموافقة) and it appears in My Approvals for whoever may approve payment applications (since 2026-10-06; before, a Draft was approved directly).
+
 ### How to approve — Payment Applications
 Needs: `approve` on `payment_application`.
-1. A person other than the one who prepared it opens the Draft and presses **Approve — reserve funds** (اعتماد — حجز المبلغ). The button is not shown to the person who prepared the application.
+1. A person other than the one who prepared it opens the application that was **sent for approval** and presses **Approve — reserve funds** (اعتماد — حجز المبلغ). The button is not shown to the person who prepared the application. The approver may instead press **Reject** with a reason.
 2. The status becomes "Approved — funds reserved" (معتمد — المبلغ محجوز): the amount is held on the paying account (its Available goes down) and, if a loan funds it, the loan is drawn.
+
+### The papers move it — Payment Applications
+Since 2026-10-06, after approval every step is a **paper**: you attach the file and say what it is, and the application moves with it. The paperclip asks **What is this paper?** (ما هذه الورقة؟) with the choices the application's state allows, and the action row has a button for each next step:
+- **Sent to the bank** (أُرسلت إلى البنك) — on an Approved application: the paper that went to the bank → the application waits for the bank ("Sent — not paid").
+- **Paid** (مدفوعة) — on a Sent application: the SWIFT copy (MT103) or the bank's confirmation → posted as below, and any goods of the import held in On Process (Without SWIFT) for its advance move to In Process.
+- **Rejected / cancelled** (مرفوضة / ملغاة) — on an Approved application it is cancelled, on a Sent one rejected (the bank refused it); a reason is required. The import's log says so, and goods held for its advance stay where they are.
+- **Other** (أخرى) — any other paper; nothing moves.
+The **Papers — what each one is** (الأوراق — ما كل ورقة) table under the application lists every paper with its kind and date. A paper that is not the next step is refused ("… is not its next step"), and a refused step keeps no paper.
 
 ### How to send to the bank — Payment Applications
 Needs: `execute` on `payment_application`; sending although a check fails also needs `approve` on `payment_application`.
-1. On an Approved application press **Send to bank** (إرسال إلى البنك).
-2. Fill **Sent to bank** (أُرسل إلى البنك) — required, the date the file went, today by default; **Bank reference** (مرجع البنك) — optional, the bank's file or application number.
+1. On an Approved application press **Sent to the bank — attach the paper** (أُرسلت إلى البنك — أرفق الورقة).
+2. Fill **Sent to bank** (أُرسل إلى البنك) — required, the date the file went, today by default; **Bank reference** (مرجع البنك) — optional, the bank's file or application number; choose the file.
 3. If a check fails, Send is refused. A user who may approve payment applications sees the box **Send anyway because…** (أرسل رغم ذلك لأن…) listing the failing checks; typing a reason there sends it anyway, and the reason is kept on the application and in the import's log.
-4. Press **Send to bank**. The status becomes "Sent — not paid" (أُرسل — غير مدفوع) — for a SWIFT, "SWIFT pending — not paid" (سويفت معلّق — غير مدفوع). The days-waiting clock starts, and the dinar value is recalculated at the rate of that date (it is recalculated once more at the confirmation date when the payment is posted).
+4. Press the button. The status becomes "Sent — not paid" (أُرسل — غير مدفوع) — for a SWIFT, "SWIFT pending — not paid" (سويفت معلّق — غير مدفوع). The days-waiting clock starts, and the dinar value is recalculated at the rate of that date (it is recalculated once more at the confirmation date when the payment is posted).
 
 ### How to confirm the payment — Payment Applications
 Needs: `post` on `payment_application`.
-1. When the bank's copy (or the cashier's voucher) is in hand, press the confirm button on a Sent application: **Confirm SWIFT** (تأكيد السويفت), **Confirm transfer** (تأكيد الحوالة), **Confirm cash paid** (تأكيد الدفع نقدًا) or **Confirm cheque paid** (تأكيد دفع الصك), by method.
+1. When the bank's copy (or the cashier's voucher) is in hand, press **Paid — attach the SWIFT copy** (دُفعت — أرفق نسخة السويفت) on a Sent application.
 2. The dialog says what it will post: a supplier payment allocated to the import's invoices still owing — or, when no invoice of the import is posted yet, a supplier advance (a deposit) against its purchase order.
 3. Fill the date (SWIFT date / Transfer date / Voucher date / Cheque date — required, today by default) and the reference (SWIFT ref (MT103) / Transfer reference / Cash voucher no. / Cheque no. — required).
-4. Press the confirm button. The status becomes "Paid" (مدفوع) — "SWIFT confirmed — paid" (سويفت مؤكَّد — مدفوع) for a SWIFT — and **Posted as** shows the document created.
-5. Attach the SWIFT copy or the signed voucher with the paperclip.
+4. Choose the file and press the button. The status becomes "Paid" (مدفوع) — "SWIFT confirmed — paid" (سويفت مؤكَّد — مدفوع) for a SWIFT — **Posted as** shows the document created, and goods the import held for its advance move to In Process.
+5. The file is kept as the application's "Paid" paper.
 6. **Paid before the cut-over** (مدفوع قبل الانتقال) is offered only on applications migrated from the old sheet whose money left before the system started: it records the date and reference and posts nothing.
 
 ### How to record the bank debit — Payment Applications
@@ -685,8 +701,9 @@ Needs: `post` on `payment_application`.
 
 ### How to reject or cancel — Payment Applications
 Needs: Reject — `approve`; Cancel — `edit_draft` for a Draft, `reverse_cancel` for an Approved or Sent one (all on `payment_application`).
-- **Reject** (رفض) — on an Approved or Sent application; type **Why rejected** (سبب الرفض). For the bank's refusal or a manager's.
-- **Cancel** (إلغاء) — on a Draft (by whoever may edit it) or on an Approved or Sent one (by a user allowed to cancel); type **Why cancelled** (سبب الإلغاء).
+- **Reject** (رفض) — on an application sent for approval, by the approver; type **Why rejected** (سبب الرفض).
+- **Cancel** (إلغاء) — on a Draft or one sent for approval (by whoever may edit it); type **Why cancelled** (سبب الإلغاء).
+- On an Approved or Sent application, attach the paper with **Rejected / cancelled — attach the paper** and say why: an Approved one is cancelled, a Sent one rejected.
 Either way the reservation on the account is released, a loan draw goes back to the loan, and the amount is free to be asked for again.
 
 ### Fields — Payment Applications
@@ -697,7 +714,7 @@ Either way the reservation on the account is released, a loan draw goes back to 
 - Reject — **Why rejected** (سبب الرفض): required. Cancel — **Why cancelled** (سبب الإلغاء): required.
 
 ### After you save — Payment Applications
-- Draft (مسودة) → Approved — funds reserved (معتمد — المبلغ محجوز) → Sent — not paid (أُرسل — غير مدفوع) → Paid (مدفوع) → Debit final (خُصم نهائيًا); or Rejected (مرفوض) / Cancelled (ملغى) before it is paid.
+- Draft (مسودة) → Sent for approval (أُرسل للموافقة) → Approved — funds reserved (معتمد — المبلغ محجوز) → Sent — not paid (أُرسل — غير مدفوع) → Paid (مدفوع) → Debit final (خُصم نهائيًا); or Rejected (مرفوض) / Cancelled (ملغى) before it is paid.
 - Nothing is posted until **Confirm**. Confirm posts, dated the confirmation date and at that day's rate: a supplier payment (debit Supplier payable, credit Bank) allocated to the import's owing invoices oldest first — or a supplier advance (debit Supplier advance, credit Bank) when no invoice is posted yet. The reservation is released.
 - Each step is written to the import's status log and the import's stage is recalculated (for example to Payment in progress once an application is sent). When the import becomes fully paid the log says "Fully paid", and for a foreign-currency import the exchange difference is booked.
 

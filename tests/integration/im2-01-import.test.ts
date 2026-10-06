@@ -252,6 +252,106 @@ describe('units · an import bought in boxes', () => {
   });
 });
 
+describe('units · two items in two units, split over two containers (2026-10-06)', () => {
+  it('plans each item in its own unit per container, and receives base units', async () => {
+    // "We order goods with different units — which item goes to each container and how many, in its unit."
+    await withScope(scope(world.manager), (tx) => units.addUnit(tx, world.manager, PANEL, { uomCode: 'BOX', numerator: 24n, isPurchaseDefault: true }));
+    const { rows: accounts } = await ownerPool.query(`select inventory_account_id, cogs_account_id, sales_account_id from item where code = $1`, [PANEL]);
+    // The item and its base unit in one transaction: `item_base_uom_registered` is checked at commit.
+    const client = await ownerPool.connect();
+    try {
+      await client.query('begin');
+      const { rows: made } = await client.query(
+        `insert into item (code, name, is_stock, base_uom_code, tracking, inventory_account_id, cogs_account_id, sales_account_id)
+         values ('ITM-INV','Inverter 5kW',true,'EA','batch',$1,$2,$3) returning id`,
+        [accounts[0].inventory_account_id, accounts[0].cogs_account_id, accounts[0].sales_account_id],
+      );
+      await client.query(`insert into item_uom (item_id, uom_code, conversion_numerator, conversion_denominator) values ($1,'EA',1,1)`, [made[0].id]);
+      await client.query('commit');
+    } catch (error) {
+      await client.query('rollback');
+      throw error;
+    } finally {
+      client.release();
+    }
+    const invoice = await withScope(scope(world.clerk), (tx) =>
+      ap.create(tx, world.clerk, {
+        supplierId: world.supplierId,
+        supplierInvoiceNo: `IM2-MIX-${randomUUID().slice(0, 6)}`,
+        branchCode: BAGHDAD,
+        invoiceDate: '2026-09-01',
+        dueDate: '2026-11-01',
+        isImport: true,
+        lines: [
+          { itemCode: PANEL, description: 'Solar Panel 550W', quantity: q('10'), unitPriceIqd: iqd('240000'), uomCode: 'BOX', isInventory: true, warehouseCode: WAREHOUSE },
+          { itemCode: 'ITM-INV', description: 'Inverter 5kW', quantity: q('30'), unitPriceIqd: iqd('50000'), uomCode: 'EA', isInventory: true, warehouseCode: WAREHOUSE },
+        ],
+      }),
+    );
+    const { rows } = await ownerPool.query(`select payable_id from ap_invoice where id = $1`, [invoice.id]);
+    ({ invoiceId, payableId } = { invoiceId: invoice.id, payableId: rows[0].payable_id as string });
+    await postInvoice();
+    expect(await onHand(IN_PROCESS)).toBe('240.000000');
+
+    // The B/L's table: each model in the unit it was bought in.
+    const models = await withScope(scope(world.clerk), (tx) => shipments.modelsToShip(tx, payableId));
+    expect(models.map((model) => [model.itemCode, model.uomCode, model.left])).toEqual([
+      [PANEL, 'BOX', '10'],
+      ['ITM-INV', 'EA', '30'],
+    ]);
+    const panel = models.find((model) => model.itemCode === PANEL)!.key;
+    const inverter = models.find((model) => model.itemCode === 'ITM-INV')!.key;
+    await withScope(scope(world.clerk), (tx) =>
+      shipments.createBl(tx, world.clerk, {
+        payableId,
+        blNo: `MEDU${randomUUID().slice(0, 6)}`,
+        blDate: '2026-09-20',
+        eta: '2026-10-25',
+        portOfDischargeCode: 'PRT-0001',
+        containerRows: [
+          { containerNo: 'MSCU1234566', sizeType: '40HC', quantities: { [panel]: q('6'), [inverter]: q('30') } },
+          { containerNo: 'TGHU7654320', sizeType: '20GP', quantities: { [panel]: q('4') } },
+        ],
+      }),
+    );
+    const { rows: planned } = await ownerPool.query(
+      `select c.container_no, l.item_code, l.planned_qty::text as planned, l.uom_code
+         from shipment_container c join shipment_container_line l on l.container_id = c.id and l.superseded_at is null
+        where c.payable_id = $1 order by c.container_no, l.item_code`,
+      [payableId],
+    );
+    expect(planned).toEqual([
+      { container_no: 'MSCU1234566', item_code: 'ITM-INV', planned: '30.000000', uom_code: 'EA' },
+      { container_no: 'MSCU1234566', item_code: PANEL, planned: '6.000000', uom_code: 'BOX' },
+      { container_no: 'TGHU7654320', item_code: PANEL, planned: '4.000000', uom_code: 'BOX' },
+    ]);
+
+    // Received as planned: boxes become panels, inverters stay inverters.
+    for (const containerNo of ['MSCU1234566', 'TGHU7654320']) {
+      const { rows: lines } = await ownerPool.query(
+        `select c.id as container_id, l.id, l.planned_qty::text as planned
+           from shipment_container c join shipment_container_line l on l.container_id = c.id and l.superseded_at is null
+          where c.payable_id = $1 and c.container_no = $2`,
+        [payableId, containerNo],
+      );
+      await withScope(scope(world.clerk), (tx) =>
+        shipments.receive(tx, world.clerk, {
+          documentId: randomUUID(),
+          containerId: lines[0].container_id,
+          warehouseCode: WAREHOUSE,
+          receiptDate: '2026-10-28',
+          lines: lines.map((line) => ({ containerLineId: line.id, receivedQty: q(line.planned), damagedQty: q('0') })),
+          varianceReason: null,
+        }),
+      );
+    }
+    expect(await onHand(WAREHOUSE)).toBe('240.000000');
+    const { rows: inverters } = await ownerPool.query(`select coalesce(sum(held), 0)::text as n from stock_position where item_code = 'ITM-INV' and warehouse_code = $1`, [WAREHOUSE]);
+    expect(inverters[0].n).toBe('30.000000');
+    expect(await onHand(IN_PROCESS)).toBe('0.000000');
+  });
+});
+
 describe('funded · stage 2 without a plan, and an application for all that is left', () => {
   beforeEach(async () => {
     await ownerPool.query(`insert into payment_method (code, name, kind, confirmation_kind) values ($1,'SWIFT transfer','bank','swift')`, [SWIFT]);
@@ -265,7 +365,7 @@ describe('funded · stage 2 without a plan, and an application for all that is l
     );
     const { rows } = await ownerPool.query(`select amount_txn::text as amount from payment_application where id = $1`, [made.id]);
     expect(rows[0].amount).toBe('1000000.0000');
-    await withScope(scope(world.manager), (tx) => applications.approve(tx, world.manager, made.id));
+    await withScope(scope(world.manager), async (tx) => { await applications.submit(tx, world.manager, made.id); return applications.approve(tx, world.manager, made.id); });
     expect(await stageOf()).toBe('invoiced_funded');
     // Nothing is left to ask for now.
     expect(

@@ -426,7 +426,8 @@ export async function stuckDocuments(
       if (kind) hidden.push('payment application');
     } else {
       const waits: Readonly<Record<string, string>> = {
-        draft: 'to be approved — nothing has been asked of the bank',
+        draft: 'to be sent for approval — nothing has been asked of the bank',
+        submitted: 'to be approved — nothing has been asked of the bank',
         approved: 'to be sent to the bank',
         sent: 'for the bank’s confirmation — the money is not confirmed as paid',
       };
@@ -438,7 +439,7 @@ export async function stuckDocuments(
                    (select bp.code || ' · ' || bp.legal_name from business_partner bp where bp.id = pa.supplier_id) as party,
                    count(*) over (partition by pa.status)::int as of_status
               from payment_application pa
-             where pa.status in ('draft', 'approved', 'sent')
+             where pa.status in ('draft', 'submitted', 'approved', 'sent')
                and (${today}::date - coalesce((pa.sent_at at time zone 'Asia/Baghdad')::date, (pa.created_at at time zone 'Asia/Baghdad')::date)) >= ${olderThan}
              order by pa.created_at
              limit ${FETCH_CAP}`,

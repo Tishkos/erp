@@ -347,7 +347,7 @@ describe('A19 · cleared by nobody, re-opened with a reason', () => {
         onDate: '2026-08-01',
       }),
     );
-    await withScope(scope(world.manager), (tx) => applications.approve(tx, world.manager, app.id));
+    await withScope(scope(world.manager), async (tx) => { await applications.submit(tx, world.manager, app.id); return applications.approve(tx, world.manager, app.id); });
     await withScope(scope(world.clerk), (tx) =>
       applications.send(tx, world.clerk, app.id, { applicationDate: '2026-08-01', bankReference: 'B-1', overrideReason: null }),
     );
@@ -424,10 +424,10 @@ describe('A20 \u00b7 the cycle end to end, and the final item cost', () => {
       }),
     );
     // The clerk cannot approve their own application — §19's second pair of eyes.
-    expect(await rejection(withScope(scope(world.clerk), (tx) => applications.approve(tx, world.clerk, app.id)))).toMatch(
+    expect(await rejection(withScope(scope(world.clerk), async (tx) => { await applications.submit(tx, world.clerk, app.id); return applications.approve(tx, world.clerk, app.id); }))).toMatch(
       /approve|another|same/i,
     );
-    await withScope(scope(world.manager), (tx) => applications.approve(tx, world.manager, app.id));
+    await withScope(scope(world.manager), async (tx) => { await applications.submit(tx, world.manager, app.id); return applications.approve(tx, world.manager, app.id); });
     await withScope(scope(world.clerk), (tx) =>
       applications.send(tx, world.clerk, app.id, { applicationDate: '2026-08-01', bankReference: 'B-A20', overrideReason: null }),
     );

@@ -175,8 +175,9 @@ describe('ops 7 · the warehouses block 8 needs', () => {
   it('makes one warehouse for each shipment stage', async () => {
     const made = await ensure(manager);
 
-    expect(made.map((entry) => entry.stage)).toEqual(['in_process', 'on_board', 'on_port']);
-    expect(made.map((entry) => entry.name)).toEqual(['In Process', 'On Board', 'At Port']);
+    // On Process (Without SWIFT) first since 2026-10-06: an import bought with an advance waits there.
+    expect(made.map((entry) => entry.stage)).toEqual(['without_swift', 'in_process', 'on_board', 'on_port']);
+    expect(made.map((entry) => entry.name)).toEqual(['On Process (Without SWIFT)', 'In Process', 'On Board', 'At Port']);
     expect(made.every((entry) => entry.created)).toBe(true);
     // Minted like any other warehouse's — Critical Rule 1 has no exception for
     // a warehouse the system asks for rather than a person.
@@ -206,7 +207,7 @@ describe('ops 7 · the warehouses block 8 needs', () => {
     expect(again.map((entry) => entry.code)).toEqual(first.map((entry) => entry.code));
 
     const stages = await withScope(scope(manager), (tx) => warehouses.stageWarehouses(tx));
-    expect(stages).toHaveLength(3);
+    expect(stages).toHaveLength(4);
   });
 
   it('keeps a stage a company renamed its own way', async () => {
@@ -219,7 +220,7 @@ describe('ops 7 · the warehouses block 8 needs', () => {
     // the renamed warehouse is a different one and make a second In Process.
     const again = await ensure(manager);
     expect(again[0]).toMatchObject({ code: inProcess!.code, name: 'Customs Clearance', created: false });
-    expect(await withScope(scope(manager), (tx) => warehouses.stageWarehouses(tx))).toHaveLength(3);
+    expect(await withScope(scope(manager), (tx) => warehouses.stageWarehouses(tx))).toHaveLength(4);
   });
 
   it('refuses somebody who may not create a warehouse', async () => {

@@ -163,6 +163,43 @@ export async function cancelApplication(formData: FormData): Promise<void> {
   );
 }
 
+/** Send for approval — Draft → Submitted (2026-10-06, by direction). */
+export async function submitApplication(formData: FormData): Promise<void> {
+  const applicationNo = text(formData, 'application_no');
+  await runAdminAndReturn(
+    async (tx, ctx) => applications.submit(tx, ctx, (await applications.loadByNo(tx, applicationNo)).id),
+    record(applicationNo),
+  );
+}
+
+/**
+ * A paper, said what it is — and the step it proves, in one go (2026-10-06,
+ * by direction): sent to the bank, paid, rejected / cancelled, or other.
+ */
+export async function addApplicationPaper(formData: FormData): Promise<void> {
+  const applicationNo = text(formData, 'application_no');
+  const file = formData.get('file');
+  if (!(file instanceof File) || file.size === 0) {
+    redirect(`${record(applicationNo)}?error=attachment_missing`);
+  }
+  const upload = file as File;
+  const content = Buffer.from(await upload.arrayBuffer());
+  // Where files go and who may read them back — registered before the first upload of a cold process.
+  registerAllRecords();
+  await runAdminAndReturn(async (tx, ctx) => {
+    const row = await applications.loadByNo(tx, applicationNo);
+    return applications.addPaper(tx, ctx, row.id, {
+      kind: text(formData, 'kind'),
+      fileName: upload.name,
+      content,
+      date: text(formData, 'paper_date').trim() || null,
+      reference: text(formData, 'paper_reference').trim() || null,
+      reason: text(formData, 'paper_reason').trim() || null,
+      overrideReason: text(formData, 'override_reason').trim() || null,
+    });
+  }, record(applicationNo));
+}
+
 /** The SWIFT copy, the signed voucher, the bank's letter — kept with the application. */
 export async function attachToApplication(formData: FormData): Promise<void> {
   const applicationNo = text(formData, 'application_no');

@@ -148,7 +148,7 @@ async function draft(input: Partial<applications.CreateInput> = {}) {
 }
 
 const approve = (id: string) =>
-  withScope(scope(world.manager), (tx) => applications.approve(tx, world.manager, id));
+  withScope(scope(world.manager), async (tx) => { await applications.submit(tx, world.manager, id); return applications.approve(tx, world.manager, id); });
 const send = (id: string, by = world.clerk, overrideReason?: string) =>
   withScope(scope(by), (tx) =>
     applications.send(tx, by, id, { applicationDate: '2026-09-10', bankReference: 'MANS-77', overrideReason: overrideReason ?? null }),
@@ -316,7 +316,7 @@ describe('A11 · ap03-payment-checks', () => {
   it('the maker cannot approve; D3 refuses an account in another currency; never more than is owed', async () => {
     const made = await draft();
     const own = await rejection(
-      withScope(scope(world.clerk), (tx) => applications.approve(tx, world.clerk, made.id)),
+      withScope(scope(world.clerk), async (tx) => { await applications.submit(tx, world.clerk, made.id); return applications.approve(tx, world.clerk, made.id); }),
     );
     expect(own).not.toBe('');
 
@@ -331,7 +331,7 @@ describe('A11 · ap03-payment-checks', () => {
       }),
     );
     expect(
-      await rejection(withScope(scope(world.manager), (tx) => applications.approve(tx, world.manager, mine.id))),
+      await rejection(withScope(scope(world.manager), async (tx) => { await applications.submit(tx, world.manager, mine.id); return applications.approve(tx, world.manager, mine.id); })),
     ).toMatch(/cannot approve it/);
 
     const { rows: gl } = await ownerPool.query(

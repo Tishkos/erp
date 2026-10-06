@@ -65,6 +65,7 @@ import * as events from './payable-events';
 import * as goodsReturns from './goods-return';
 import * as holds from './payable-holds';
 import * as inventory from './inventory';
+import * as advanceHold from './advance-hold';
 import * as units from './item-units';
 import * as payables from './payables';
 import { allocateDocumentNumber } from './numbering';
@@ -1090,6 +1091,17 @@ export async function receive(tx: Tx, ctx: ActorContext, input: ReceiveInput) {
     throw new ShipmentValidationError(`${container.containerNo} was received on ${container.receivedOn}. One container, one receipt.`);
   }
   const owner = await openImport(tx, container.payableId);
+
+  // An import bought with an advance reaches its warehouse through In Process,
+  // as every import does: while its goods wait in On Process (Without SWIFT)
+  // for the advance, nothing is received (2026-10-06, by direction).
+  const held = await advanceHold.heldOf(tx, container.payableId);
+  if (held.length > 0) {
+    throw new ShipmentValidationError(
+      `${owner.payableNo}'s goods still wait in On Process (Without SWIFT) for the advance to be paid. ` +
+        'Attach the "paid" paper to its payment application first — the goods then move to In Process and can be received.',
+    );
+  }
 
   // §18 — a warehouse of the import's branch that stock is put away in.
   const [house] = await tx.select().from(warehouse).where(eq(warehouse.code, input.warehouseCode)).limit(1);

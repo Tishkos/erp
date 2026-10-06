@@ -253,7 +253,7 @@ async function paymentApplications(tx: Tx, principal: Principal): Promise<Approv
              a.created_at as "since", u.display_name as "requester"
         from payment_application a
         left join app_user u on u.id = a.created_by
-       where a.status = 'draft'
+       where a.status = 'submitted'
        order by a.created_at
        limit 100`)
   ).rows as Row[];
@@ -268,7 +268,7 @@ async function paymentApplications(tx: Tx, principal: Principal): Promise<Approv
       requester: (row.requester as string | null) ?? null,
       since: iso(row.since),
       amount: { value: row.amount as string, currency: row.currency as string },
-      stage: 'draft',
+      stage: 'submitted',
       action: 'approve' as const,
       inline: null,
     }));

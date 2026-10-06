@@ -159,6 +159,7 @@ bank_loan_revaluation
 bank_loan_allocation
 bank_loan_instalment
 bank_loan
+payment_application_paper
 payment_application
 payable_instalment
 asycuda_run

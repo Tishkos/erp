@@ -9,10 +9,12 @@ import {
   Grid,
   Hidden,
   ReasonForm,
+  Select,
   Submit,
   SubmitRow,
   admin as s,
 } from '@/components/admin';
+import { Upload } from 'lucide-react';
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { ProfileLink } from '@/components/admin/profile-link';
@@ -26,17 +28,17 @@ import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as applications from '@/server/services/payment-applications';
 import {
+  addApplicationPaper,
   approveApplication,
   cancelApplication,
-  confirmApplication,
   confirmBeforeCutOver,
   debitApplication,
   rejectApplication,
-  sendApplication,
+  submitApplication,
 } from '../actions';
 import { STATUS_CHIP, statusKey } from '../status';
 import { windowTone } from '../../window-tone';
-import { businessToday } from '@/server/domain/business-date';
+import { businessDateOf, businessToday } from '@/server/domain/business-date';
 import { isNotFoundError } from '@/server/not-found';
 import { PurchaseDoors, readDoors } from '../../record-doors';
 
@@ -87,7 +89,12 @@ export default async function PaymentApplicationPage({
   const found = await withCurrentUser(async (tx) => {
     try {
       const seen = await applications.view(tx, applicationNo);
-      return { ...seen, doors: await readDoors(tx, principal, { object: applications.PERMISSION_OBJECT, recordId: seen.application.id }) };
+      return {
+        ...seen,
+        doors: await readDoors(tx, principal, { object: applications.PERMISSION_OBJECT, recordId: seen.application.id }),
+        // What each paper is (2026-10-06): the files the paperclip lists, with their kind.
+        papers: await applications.papersOf(tx, seen.application.id),
+      };
     } catch (error) {
       // E1 — a missing record is a 404; anything else reaches the error boundary.
       if (isNotFoundError(error)) return null;
@@ -104,23 +111,29 @@ export default async function PaymentApplicationPage({
   const day = (value: string | null) => (value ? formatBusinessDate(value, locale as Locale) : '—');
   const today = businessToday();
 
+  // Draft → Send for approval → Approved by somebody else (2026-10-06, by direction).
+  const maySubmit = row.status === 'draft' && can(principal, 'submit', applications.PERMISSION_OBJECT);
   const mayApprove =
-    row.status === 'draft' &&
+    row.status === 'submitted' &&
     can(principal, 'approve', applications.PERMISSION_OBJECT) &&
-    row.createdBy !== principal.userId;
-  const maySend = row.status === 'approved' && can(principal, 'execute', applications.PERMISSION_OBJECT);
+    (row.createdBy !== principal.userId || principal.isSuperUser);
+  // After approval the papers move it: sent to the bank, paid, rejected / cancelled.
+  const offered = applications.papersFor(row.status);
+  const maySend = offered.includes('sent_to_bank') && can(principal, 'execute', applications.PERMISSION_OBJECT);
   const mayOverride = can(principal, 'approve', applications.PERMISSION_OBJECT);
-  const mayConfirm = row.status === 'sent' && can(principal, 'post', applications.PERMISSION_OBJECT);
+  const mayConfirm = offered.includes('paid') && can(principal, 'post', applications.PERMISSION_OBJECT);
+  const mayRefusePaper =
+    (row.status === 'approved' && can(principal, 'reverse_cancel', applications.PERMISSION_OBJECT)) ||
+    (row.status === 'sent' && can(principal, 'approve', applications.PERMISSION_OBJECT));
+  const mayAttach = can(principal, 'create', 'attachment');
   // D37 — a sheet row the sheet left "sent" although the money had gone.
   const mayConfirmMigrated = mayConfirm && row.source === 'sheet_import';
   const mayDebit = row.status === 'confirmed' && can(principal, 'post', applications.PERMISSION_OBJECT);
-  const mayReject =
-    (row.status === 'approved' || row.status === 'sent') &&
-    can(principal, 'approve', applications.PERMISSION_OBJECT);
+  // Before approval a decision needs no paper: the approver rejects, the preparer cancels.
+  const mayReject = row.status === 'submitted' && can(principal, 'approve', applications.PERMISSION_OBJECT);
   const mayCancel =
-    (row.status === 'draft' && can(principal, 'edit_draft', applications.PERMISSION_OBJECT)) ||
-    ((row.status === 'approved' || row.status === 'sent') &&
-      can(principal, 'reverse_cancel', applications.PERMISSION_OBJECT));
+    (row.status === 'draft' || row.status === 'submitted') && can(principal, 'edit_draft', applications.PERMISSION_OBJECT);
+  const paperLabel = (kind: string) => t(`paper_${kind}`);
   const failing = checks.filter((check) => check.outcome === 'fail');
 
   const statusChip = windowTone(STATUS_CHIP[row.status] ?? 'draft');
@@ -292,7 +305,69 @@ export default async function PaymentApplicationPage({
       done: Boolean(row.debitDate),
     },
   ];
-  const showChecks = row.status === 'draft' || row.status === 'approved';
+  const showChecks = row.status === 'draft' || row.status === 'submitted' || row.status === 'approved';
+
+  /*
+   * A paper and the step it proves (2026-10-06, by direction: "once posted it
+   * has attachments; whenever someone updates them it has to be pointed out
+   * what this attachment is"). One form per kind, each asking only what that
+   * step needs; the file is required.
+   */
+  const paperFile = (
+    <label className={s.uploadPicker}>
+      <Upload aria-hidden="true" />
+      <span>{admin('attachments.choose')}</span>
+      <input name="file" required type="file" />
+    </label>
+  );
+  const paperDialog = (kind: 'sent_to_bank' | 'paid' | 'rejected_cancelled') => (
+    <NewRecordDialog
+      buttonLabel={t(`paper_action_${kind}`)}
+      closeLabel={admin('close')}
+      openOnLoad={Boolean(outcome.error) && ((kind === 'sent_to_bank' && row.status === 'approved') || (kind === 'paid' && row.status === 'sent'))}
+      title={t(`paper_title_${kind}`, { applicationNo: row.applicationNo })}
+    >
+      <p className="muted">{t(`paper_note_${kind}`)}</p>
+      <Form action={addApplicationPaper}>
+        <Hidden name="application_no" value={row.applicationNo} />
+        <Hidden name="kind" value={kind} />
+        {kind === 'sent_to_bank' ? (
+          <Grid>
+            <Field defaultValue={today} label={t('col_application_date')} name="paper_date" required type="date" />
+            <Field hint={t('bank_reference_hint')} label={t('bank_reference')} name="paper_reference" />
+          </Grid>
+        ) : null}
+        {kind === 'sent_to_bank' && failing.length > 0 && mayOverride ? (
+          <Field
+            hint={t('override_hint', { checks: failing.map((check) => t(`check_${check.code}`)).join(', ') })}
+            label={t('override_reason')}
+            name="override_reason"
+            wide
+          />
+        ) : null}
+        {kind === 'paid' ? (
+          <>
+            <p className="muted">
+              {found.confirmPostsAs === 'payment'
+                ? t('confirm_posts_payment', { invoices: found.owingInvoices.join(', ') })
+                : t('confirm_posts_advance')}
+            </p>
+            <Grid>
+              <Field defaultValue={today} label={t(`confirmed_on_${kind === 'paid' ? method.kind : 'swift'}`)} name="paper_date" required type="date" />
+              <Field label={t(`reference_${method.kind}`)} name="paper_reference" required />
+            </Grid>
+          </>
+        ) : null}
+        {kind === 'rejected_cancelled' ? (
+          <Field label={t('paper_reason')} name="paper_reason" required wide />
+        ) : null}
+        {paperFile}
+        <SubmitRow>
+          <Submit label={t(`paper_action_${kind}`)} />
+        </SubmitRow>
+      </Form>
+    </NewRecordDialog>
+  );
 
   return (
     <AdminPage
@@ -322,71 +397,21 @@ export default async function PaymentApplicationPage({
       <DocumentWindow
         actions={
           <>
+            {maySubmit ? (
+              <form action={submitApplication}>
+                <Hidden name="application_no" value={row.applicationNo} />
+                <Submit label={t('submit')} variant="document" />
+              </form>
+            ) : null}
             {mayApprove ? (
               <form action={approveApplication}>
                 <Hidden name="application_no" value={row.applicationNo} />
                 <Submit label={t('approve')} variant="document" />
               </form>
             ) : null}
-            {maySend ? (
-              <NewRecordDialog
-                buttonLabel={t('send')}
-                closeLabel={admin('close')}
-                openOnLoad={Boolean(outcome.error) && row.status === 'approved'}
-                title={t('send_title', { applicationNo: row.applicationNo })}
-              >
-                <p className="muted">{t('send_note')}</p>
-                <Form action={sendApplication}>
-                  <Hidden name="application_no" value={row.applicationNo} />
-                  <Grid>
-                    <Field defaultValue={today} label={t('col_application_date')} name="application_date" required type="date" />
-                    <Field hint={t('bank_reference_hint')} label={t('bank_reference')} name="bank_reference" />
-                  </Grid>
-                  {failing.length > 0 && mayOverride ? (
-                    <Field
-                      hint={t('override_hint', { checks: failing.map((check) => t(`check_${check.code}`)).join(', ') })}
-                      label={t('override_reason')}
-                      name="override_reason"
-                      wide
-                    />
-                  ) : null}
-                  <SubmitRow>
-                    <Submit label={t('send')} />
-                  </SubmitRow>
-                </Form>
-              </NewRecordDialog>
-            ) : null}
-            {mayConfirm ? (
-              <NewRecordDialog
-                buttonLabel={t(`confirm_${kind}`)}
-                closeLabel={admin('close')}
-                openOnLoad={Boolean(outcome.error) && row.status === 'sent'}
-                title={t(`confirm_${kind}`)}
-              >
-                <p className="muted">
-                  {found.confirmPostsAs === 'payment'
-                    ? t('confirm_posts_payment', { invoices: found.owingInvoices.join(', ') })
-                    : t('confirm_posts_advance')}
-                </p>
-                <Form action={confirmApplication}>
-                  <Hidden name="application_no" value={row.applicationNo} />
-                  <Grid>
-                    <Field
-                      defaultValue={today}
-                      label={t(`confirmed_on_${kind}`)}
-                      name="confirmed_on"
-                      required
-                      type="date"
-                    />
-                    <Field label={t(`reference_${kind}`)} name="confirmation_reference" required />
-                  </Grid>
-                  <p className="muted">{t('attach_copy_hint')}</p>
-                  <SubmitRow>
-                    <Submit label={t(`confirm_${kind}`)} />
-                  </SubmitRow>
-                </Form>
-              </NewRecordDialog>
-            ) : null}
+            {maySend && mayAttach ? paperDialog('sent_to_bank') : null}
+            {mayConfirm && mayAttach ? paperDialog('paid') : null}
+            {mayRefusePaper && mayAttach ? paperDialog('rejected_cancelled') : null}
             {mayConfirmMigrated ? (
               <NewRecordDialog
                 buttonLabel={t('confirm_before_cut_over')}
@@ -453,6 +478,28 @@ export default async function PaymentApplicationPage({
             recordId={row.id}
             returnTo={self}
             title={`${t('document_type')} ${row.applicationNo}`}
+            attach={{
+              action: addApplicationPaper,
+              hidden: { application_no: row.applicationNo },
+              formExtra: (
+                <>
+                  <Select
+                    defaultValue="other"
+                    label={t('paper_kind')}
+                    name="kind"
+                    options={offered.map((kind) => ({ value: kind, label: paperLabel(kind) }))}
+                    required
+                  />
+                  {offered.length > 1 ? (
+                    <>
+                      <Field hint={t('paper_date_hint')} label={t('paper_date')} name="paper_date" type="date" />
+                      <Field hint={t('paper_reference_hint')} label={t('paper_reference')} name="paper_reference" />
+                      <Field hint={t('paper_reason_hint')} label={t('paper_reason')} name="paper_reason" />
+                    </>
+                  ) : null}
+                </>
+              ),
+            }}
           />
         }
         linesCount={showChecks ? checks.length : path.length}
@@ -524,6 +571,60 @@ export default async function PaymentApplicationPage({
         )}
       </DocumentWindow>
 
+      {/* What each paper is — and so which step it moved (2026-10-06). */}
+      <section aria-labelledby="payment-application-papers-title" className={s.sapDoc}>
+        <div className={s.sapWindow}>
+          <h2 className={s.sapTitle} id="payment-application-papers-title">
+            <span>{t('papers_title')}</span>
+            <span className={s.sapTitleMeta}>{t('papers_meta', { count: found.papers.length })}</span>
+          </h2>
+          <div className={s.sapTableWrap}>
+            <table aria-labelledby="payment-application-papers-title" className={s.sapTable}>
+              <thead>
+                <tr>
+                  <th scope="col">{t('paper_kind')}</th>
+                  <th scope="col">{t('paper_file')}</th>
+                  <th scope="col">{t('path_date')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {found.papers.length === 0 ? (
+                  <tr>
+                    <td className={s.sapEmptyRow} colSpan={3}>
+                      {t('papers_none')}
+                    </td>
+                  </tr>
+                ) : null}
+                {found.papers.map((paper) => (
+                  <tr key={paper.attachmentId}>
+                    <td>
+                      <span className={`status status--${PAPER_CHIP[paper.kind] ?? 'draft'}`} data-status={PAPER_CHIP[paper.kind] ?? 'draft'}>
+                        {paperLabel(paper.kind)}
+                      </span>
+                    </td>
+                    <td>
+                      <a className={s.sapLink} href={`/attachments/${paper.attachmentId}`} rel="noreferrer" target="_blank">
+                        <bdi dir="auto">{paper.fileName}</bdi>
+                      </a>
+                    </td>
+                    <td>
+                      <bdi dir="ltr">{day(businessDateOf(paper.createdAt))}</bdi>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
     </AdminPage>
   );
 }
+
+/** A paper's chip: what it did. */
+const PAPER_CHIP: Readonly<Record<string, string>> = {
+  sent_to_bank: 'submitted',
+  paid: 'posted',
+  rejected_cancelled: 'rejected',
+  other: 'draft',
+};

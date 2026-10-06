@@ -139,9 +139,15 @@ export function ContainerRowsGrid({
               <th scope="col">{labels.sizeType}</th>
               <th scope="col">{labels.sealNo}</th>
               {models.map((model) => (
-                <th className={styles.sapNum} key={model.key} scope="col" title={model.label}>
+                <th className={styles.sapNum} key={model.key} scope="col" title={model.unit ? `${model.label} — ${model.unit}` : model.label}>
                   <bdi dir="auto">{model.label}</bdi>
-                  {model.unit ? <> ({model.unit})</> : null}
+                  {/* Each item in its own unit, on a line of its own (2026-10-06, by direction:
+                      "we order goods with different units — which item goes to each container and how many, in its unit"). */}
+                  {model.unit ? (
+                    <div className="muted">
+                      <bdi dir="ltr">{model.unit}</bdi>
+                    </div>
+                  ) : null}
                 </th>
               ))}
               <th aria-label={labels.remove} />
@@ -198,7 +204,7 @@ export function ContainerRowsGrid({
                   {models.map((model, m) => (
                     <td className={styles.sapNum} key={model.key}>
                       <input
-                        aria-label={`${model.label} ${index + 1}`}
+                        aria-label={`${model.label}${model.unit ? ` (${model.unit})` : ''} ${index + 1}`}
                         dir="ltr"
                         inputMode="decimal"
                         min={0}
@@ -227,12 +233,12 @@ export function ContainerRowsGrid({
               <td colSpan={4}>{labels.typed}</td>
               {totals.map((total, m) => (
                 <td className={styles.sapNum} key={models[m]!.key}>
-                  <bdi dir="ltr">{total.typed ? show(total.sum) : labels.divided}</bdi>
+                  <bdi dir="ltr">{total.typed ? `${show(total.sum)}${models[m]!.unit ? ` ${models[m]!.unit}` : ''}` : labels.divided}</bdi>
                   {total.over ? (
                     <span className={styles.sapRowError}>{labels.tooMany.replace('{left}', show(total.left))}</span>
                   ) : (
                     <div className="muted">
-                      {labels.left} <bdi dir="ltr">{show(total.left)}</bdi>
+                      {labels.left} <bdi dir="ltr">{`${show(total.left)}${models[m]!.unit ? ` ${models[m]!.unit}` : ''}`}</bdi>
                     </div>
                   )}
                 </td>
