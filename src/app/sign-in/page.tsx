@@ -1,15 +1,9 @@
-import Image from 'next/image';
-import { getLocale, getTranslations } from 'next-intl/server';
-import { Globe, ShieldCheck } from 'lucide-react';
 import { redirect } from 'next/navigation';
 import { cookies, headers } from 'next/headers';
 import { db, applyScope } from '@/server/db/client';
 import { signIn as authenticate } from '@/server/services/authentication';
 import { optionalContext, RESTRICTION_ROUTE, SESSION_COOKIE } from '@/server/session';
-import { LoginForm } from '@/components/login-form';
-import { DEFAULT_ACCENT, DEFAULT_PALETTE } from '@domain/appearance';
-import mainLogo from '../../../mainLogo.png';
-import styles from './sign-in.module.css';
+import { AuthShell, LoginForm } from '@/components/login-form';
 
 /**
  * Sign-in — Phase 01.1's authentication, given a screen in Phase 01.12.
@@ -103,7 +97,6 @@ export default async function SignInPage({
 }) {
   if (await optionalContext()) redirect('/');
 
-  const [t, locale] = await Promise.all([getTranslations(), getLocale()]);
   const params = await searchParams;
   const failed =
     params.error === 'locked'
@@ -117,56 +110,11 @@ export default async function SignInPage({
             : null;
   const mfa = params.mfa === '1';
 
+  // The page around the form — the company's mark, the language switch, what
+  // the system is — is `AuthShell`'s; the password screen wears the same.
   return (
-    <main className={`erp-root ${styles.page}`} data-palette={DEFAULT_PALETTE} data-accent={DEFAULT_ACCENT}>
-      {/*
-        The brand panel. The grid and concentric rings are pseudo-elements on
-        this section; the lockup already carries the company name and
-        strapline, so the panel adds only the product tagline beneath it.
-      */}
-      <section className={styles.brand}>
-        <div className={styles.brandHeading}>
-          <Image
-            alt={t('shell.logo_alt')}
-            className={styles.brandLogo}
-            preload
-            sizes="72px"
-            src={mainLogo}
-          />
-          <p className={styles.brandStrapline}>{t('app.tagline')}</p>
-        </div>
-
-        <div className={styles.brandFooter}>
-          <div>
-            <p className={styles.pillarTitle}>{t('auth.pillar_one_title')}</p>
-            <p className={styles.pillarBody}>{t('auth.pillar_one_body')}</p>
-          </div>
-          <i aria-hidden="true" />
-          <div>
-            <p className={styles.pillarTitle}>{t('auth.pillar_two_title')}</p>
-            <p className={styles.pillarBody}>{t('auth.pillar_two_body')}</p>
-          </div>
-        </div>
-      </section>
-
-      <section className={styles.formSide}>
-        <p className={styles.authorized}>
-          <ShieldCheck aria-hidden="true" />
-          <span>{t('auth.authorized')}</span>
-        </p>
-
-        <LoginForm action={signIn} className={styles.card} failed={failed} mfa={mfa} />
-
-        <footer className={styles.pageFooter}>
-          <span>
-            © {new Date().getFullYear()} {t('auth.company')}
-          </span>
-          <span className={styles.pageFooterLang}>
-            <Globe aria-hidden="true" />
-            {locale === 'ar' ? t('shell.arabic') : t('shell.english')}
-          </span>
-        </footer>
-      </section>
-    </main>
+    <AuthShell pillars>
+      <LoginForm action={signIn} failed={failed} mfa={mfa} />
+    </AuthShell>
   );
 }

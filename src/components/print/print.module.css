@@ -23,45 +23,52 @@
   gap: 0.5rem;
   align-items: center;
   max-inline-size: 190mm;
-  margin: 0.6rem auto;
-  padding: 0.5rem 0.6rem;
-  border: 1px solid #b8b8b2;
-  background: #f4f4ee;
+  margin: 0.75rem auto;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-xl, 0.7rem);
+  background: var(--ui-overlay);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
 }
 
 /* The toolbar is screen furniture, not paper, so its buttons are the
-   application's: the same 2rem height, the same inset and corner, the same
-   amber. They were shorter and squarer than every other button in the system,
-   which is what made the Print button look like it came from somewhere else. */
+   application's — Intent UI's primary and outline since the redesign
+   (2026-10-06). This file is outside the cascade layers (its @page rules), so
+   these are written in the theme's variables rather than as utilities. */
 .toolbar a,
 .toolbar button {
   display: inline-flex;
-  min-block-size: 2rem;
+  min-block-size: 2.25rem;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem;
+  gap: 0.5rem;
   padding-block: 0;
-  padding-inline: 0.85rem;
-  border: 1px solid #b77d0b;
-  border-radius: 0.12rem;
-  background: linear-gradient(180deg, #ffd978, #e9aa24);
-  color: #3a2600;
+  padding-inline: 0.875rem;
+  border: 1px solid color-mix(in oklab, var(--ui-primary) 82%, var(--ui-fg) 18%);
+  border-radius: var(--radius-lg, 0.5rem);
+  background: var(--ui-primary);
+  color: var(--ui-primary-fg);
   font: inherit;
-  font-size: 0.76rem;
-  font-weight: 700;
+  font-size: 0.875rem;
+  font-weight: 500;
   text-decoration: none;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
   cursor: pointer;
 }
 
 .toolbar a:hover,
 .toolbar button:hover {
-  background: linear-gradient(180deg, #fff0c2, #f0c45c);
+  background: color-mix(in oklab, var(--ui-primary) 90%, var(--ui-primary-fg) 10%);
 }
 
 .toolbar .quiet {
-  border-color: #8d8d89;
-  background: #fff;
-  color: #333;
+  border-color: var(--ui-border);
+  background: var(--ui-overlay);
+  color: var(--ui-fg);
+}
+
+.toolbar .quiet:hover {
+  background: var(--ui-secondary);
 }
 
 /* Letterhead: the logo, the company, and which document this is. */

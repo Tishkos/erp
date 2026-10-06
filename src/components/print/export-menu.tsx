@@ -1,4 +1,4 @@
-import { FileDown } from 'lucide-react';
+import { ChevronDown, Download, FileDown, FileSpreadsheet, FileText, FileType, type LucideIcon } from 'lucide-react';
 import { PrintButton } from '@/components/admin/icon-dialog';
 import { getTranslations } from 'next-intl/server';
 import { exportHref, mayExport, type ExportKey } from '@/server/print/access';
@@ -6,6 +6,45 @@ import { FORMATS, type ExportFormat } from '@/server/print/model';
 import type { Principal } from '@domain/permissions';
 import { requireContext } from '@/server/session';
 import styles from './export-menu.module.css';
+
+/** Each format's mark, as Intent UI's menus draw one before the label. */
+const FORMAT_ICON: Record<ExportFormat, LucideIcon> = { pdf: FileText, xlsx: FileSpreadsheet, docx: FileType };
+
+/**
+ * One language's copies: a small heading, then a menu item per format. The
+ * dropdown and the printer's window draw the same groups.
+ */
+function LanguageGroup({
+  lang,
+  name,
+  formats,
+  names,
+  href,
+}: {
+  readonly lang: 'en' | 'ar';
+  readonly name: string;
+  readonly formats: readonly ExportFormat[];
+  readonly names: Record<ExportFormat, string>;
+  readonly href: (format: ExportFormat, lang: 'en' | 'ar') => string;
+}) {
+  return (
+    <div className={styles.language} lang={lang}>
+      <span className={styles.languageName}>{name}</span>
+      <span className={styles.formats}>
+        {formats.map((format) => {
+          const Icon = FORMAT_ICON[format];
+          return (
+            <a className={styles.format} data-format={format} data-lang={lang} download href={href(format, lang)} key={format}>
+              <Icon aria-hidden="true" />
+              <span className={styles.formatName}>{names[format]}</span>
+              <Download aria-hidden="true" className={styles.formatGo} />
+            </a>
+          );
+        })}
+      </span>
+    </div>
+  );
+}
 
 /**
  * The one "Print / Export" menu every document and report carries.
@@ -19,6 +58,9 @@ import styles from './export-menu.module.css';
  *
  * Both languages are offered side by side: the document's language is chosen
  * per copy, independently of the reader's own.
+ *
+ * Drawn as Intent UI's menu (2026-10-06): an outline trigger with its
+ * chevron, a popover of language sections and format items.
  */
 export async function ExportMenu({
   exportKey,
@@ -61,26 +103,18 @@ export async function ExportMenu({
       <summary aria-label={label ? `${t('menu')} — ${label}` : undefined} className={styles.trigger}>
         <FileDown aria-hidden="true" />
         <span>{t('menu')}</span>
+        <ChevronDown aria-hidden="true" className={styles.chevron} />
       </summary>
       <div className={styles.panel} role="group">
         {(['en', 'ar'] as const).map((lang) => (
-          <div className={styles.language} key={lang} lang={lang}>
-            <span className={styles.languageName}>{lang === 'ar' ? t('arabic') : t('english')}</span>
-            <span className={styles.formats}>
-              {formats.map((format) => (
-                <a
-                  className={styles.format}
-                  data-format={format}
-                  data-lang={lang}
-                  download
-                  href={link(format, lang)}
-                  key={format}
-                >
-                  {names[format]}
-                </a>
-              ))}
-            </span>
-          </div>
+          <LanguageGroup
+            formats={formats}
+            href={link}
+            key={lang}
+            lang={lang}
+            name={lang === 'ar' ? t('arabic') : t('english')}
+            names={names}
+          />
         ))}
       </div>
     </details>
@@ -110,27 +144,19 @@ export async function ExportIcon({
   const formats = FORMATS.filter((format) => mayExport(reader, exportKey, format));
   if (formats.length === 0) return null;
   const names: Record<ExportFormat, string> = { pdf: t('pdf'), xlsx: t('excel'), docx: t('word') };
+  const href = (format: ExportFormat, lang: 'en' | 'ar') => `${exportHref(exportKey, id)}?format=${format}&lang=${lang}`;
   return (
     <PrintButton closeLabel={admin('close')} label={t('menu')} title={title}>
-      <div data-export-menu={exportKey}>
+      <div className={styles.sheet} data-export-menu={exportKey}>
         {(['en', 'ar'] as const).map((lang) => (
-          <div className={styles.language} key={lang} lang={lang}>
-            <span className={styles.languageName}>{lang === 'ar' ? t('arabic') : t('english')}</span>
-            <span className={styles.formats}>
-              {formats.map((format) => (
-                <a
-                  className={styles.format}
-                  data-format={format}
-                  data-lang={lang}
-                  download
-                  href={`${exportHref(exportKey, id)}?format=${format}&lang=${lang}`}
-                  key={format}
-                >
-                  {names[format]}
-                </a>
-              ))}
-            </span>
-          </div>
+          <LanguageGroup
+            formats={formats}
+            href={href}
+            key={lang}
+            lang={lang}
+            name={lang === 'ar' ? t('arabic') : t('english')}
+            names={names}
+          />
         ))}
       </div>
     </PrintButton>

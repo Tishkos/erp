@@ -1,7 +1,10 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { TriangleAlert } from 'lucide-react';
+import { RotateCcw, TriangleAlert } from 'lucide-react';
+// The palettes' `--w-*` tokens, which the Intent theme reads (a failed render
+// may come before any screen has loaded them).
+import '@/components/admin/admin.module.css';
 import styles from '../route-states.module.css';
 
 /**
@@ -17,6 +20,8 @@ import styles from '../route-states.module.css';
  *
  * `reset` is React's own retry — it re-renders the segment without a full page
  * load, so the reader keeps their place in the shell.
+ *
+ * Drawn as Intent UI's empty state (2026-10-06), its icon in the danger tint.
  */
 export default function ScreenError({
   error,
@@ -30,16 +35,19 @@ export default function ScreenError({
   return (
     <main className={styles.state}>
       <div className={styles.stateCard} role="alert">
-        <span className={`${styles.stateIcon} ${styles.stateIconAlert}`}>
-          <TriangleAlert aria-hidden="true" />
+        <span aria-hidden="true" className={`${styles.stateIcon} ${styles.stateIconAlert}`}>
+          <TriangleAlert />
         </span>
         <h1>{t('error_title')}</h1>
         <p>{t('error_body')}</p>
         {/* OP-5 — the digest is on the server's log line for this failure. */}
-        {error.digest ? <p>{t('error_reference', { digest: error.digest })}</p> : null}
-        <button className={styles.stateAction} onClick={reset} type="button">
-          {t('error_action')}
-        </button>
+        {error.digest ? <p className={styles.stateReference}>{t('error_reference', { digest: error.digest })}</p> : null}
+        <div className={styles.stateActions}>
+          <button className={styles.stateAction} onClick={reset} type="button">
+            <RotateCcw aria-hidden="true" />
+            <span>{t('error_action')}</span>
+          </button>
+        </div>
       </div>
     </main>
   );

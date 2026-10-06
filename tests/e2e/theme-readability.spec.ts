@@ -182,7 +182,8 @@ test('missing/error route-state styling follows light and dark palettes', async 
         radius: parseFloat(s.borderRadius),
       };
     });
-    expect(colors.radius).toBeLessThan(4);
+    // An Intent UI card since the redesign (2026-10-06): rounded-xl, not the squared window.
+    expect(colors.radius).toBeGreaterThanOrEqual(8);
     expect(contrast(colors.heading, colors.background)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(colors.text, colors.background)).toBeGreaterThanOrEqual(4.5);
   }

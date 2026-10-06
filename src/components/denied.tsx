@@ -1,4 +1,8 @@
 import { getTranslations } from 'next-intl/server';
+import { Lock } from 'lucide-react';
+// The palettes' `--w-*` tokens, which the Intent theme reads: a refused page
+// draws no screen that would have loaded them.
+import '@/components/admin/admin.module.css';
 
 /**
  * The refusal screen — Phase 01.2, rendered by Phase 01.12's shell.
@@ -16,15 +20,31 @@ import { getTranslations } from 'next-intl/server';
  * What it deliberately does not say is what the page would have contained, or
  * whether the record exists. A refusal that leaks the shape of what was refused
  * is a slower way of granting access.
+ *
+ * Drawn as the other route states are — Intent UI's empty state in a card
+ * (2026-10-06) — in utilities over the legacy `.panel`. The markup the tests
+ * and Noah's camera read stays: `.panel[role="alert"] > h1.page__title`, and
+ * no class that contains "stateCard" (that is the missing/failed card).
  */
 export async function Denied({ object }: { object: string }) {
   const t = await getTranslations();
 
   return (
-    <div className="panel" role="alert">
-      <h1 className="page__title">{t('error.no_permission_title')}</h1>
-      <p>{t('error.no_permission')}</p>
-      <p className="muted">{t('error.no_permission_next', { object })}</p>
+    <div
+      className="panel mx-auto my-10 grid w-full max-w-md justify-items-center gap-1.5 rounded-xl border border-border bg-overlay px-6 pt-9 pb-8 text-center text-overlay-fg shadow-xs"
+      role="alert"
+    >
+      <span
+        aria-hidden="true"
+        className="mb-3 grid size-12 place-items-center rounded-full bg-warning-subtle text-warning-subtle-fg ring-[0.45rem] ring-warning-subtle/45"
+      >
+        <Lock className="size-5" />
+      </span>
+      <h1 className="page__title m-0 text-lg/7 font-semibold tracking-tight text-balance text-fg rtl:tracking-normal">
+        {t('error.no_permission_title')}
+      </h1>
+      <p className="m-0 max-w-sm text-sm/6 text-muted-fg">{t('error.no_permission')}</p>
+      <p className="muted m-0 max-w-sm text-sm/6 text-muted-fg">{t('error.no_permission_next', { object })}</p>
     </div>
   );
 }

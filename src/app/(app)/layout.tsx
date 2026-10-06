@@ -1,5 +1,9 @@
 import type { ReactNode } from 'react';
 import { AppShell } from '@/components/app-shell';
+// The palettes (`--w-*`) and so the Intent UI theme (`--ui-*`) live here: loaded once for
+// every signed-in page, including those — a loading skeleton, a refusal — that import no
+// screen component (the Intent UI redesign, 2026-10-06).
+import '@/components/admin/admin.module.css';
 import { optionalContext, withCurrentUser } from '@/server/session';
 import * as companyService from '@/server/services/company';
 import * as userAppearance from '@/server/services/user-appearance';

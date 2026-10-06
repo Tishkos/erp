@@ -3,9 +3,12 @@
 
 @layer legacy {
 /*
- * The three states a route can be in besides showing its screen: loading,
- * missing, failed. All three use the same tokens as the screens themselves —
- * a reader should be able to tell the application is still the application.
+ * The states a route can be in besides showing its screen: loading,
+ * missing, failed, refused. Drawn as Intent UI's empty state and skeleton
+ * (the redesign, 2026-10-06), in the theme's `--ui-*` tokens — so a reader
+ * can tell the application is still the application, in every palette, and
+ * a page with no palette (an error above the shell) wears Intent's own light
+ * theme from :root.
  */
 
 /* Skeleton ---------------------------------------------------------------- */
@@ -28,9 +31,9 @@
   inset-block-start: 0;
   inset-inline-start: 0;
   inline-size: 100%;
-  block-size: 3px;
+  block-size: 2px;
   pointer-events: none;
-  background: color-mix(in srgb, var(--w-amber-b, var(--accent)) 18%, transparent);
+  background: color-mix(in oklab, var(--ui-primary) 16%, transparent);
 }
 
 .progress::before {
@@ -39,21 +42,10 @@
   inset-inline-start: 0;
   content: "";
   inline-size: 0;
-  border-start-end-radius: 3px;
-  border-end-end-radius: 3px;
-  background: var(--w-amber-b, var(--accent));
-  box-shadow: 0 0 12px color-mix(in srgb, var(--w-amber-b, var(--accent)) 70%, transparent);
+  border-start-end-radius: 999px;
+  border-end-end-radius: 999px;
+  background: var(--ui-primary);
   animation: progress-advance 6s cubic-bezier(0.1, 0.6, 0.2, 1) forwards;
-}
-
-.progress::after {
-  position: absolute;
-  inset-block: 0;
-  inset-inline-start: 0;
-  content: "";
-  inline-size: 30%;
-  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 55%), transparent);
-  animation: progress-glide 1.3s ease-in-out infinite;
 }
 
 .skeletonHeader {
@@ -66,7 +58,7 @@
 .skeletonHeading {
   display: grid;
   flex: 1 1 auto;
-  gap: 0.55rem;
+  gap: 0.6rem;
 }
 
 .skeletonActions {
@@ -78,31 +70,32 @@
 .skeletonStrip {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  gap: 0.8rem;
+  gap: 1rem;
 }
 
 .skeletonTable {
   display: grid;
   overflow: hidden;
-  border: 1px solid var(--w-rule, var(--border));
-  border-radius: var(--radius-lg);
-  background: var(--w-bg, var(--surface));
+  border: 1px solid var(--ui-border);
+  border-radius: calc(var(--ui-radius) * 1.4);
+  background: var(--ui-overlay);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 5%);
 }
 
 .skeletonToolbar {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.75rem;
-  border-block-end: 1px solid var(--w-rule, var(--border));
+  padding: 0.75rem 1rem;
+  border-block-end: 1px solid var(--ui-border);
 }
 
 .skeletonRow {
   display: grid;
   grid-template-columns: 1.6fr 2fr 1fr 1fr 0.8fr;
   gap: 1rem;
-  padding: 0.8rem 1rem;
-  border-block-end: 1px solid var(--w-rule, var(--border));
+  padding: 0.85rem 1rem;
+  border-block-end: 1px solid var(--ui-border);
   animation: fade-in 400ms ease-out both;
   animation-delay: calc(var(--row, 0) * 45ms);
 }
@@ -112,24 +105,21 @@
 }
 
 .skeletonRowHead {
-  background: var(--w-field-ro, var(--surface-muted));
+  padding-block: 0.7rem;
+  background: var(--ui-muted);
 }
 
 .skeletonRowHead .cell {
-  block-size: 0.6rem;
+  block-size: 0.55rem;
   inline-size: 55%;
 }
 
+/* Intent UI's Skeleton: a quiet fill that breathes. */
 .bar {
-  border-radius: var(--radius-sm);
-  background: linear-gradient(
-    100deg,
-    var(--w-field-ro, var(--surface-muted)) 30%,
-    color-mix(in srgb, var(--w-field-ro, var(--surface-muted)) 55%, var(--w-bg, var(--surface-raised))) 50%,
-    var(--w-field-ro, var(--surface-muted)) 70%
-  );
-  background-size: 220% 100%;
-  animation: shimmer 1.4s ease-in-out infinite;
+  display: block;
+  border-radius: calc(var(--ui-radius) * 0.8);
+  background: var(--ui-secondary);
+  animation: pulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 .crumb {
@@ -138,7 +128,7 @@
 }
 
 .title {
-  block-size: 1.6rem;
+  block-size: 1.5rem;
   inline-size: min(18rem, 60%);
 }
 
@@ -149,22 +139,29 @@
 
 .ghostButton,
 .primaryButton {
-  block-size: 2.1rem;
+  block-size: 2.25rem;
   inline-size: 6.5rem;
+  border-radius: var(--ui-radius);
+}
+
+.ghostButton {
+  border: 1px solid var(--ui-border);
+  background: transparent;
 }
 
 .primaryButton {
-  background: color-mix(in srgb, var(--w-amber-b, var(--accent)) 22%, var(--w-field-ro, var(--surface-muted)));
+  background: color-mix(in oklab, var(--ui-primary) 28%, var(--ui-secondary));
 }
 
 .card {
   display: grid;
   align-content: space-between;
   block-size: 6.4rem;
-  padding: 0.9rem 1rem;
-  border: 1px solid var(--w-rule, var(--border));
-  border-radius: var(--radius-lg);
-  background: var(--w-bg, var(--surface));
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--ui-border);
+  border-radius: calc(var(--ui-radius) * 1.4);
+  background: var(--ui-overlay);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 5%);
 }
 
 .cardLabel {
@@ -178,18 +175,19 @@
 }
 
 .search {
-  block-size: 2rem;
+  block-size: 2.25rem;
   inline-size: min(18rem, 50%);
+  border-radius: var(--ui-radius);
 }
 
 .chip {
-  block-size: 2rem;
+  block-size: 2.25rem;
   inline-size: 5rem;
-  border-radius: 999px;
+  border-radius: var(--ui-radius);
 }
 
 .cell {
-  block-size: 0.8rem;
+  block-size: 0.75rem;
   inline-size: 80%;
 }
 
@@ -199,15 +197,12 @@
 
 .cell:nth-child(5) {
   inline-size: 45%;
-  border-radius: 999px;
+  border-radius: calc(var(--ui-radius) * 0.8);
 }
 
-@keyframes shimmer {
-  from {
-    background-position: 180% 0;
-  }
-  to {
-    background-position: -80% 0;
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
   }
 }
 
@@ -237,25 +232,16 @@
   }
 }
 
-@keyframes progress-glide {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(340%);
-  }
-}
-
 /*
  * A skeleton that pulses is decoration, not information. Someone who has asked
- * not to see motion still needs to know the screen is coming, so the shimmer
+ * not to see motion still needs to know the screen is coming, so the pulse
  * stops and the placeholders stay.
  */
 @media (prefers-reduced-motion: reduce) {
   .bar,
   .skeleton,
   .skeletonRow,
-  .progress::after {
+  .stateCard {
     animation: none;
   }
 
@@ -265,7 +251,7 @@
   }
 }
 
-/* Missing and failed ------------------------------------------------------ */
+/* Missing, failed and refused: Intent UI's empty state, in a card ------- */
 
 .state {
   display: grid;
@@ -277,33 +263,37 @@
 .stateCard {
   display: grid;
   justify-items: center;
-  max-inline-size: 30rem;
-  gap: 0.45rem;
-  padding: 2rem 1.75rem;
-  border: 1px solid var(--w-line-strong, var(--border));
-  border-block-start: 4px solid var(--w-title-line, var(--accent));
-  border-radius: 0.2rem;
-  background: var(--w-bg, var(--surface-raised));
-  color: var(--w-text, var(--text));
+  box-sizing: border-box;
+  inline-size: min(100%, 28rem);
+  gap: 0.375rem;
+  padding: 2.25rem 1.5rem 2rem;
+  border: 1px solid var(--ui-border);
+  border-radius: calc(var(--ui-radius) * 1.4);
+  background: var(--ui-overlay);
+  color: var(--ui-overlay-fg);
   font-family: inherit;
-  box-shadow: 0 1px 2px rgb(24 39 31 / 10%);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 5%);
   text-align: center;
+  animation: state-in 200ms ease-out both;
 }
 
+/* The icon in a soft circle, with a fainter ring around it. */
 .stateIcon {
   display: inline-grid;
-  inline-size: 2.6rem;
-  block-size: 2.6rem;
+  inline-size: 3rem;
+  block-size: 3rem;
   place-items: center;
-  margin-block-end: 0.35rem;
-  border-radius: 0.15rem;
-  color: var(--w-label, var(--text));
-  background: var(--w-selected, var(--accent-soft));
+  margin-block-end: 0.75rem;
+  border-radius: 999px;
+  color: var(--ui-primary-subtle-fg);
+  background: var(--ui-primary-subtle);
+  box-shadow: 0 0 0 0.45rem color-mix(in oklab, var(--ui-primary-subtle) 45%, transparent);
 }
 
 .stateIconAlert {
-  color: var(--status-rejected);
-  background: color-mix(in srgb, var(--status-rejected) 12%, var(--w-bg, var(--surface)));
+  color: var(--ui-danger-subtle-fg);
+  background: var(--ui-danger-subtle);
+  box-shadow: 0 0 0 0.45rem color-mix(in oklab, var(--ui-danger-subtle) 45%, transparent);
 }
 
 .stateIcon svg {
@@ -313,43 +303,101 @@
 
 .stateCard h1 {
   margin: 0;
-  color: var(--w-label, var(--text));
-  font-size: 1.1rem;
-  font-weight: var(--weight-strong);
-  letter-spacing: -0.02em;
+  color: var(--ui-fg);
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.75rem;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+:global(html[lang="ar"]) .stateCard h1 {
+  letter-spacing: 0;
 }
 
 .stateCard p {
   margin: 0;
-  color: var(--w-muted, var(--text-muted));
-  font-size: var(--font-body);
+  max-inline-size: 24rem;
+  color: var(--ui-muted-fg);
+  font-size: 0.875rem;
+  line-height: 1.5rem;
+  text-wrap: pretty;
 }
 
+/* What support asks for: the reference, quiet and copyable. */
+.stateCard p.stateReference {
+  margin-block-start: 0.5rem;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid var(--ui-border);
+  border-radius: calc(var(--ui-radius) * 0.8);
+  background: var(--ui-muted);
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  user-select: all;
+}
+
+.stateActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-block-start: 1.25rem;
+}
+
+/* Intent UI's primary button. */
 .stateAction {
-  min-block-size: var(--control-height);
   display: inline-flex;
+  min-block-size: 2.25rem;
   align-items: center;
-  margin-block-start: 0.75rem;
-  padding-inline: 1rem;
-  border: 1px solid var(--w-amber-line, var(--accent));
-  border-radius: 0.15rem;
-  color: var(--w-accent-ink, var(--accent-contrast));
-  background: linear-gradient(180deg, var(--w-amber-a, var(--accent)), var(--w-amber-b, var(--accent)));
-  font-size: var(--font-button);
-  font-weight: var(--weight-button);
+  justify-content: center;
+  gap: 0.5rem;
+  box-sizing: border-box;
+  padding: 0.375rem 0.875rem;
+  border: 1px solid color-mix(in oklab, var(--ui-primary) 85%, black);
+  border-radius: var(--ui-radius);
+  color: var(--ui-primary-fg);
+  background: var(--ui-primary);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.5rem;
   text-decoration: none;
   cursor: pointer;
 }
 
+.stateAction svg {
+  inline-size: 1rem;
+  block-size: 1rem;
+  flex: 0 0 auto;
+  opacity: 0.8;
+}
+
 .stateAction:hover {
-  border-color: var(--w-amber-line, var(--accent-hover));
-  color: var(--w-label, var(--accent-contrast));
-  background: var(--w-selected, var(--accent-hover));
+  color: var(--ui-primary-fg);
+  background: color-mix(in oklab, var(--ui-primary-fg) 10%, var(--ui-primary) 90%);
 }
 
 .stateAction:focus-visible {
-  outline: 2px solid var(--w-title-line, var(--accent));
+  outline: 2px solid var(--ui-ring);
   outline-offset: 2px;
+}
+
+@keyframes state-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .stateCard,
+  .stateAction {
+    border-color: CanvasText;
+  }
 }
 
 .srOnly {

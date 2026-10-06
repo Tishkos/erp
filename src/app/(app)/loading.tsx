@@ -1,5 +1,8 @@
 import type { CSSProperties } from 'react';
 import { getTranslations } from 'next-intl/server';
+// The palettes' `--w-*` tokens, which the Intent theme reads: the skeleton is
+// often drawn before the screen that would have loaded them.
+import '@/components/admin/admin.module.css';
 import styles from '../route-states.module.css';
 
 /**
