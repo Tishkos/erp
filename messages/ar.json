@@ -3274,7 +3274,7 @@
       "none": "لا توجد طلبات دفع بعد.",
       "none_for_import": "لم يُطلب من البنك شيء بعد.",
       "submit": "إرسال للموافقة",
-      "status_submitted": "أُرسل للموافقة",
+      "status_sent_for_approval": "أُرسل للموافقة",
       "view_drafts": "المسودات",
       "paper_kind": "ما هذه الورقة؟",
       "paper_sent_to_bank": "أُرسلت إلى البنك",

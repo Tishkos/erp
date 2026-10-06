@@ -1,3 +1,5 @@
+import { statusLabelKey } from '@/server/domain/payment-applications';
+
 /**
  * The chip each payment application status wears — the shared status
  * palette (`status status--<x>`), nothing new drawn.
@@ -14,9 +16,7 @@ export const STATUS_CHIP: Readonly<Record<string, string>> = {
   cancelled: 'cancelled',
 };
 
-/** "SWIFT pending" / "SWIFT confirmed" — the diagram's wording when the method is SWIFT. */
+/** "SWIFT pending" / "SWIFT confirmed" — the diagram's wording when the method is SWIFT; "Sent for approval". */
 export function statusKey(status: string, kind: string): string {
-  return kind === 'swift' && (status === 'sent' || status === 'confirmed')
-    ? `status_swift_${status}`
-    : `status_${status}`;
+  return statusLabelKey(status, kind);
 }

@@ -24,6 +24,7 @@ import * as notes from '../services/supplier-notes';
 import { decimalString, lineTotal, scaled, sumMoney, sumQuantity } from './decimal';
 import type { BuildContext, Built } from './documents';
 import type { Column, Fact, PrintModel, Row } from './model';
+import { statusLabelKey } from '../domain/payment-applications';
 
 const date = (value: string | null | undefined, locale: Locale) => (value ? formatBusinessDate(value, locale) : '—');
 const money = (value: string | bigint, locale: Locale) =>
@@ -203,7 +204,7 @@ export async function paymentApplication(ctx: BuildContext, applicationNo: strin
   if (!found) return null;
   const { application: row, payable, method, account, supplier, payee, instalment, people } = found;
   const t = (key: string) => m.admin(`payment_applications.${key}`);
-  const statusLabel = m.admin(`payment_applications.status_${row.status}`);
+  const statusLabel = m.admin(`payment_applications.${statusLabelKey(row.status)}`);
   const fields: Fact[] = [
     { label: t('col_no'), value: row.applicationNo, ltr: true },
     { label: m.column('status'), value: statusLabel },

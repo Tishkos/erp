@@ -82,6 +82,17 @@ export const PAYMENT_APPLICATION_STATUSES = [
 ] as const;
 export type ApplicationStatus = (typeof PAYMENT_APPLICATION_STATUSES)[number];
 
+/**
+ * A status's label in `admin.payment_applications`: "SWIFT pending" / "SWIFT
+ * confirmed" when the method is SWIFT, and "Sent for approval" for
+ * `submitted` — kept under a key of its own, because the shared order labels
+ * (`status_order`) say "Submitted" and are not re-declared per screen (hd18).
+ */
+export function statusLabelKey(status: string, kind?: string | null): string {
+  if (status === 'submitted') return 'status_sent_for_approval';
+  return kind === 'swift' && (status === 'sent' || status === 'confirmed') ? `status_swift_${status}` : `status_${status}`;
+}
+
 /** Live: holds or has moved money. Rejected and cancelled are not. */
 export function isLive(status: string): boolean {
   return status !== 'rejected' && status !== 'cancelled';

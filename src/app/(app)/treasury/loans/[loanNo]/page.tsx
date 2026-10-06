@@ -50,7 +50,7 @@ import {
   setSharesAction,
 } from '../actions';
 import { INSTALMENT_CHIP, LOAN_CHIP } from '../status';
-import { STATUS_CHIP } from '../../../payables/payment-applications/status';
+import { STATUS_CHIP, statusKey } from '../../../payables/payment-applications/status';
 import { windowTone } from '../../../payables/window-tone';
 import { businessToday } from '@/server/domain/business-date';
 import { isNotFoundError } from '@/server/not-found';
@@ -691,7 +691,7 @@ export default async function LoanPage({
                               className={`status status--${STATUS_CHIP[row.applicationStatus] ?? 'draft'}`}
                               data-status={STATUS_CHIP[row.applicationStatus] ?? 'draft'}
                             >
-                              {pa(`status_${row.applicationStatus}`)}
+                              {pa(statusKey(row.applicationStatus, ''))}
                             </span>
                           </div>
                         </td>

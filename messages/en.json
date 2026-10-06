@@ -3274,7 +3274,7 @@
       "none": "No payment applications yet.",
       "none_for_import": "Nothing asked of the bank yet.",
       "submit": "Send for approval",
-      "status_submitted": "Sent for approval",
+      "status_sent_for_approval": "Sent for approval",
       "view_drafts": "Drafts",
       "paper_kind": "What is this paper?",
       "paper_sent_to_bank": "Sent to the bank",
