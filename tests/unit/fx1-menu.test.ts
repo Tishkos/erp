@@ -29,10 +29,12 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
     // application and the payment application into a module of its own.
     expect(keysOf('payables_transfers')).toEqual(['payables_workbench', 'payment_applications']);
     expect(MODULES.find((module) => module.key === 'transfers')?.sectionKeys).toEqual(['payables_transfers']);
+    // The purchase invoice first — the document this company starts from
+    // (by direction, 2026-10-06: "Purchase Invoices should come first").
     expect(keysOf('payables').slice(0, 6)).toEqual([
+      'ap_invoices',
       'purchase_orders',
       'goods_receipts',
-      'ap_invoices',
       'service_receipts',
       'recurring_contracts',
       'goods_returns',

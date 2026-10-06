@@ -190,10 +190,12 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     items: [
       // The import application (`payables_workbench`, /payables) led this
       // heading until 2026-10-06, when it went to the Transfers &
-      // Applications module below, by direction.
+      // Applications module below, by direction — and the purchase invoice
+      // leads it now ("Purchase Invoices should come first, not purchase
+      // order", the same day): it is the document this company starts from.
+      page('ap_invoices', 'ap_invoice', '/payables/invoices'),
       page('purchase_orders', 'purchase_order'),
       page('goods_receipts', 'goods_receipt'),
-      page('ap_invoices', 'ap_invoice', '/payables/invoices'),
       // Labelled Expenses: an expense is a purchase invoice raised and
       // confirmed here (D12), route kept.
       page('service_receipts', 'service_receipt'),
