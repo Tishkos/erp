@@ -26,6 +26,10 @@ import { businessDateOf } from '@/server/domain/business-date';
  */
 export const dynamic = 'force-dynamic';
 
+/** The native file picker, dressed as Intent's outline button with the chosen names beside it. */
+const FILE_INPUT =
+  'min-h-0 max-w-64 min-w-0 border-0 bg-transparent p-0 text-xs text-muted-fg shadow-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring file:me-2 file:h-7 file:cursor-pointer file:rounded-md file:border file:border-solid file:border-input file:bg-overlay file:px-2.5 file:text-xs file:font-medium file:text-fg hover:file:bg-secondary';
+
 const COUNT_KEYS = ['imports', 'payments', 'pds', 'bls', 'containers', 'details', 'orderLines', 'notes'] as const;
 
 export default async function PayablesMigrationPage({ searchParams }: { searchParams: SearchParams }) {
@@ -94,7 +98,7 @@ export default async function PayablesMigrationPage({ searchParams }: { searchPa
                 <label className={s.uploadPicker}>
                   <Upload aria-hidden="true" />
                   <span>{t('choose')}</span>
-                  <input accept=".xlsx" aria-label={t('file')} name="file" required type="file" />
+                  <input accept=".xlsx" aria-label={t('file')} className={FILE_INPUT} name="file" required type="file" />
                 </label>
                 <Select
                   defaultValue="dry_run"
@@ -186,7 +190,7 @@ export default async function PayablesMigrationPage({ searchParams }: { searchPa
                   </tbody>
                 </table>
               </div>
-              {report.shipments ? <p className={s.sapNote}>{t('shipments', report.shipments)}</p> : null}
+              {report.shipments ? <p className={`${s.sapNote} px-5 py-3`}>{t('shipments', report.shipments)}</p> : null}
             </>,
           )}
 
@@ -377,7 +381,7 @@ export default async function PayablesMigrationPage({ searchParams }: { searchPa
             t('cleared_title'),
             latest.signedOffAt ? t('signed_off', { date: when(latest.signedOffAt), note: latest.signOffNote ?? '—' }) : null,
             <>
-              <p className={s.sapNote}>
+              <p className={`${s.sapNote} px-5 py-3`}>
                 {t('cleared_counts', {
                   rule: report.cleared.ruleCleared,
                   legacy: report.cleared.legacyCleared,
@@ -541,7 +545,7 @@ export default async function PayablesMigrationPage({ searchParams }: { searchPa
           )}
         </>
       ) : (
-        section('migration-none-title', t('latest'), null, <p className={s.sapNote}>{t('none')}</p>)
+        section('migration-none-title', t('latest'), null, <p className={`${s.sapNote} px-5 py-3`}>{t('none')}</p>)
       )}
 
       {section(

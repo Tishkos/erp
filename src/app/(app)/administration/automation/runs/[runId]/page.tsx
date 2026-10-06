@@ -162,7 +162,7 @@ export default async function AutomationRunPage({ params, searchParams }: { para
       </DocumentWindow>
 
       <section aria-labelledby="automation-run-conditions-title" className={`${s.sapDoc} ${s.sapRegister}`}>
-        <div className={s.sapWindow}>
+        <div className={`${s.sapWindow} mb-5`}>
           <h2 className={s.sapTitle} id="automation-run-conditions-title">
             <span>{x('run_conditions_title')}</span>
             <span className={s.sapTitleMeta}>{run.checks.length}</span>
@@ -206,7 +206,7 @@ export default async function AutomationRunPage({ params, searchParams }: { para
       </section>
 
       <section aria-labelledby="automation-run-planned-title" className={`${s.sapDoc} ${s.sapRegister}`}>
-        <div className={s.sapWindow}>
+        <div className={`${s.sapWindow} mb-5`}>
           <h2 className={s.sapTitle} id="automation-run-planned-title">
             <span>{x('rule_actions')}</span>
             <span className={s.sapTitleMeta}>{run.planned.length}</span>
@@ -242,7 +242,7 @@ export default async function AutomationRunPage({ params, searchParams }: { para
       </section>
 
       <section aria-labelledby="automation-run-payload-title" className={`${s.sapDoc} ${s.sapRegister}`}>
-        <div className={s.sapWindow}>
+        <div className={`${s.sapWindow} mb-5`}>
           <h2 className={s.sapTitle} id="automation-run-payload-title">
             <span>{x('run_payload_title')}</span>
             <span className={s.sapTitleMeta}>{payload.length}</span>

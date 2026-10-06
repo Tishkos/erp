@@ -26,6 +26,10 @@ import { runLegacyImport } from './actions';
  */
 export const dynamic = 'force-dynamic';
 
+/** The native file picker, dressed as Intent's outline button with the chosen names beside it. */
+const FILE_INPUT =
+  'min-h-0 max-w-64 min-w-0 border-0 bg-transparent p-0 text-xs text-muted-fg shadow-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring file:me-2 file:h-7 file:cursor-pointer file:rounded-md file:border file:border-solid file:border-input file:bg-overlay file:px-2.5 file:text-xs file:font-medium file:text-fg hover:file:bg-secondary';
+
 export default async function LegacyImportPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/administration/legacy-import')) notFound();
   const [t, admin, page, locale, context, outcome] = await Promise.all([
@@ -109,7 +113,7 @@ export default async function LegacyImportPage({ searchParams }: { searchParams:
                 <label className={s.uploadPicker}>
                   <Upload aria-hidden="true" />
                   <span>{t('choose')}</span>
-                  <input accept=".xlsx,.xls" aria-label={t('files')} multiple name="files" required type="file" />
+                  <input accept=".xlsx,.xls" aria-label={t('files')} className={FILE_INPUT} multiple name="files" required type="file" />
                 </label>
                 <Field defaultValue={businessToday()} hint={t('cut_over_hint')} label={t('cut_over')} name="cut_over_date" required type="date" />
                 <Select
@@ -167,7 +171,7 @@ export default async function LegacyImportPage({ searchParams }: { searchParams:
                       )),
                 ),
               )}
-              {report.missing.length > 0 ? <p className={s.sapNote}>{t('missing', { kinds: report.missing.map((k) => t(`kind_${k}`)).join(', ') })}</p> : null}
+              {report.missing.length > 0 ? <p className={`${s.sapNote} px-5 py-3`}>{t('missing', { kinds: report.missing.map((k) => t(`kind_${k}`)).join(', ') })}</p> : null}
             </>,
           )}
 
@@ -269,7 +273,7 @@ export default async function LegacyImportPage({ searchParams }: { searchParams:
             t('balances_title'),
             admin('rows_shown', { count: report.balances.lines.length }),
             <>
-              <p className={s.sapNote}>{t('balances_note', { implied: rate(report.rate.implied), erp: rate(report.rate.erp) })}</p>
+              <p className={`${s.sapNote} px-5 py-3`}>{t('balances_note', { implied: rate(report.rate.implied), erp: rate(report.rate.erp) })}</p>
               {table(
                 'legacy-balances-title',
                 [{ label: t('totals_title') }, { label: t('col_old_books'), numeric: true }, { label: t('col_old_tb'), numeric: true }],
@@ -312,7 +316,7 @@ export default async function LegacyImportPage({ searchParams }: { searchParams:
                   </tr>
                 </>,
               )}
-              <p className={s.sapNote}>
+              <p className={`${s.sapNote} px-5 py-3`}>
                 <span className={`status status--${report.balances.agrees ? 'posted' : 'rejected'}`} data-status={report.balances.agrees ? 'posted' : 'rejected'}>
                   {report.balances.agrees ? t('agrees') : t('disagrees')}
                 </span>
@@ -424,7 +428,7 @@ export default async function LegacyImportPage({ searchParams }: { searchParams:
             t('stock_title'),
             admin('rows_shown', { count: report.stock.documents.length }),
             <>
-              <p className={s.sapNote}>{t('stock_note', { tb: iqd(report.stock.tbValueIqd), proposed: iqd(report.stock.proposedValueIqd) })}</p>
+              <p className={`${s.sapNote} px-5 py-3`}>{t('stock_note', { tb: iqd(report.stock.tbValueIqd), proposed: iqd(report.stock.proposedValueIqd) })}</p>
               {table(
                 'legacy-stock-title',
                 [{ label: t('col_warehouse') }, { label: t('col_lines'), numeric: true }, { label: t('col_units'), numeric: true }, { label: t('col_cost'), numeric: true }, { label: t('col_document') }],
@@ -479,7 +483,7 @@ export default async function LegacyImportPage({ searchParams }: { searchParams:
             t('in_transit_title'),
             admin('rows_shown', { count: report.stock.inTransit.length }),
             <>
-              <p className={s.sapNote}>{t('in_transit_note')}</p>
+              <p className={`${s.sapNote} px-5 py-3`}>{t('in_transit_note')}</p>
               {table(
                 'legacy-transit-title',
                 [{ label: t('col_item') }, { label: t('col_warehouse') }, { label: t('col_quantity'), numeric: true }],
@@ -507,7 +511,7 @@ export default async function LegacyImportPage({ searchParams }: { searchParams:
             t('archive_title'),
             null,
             <>
-              <p className={s.sapNote}>{t('archive_note')}</p>
+              <p className={`${s.sapNote} px-5 py-3`}>{t('archive_note')}</p>
               {table(
                 'legacy-archive-title',
                 [{ label: t('col_kind') }, { label: t('col_rows'), numeric: true }],
@@ -524,8 +528,8 @@ export default async function LegacyImportPage({ searchParams }: { searchParams:
                   </tr>
                 </>,
               )}
-              {report.archive.unmatchedNames.length > 0 ? <p className={s.sapNote}>{t('unmatched_names', { names: report.archive.unmatchedNames.join('، ') })}</p> : null}
-              {report.archive.unmatchedCodes.length > 0 ? <p className={s.sapNote}>{t('unmatched_codes', { codes: report.archive.unmatchedCodes.join(', ') })}</p> : null}
+              {report.archive.unmatchedNames.length > 0 ? <p className={`${s.sapNote} px-5 py-3`}>{t('unmatched_names', { names: report.archive.unmatchedNames.join('، ') })}</p> : null}
+              {report.archive.unmatchedCodes.length > 0 ? <p className={`${s.sapNote} px-5 py-3`}>{t('unmatched_codes', { codes: report.archive.unmatchedCodes.join(', ') })}</p> : null}
             </>,
           )}
 
@@ -534,7 +538,7 @@ export default async function LegacyImportPage({ searchParams }: { searchParams:
             t('tb_title'),
             null,
             <>
-              <p className={s.sapNote}>{t('tb_note')}</p>
+              <p className={`${s.sapNote} px-5 py-3`}>{t('tb_note')}</p>
               {table(
                 'legacy-tb-title',
                 [{ label: t('col_caption') }, { label: t('col_iqd'), numeric: true }, { label: t('col_usd'), numeric: true }, { label: t('col_final'), numeric: true }],
@@ -561,7 +565,7 @@ export default async function LegacyImportPage({ searchParams }: { searchParams:
           )}
         </>
       ) : (
-        section('legacy-none-title', t('latest'), null, <p className={s.sapNote}>{t('none')}</p>)
+        section('legacy-none-title', t('latest'), null, <p className={`${s.sapNote} px-5 py-3`}>{t('none')}</p>)
       )}
 
       {section(

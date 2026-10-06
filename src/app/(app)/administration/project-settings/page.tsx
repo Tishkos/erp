@@ -44,10 +44,10 @@ export default async function ProjectSettingsPage({ searchParams }: { searchPara
   }));
   const activeForm = (action: (form: FormData) => Promise<void>, code: string, active: boolean) =>
     mayConfigure ? (
-      <Form action={action}>
+      <Form action={action} className="flex flex-wrap items-center gap-2">
         <Hidden name="code" value={code} />
         <Hidden name="active" value={active ? '0' : '1'} />
-        {active ? <input aria-label={admin('reason')} name="reason" placeholder={admin('reason')} required type="text" /> : null}
+        {active ? <input aria-label={admin('reason')} className="h-8 min-h-8 w-36 min-w-0 flex-1" name="reason" placeholder={admin('reason')} required type="text" /> : null}
         <Submit label={active ? t('deactivate') : t('activate')} small tone="secondary" />
       </Form>
     ) : active ? (
@@ -96,7 +96,7 @@ export default async function ProjectSettingsPage({ searchParams }: { searchPara
             </table>
           </div>
           {mayConfigure ? (
-            <Form action={saveProjectType}>
+            <Form action={saveProjectType} className="px-5 pb-5 pt-4">
               <p className={s.sapGridCaption}>{t('new_type')}</p>
               <Grid>
                 <Field hint={admin('code_hint')} label={t('code')} name="code" required />
@@ -154,7 +154,7 @@ export default async function ProjectSettingsPage({ searchParams }: { searchPara
             </table>
           </div>
           {mayConfigure ? (
-            <Form action={saveToleranceProfile}>
+            <Form action={saveToleranceProfile} className="px-5 pb-5 pt-4">
               <p className={s.sapGridCaption}>{t('new_profile')}</p>
               <Grid>
                 <Field hint={admin('code_hint')} label={t('code')} name="code" required />
@@ -210,7 +210,7 @@ export default async function ProjectSettingsPage({ searchParams }: { searchPara
             </table>
           </div>
           {mayConfigure ? (
-            <Form action={saveCostCode}>
+            <Form action={saveCostCode} className="px-5 pb-5 pt-4">
               <p className={s.sapGridCaption}>{t('new_cost_code')}</p>
               <Grid>
                 <Field hint={admin('code_hint')} label={t('code')} name="code" required />
@@ -258,9 +258,9 @@ export default async function ProjectSettingsPage({ searchParams }: { searchPara
               </tbody>
             </table>
           </div>
-          <p className={s.sapNote}>{t('recognition_note')}</p>
+          <p className={`${s.sapNote} px-5 py-3`}>{t('recognition_note')}</p>
           {mayConfigure && !policy.ratified ? (
-            <Form action={ratifyRecognition}>
+            <Form action={ratifyRecognition} className="px-5 pb-5 pt-1">
               <Grid>
                 <Field hint={t('ratify_hint')} label={admin('reason')} name="note" required wide />
               </Grid>

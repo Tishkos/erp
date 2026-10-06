@@ -1,4 +1,6 @@
 import { getTranslations } from 'next-intl/server';
+import { ChevronRight } from 'lucide-react';
+import { cn } from '@/components/intent/cn';
 import { MENU } from '@domain/menu';
 import { PERMISSION_VERBS } from '@domain/permissions';
 import { routeFor, screenRoutes } from '@domain/screens';
@@ -53,7 +55,7 @@ export async function GrantMatrix({
   }).filter((section) => section.rows.length > 0);
 
   return (
-    <form action={action} className={s.grantForm}>
+    <form action={action} className={cn(s.grantForm, 'gap-2')}>
       <input name="code" type="hidden" value={roleCode} />
       {Object.entries(hidden).map(([k, v]) => (
         <input key={k} name={k} type="hidden" value={v} />
@@ -71,14 +73,33 @@ export async function GrantMatrix({
         <input key={object} name="offered" type="hidden" value={object} />
       ))}
       <p className={s.sectionHint}>{t('roles.grants_hint')}</p>
+      {/* Each system section is an Intent disclosure card: the chevron, the name, the count; open, the verbs as a register. */}
       {sections.map((section) => (
-        <details className={s.grantSection} key={section.key}>
-          <summary className={s.grantSummary}>
-            <span>{nav(section.key)}</span>
+        <details
+          className={cn(s.grantSection, 'group overflow-hidden rounded-xl border border-border bg-overlay shadow-xs')}
+          key={section.key}
+        >
+          <summary
+            className={cn(
+              s.grantSummary,
+              'flex cursor-pointer list-none items-center gap-2.5 rounded-none bg-transparent px-4 py-2.5 text-start text-sm font-medium text-fg before:hidden hover:bg-muted/60 group-open:border-b group-open:border-border [&::-webkit-details-marker]:hidden',
+            )}
+          >
+            <ChevronRight
+              aria-hidden="true"
+              className="size-4 shrink-0 text-muted-fg transition-transform group-open:rotate-90 rtl:-scale-x-100 rtl:group-open:-rotate-90"
+            />
+            <span className="min-w-0 flex-1">{nav(section.key)}</span>
             <Pill label={`${section.granted} / ${section.rows.length}`} on={section.granted > 0 ? true : null} />
           </summary>
           <div className={s.matrixWrap}>
-            <table className={`${s.matrix} ${s.grantTable}`}>
+            <table
+              className={cn(
+                s.matrix,
+                s.grantTable,
+                'text-sm [&_td]:border-border [&_th]:border-border [&_thead_th]:bg-muted [&_thead_th]:py-2 [&_thead_th]:text-xs [&_thead_th]:font-medium [&_thead_th]:normal-case [&_thead_th]:tracking-normal [&_thead_th]:text-muted-fg [&_tbody_tr:hover]:bg-muted/60 [&_tbody_tr:last-child>*]:border-b-0 [&_tbody_tr:nth-child(2n)]:bg-transparent',
+              )}
+            >
               <thead>
                 <tr>
                   <th scope="col">{t('roles.section')}</th>
@@ -92,7 +113,7 @@ export async function GrantMatrix({
               <tbody>
                 {section.rows.map((r) => (
                   <tr key={r.object}>
-                    <th className={s.grantObject} scope="row">
+                    <th className={cn(s.grantObject, 'font-medium text-fg [&>code]:text-muted-fg')} scope="row">
                       <span>{r.pages.join(' · ')}</span>
                       <code>{r.object}</code>
                     </th>

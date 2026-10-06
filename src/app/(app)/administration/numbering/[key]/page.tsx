@@ -78,9 +78,9 @@ export default async function SeriesPage({
         {/* Left: identity, facts, lifecycle */}
         <div className={s.profileStack}>
           <Panel>
-            <div className={s.profileCard}>
-              <span className={`${s.avatarLarge} ${s.profileAvatar}`}>
-                <Hash aria-hidden="true" style={{ inlineSize: '2rem', blockSize: '2rem' }} />
+            <div className={`${s.profileCard} border-0 bg-transparent px-1 pb-1 pt-2 shadow-none`}>
+              <span className={`${s.avatarLarge} ${s.profileAvatar} size-16 rounded-xl border-0 bg-primary-subtle text-primary-subtle-fg`}>
+                <Hash aria-hidden="true" className="size-8" />
               </span>
               <h2>{row.key}</h2>
               <p>
@@ -150,11 +150,11 @@ export default async function SeriesPage({
 
           <Panel flush title={t('numbering.recent')}>
             {recent.length === 0 ? (
-              <p className="muted" style={{ padding: '1.4rem' }}>
+              <p className="muted p-5 text-sm">
                 {t('numbering.recent_empty')}
               </p>
             ) : (
-              <div className="table-wrap" style={{ border: 0 }}>
+              <div className="table-wrap rounded-none border-0">
                 <table className="list">
                   <thead>
                     <tr>

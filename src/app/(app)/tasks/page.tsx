@@ -29,6 +29,20 @@ import { createTask } from './actions';
  */
 export const dynamic = 'force-dynamic';
 
+/** Intent's badge: the priority and how near the deadline is read at a glance (the words are the same). */
+const BADGE = 'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap';
+const PRIORITY_LOOK: Record<string, string> = {
+  low: 'bg-secondary text-muted-fg',
+  normal: 'bg-secondary text-secondary-fg',
+  high: 'bg-warning-subtle text-warning-subtle-fg',
+  urgent: 'bg-danger-subtle text-danger-subtle-fg',
+};
+const DUE_LOOK: Record<'overdue' | 'today' | 'soon', string> = {
+  overdue: 'bg-danger-subtle text-danger-subtle-fg',
+  today: 'bg-warning-subtle text-warning-subtle-fg',
+  soon: 'bg-info-subtle text-info-subtle-fg',
+};
+
 export default async function TasksPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/tasks')) notFound();
   registerAllRecords();
@@ -102,7 +116,13 @@ export default async function TasksPage({ searchParams }: { searchParams: Search
                   <label className={s.label} htmlFor="f-task-files">
                     {x('files')}
                   </label>
-                  <input id="f-task-files" multiple name="files" type="file" />
+                  <input
+                    className="w-full min-w-0 rounded-lg border border-input bg-[var(--w-field,var(--ui-bg))] p-1 text-sm text-muted-fg shadow-xs file:me-3 file:h-7 file:cursor-pointer file:rounded-md file:border-0 file:bg-secondary file:px-3 file:text-sm file:font-medium file:text-fg hover:file:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    id="f-task-files"
+                    multiple
+                    name="files"
+                    type="file"
+                  />
                   <span className={s.hint}>{x('files_hint')}</span>
                 </div>
               </Grid>
@@ -122,7 +142,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Search
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
 
       <section aria-labelledby="tasks-list-title" className={`${s.sapDoc} ${s.sapRegister}`}>
-        <div className={s.sapWindow}>
+        <div className={`${s.sapWindow} mb-5`}>
           <h2 className={s.sapTitle} id="tasks-list-title">
             <span>{x(`view_${view}`)}</span>
             <span className={s.sapTitleMeta}>{t('rows_shown', { count: result.total })}</span>
@@ -209,15 +229,18 @@ export default async function TasksPage({ searchParams }: { searchParams: Search
                           <bdi dir="auto">{row.departmentName}</bdi>
                         </td>
                       ) : null}
-                      <td>{x(`priority_${row.priority}`)}</td>
                       <td>
-                        <bdi dir="ltr">{day(row.dueDate)}</bdi>
-                        {row.dueState === 'overdue' || row.dueState === 'today' || row.dueState === 'soon' ? (
-                          <>
-                            {' '}
-                            <span className="muted">{x(`due_${row.dueState}`)}</span>
-                          </>
-                        ) : null}
+                        <span className={`${BADGE} ${PRIORITY_LOOK[row.priority] ?? PRIORITY_LOOK.normal}`}>{x(`priority_${row.priority}`)}</span>
+                      </td>
+                      <td>
+                        <span className="inline-flex flex-wrap items-center gap-1.5">
+                          <bdi className="tabular-nums" dir="ltr">
+                            {day(row.dueDate)}
+                          </bdi>
+                          {row.dueState === 'overdue' || row.dueState === 'today' || row.dueState === 'soon' ? (
+                            <span className={`${BADGE} ${DUE_LOOK[row.dueState]}`}>{x(`due_${row.dueState}`)}</span>
+                          ) : null}
+                        </span>
                       </td>
                       <td>
                         <span className={`status status--${tone} ${s.sapRegisterStatus}`} data-status={tone}>
@@ -226,7 +249,14 @@ export default async function TasksPage({ searchParams }: { searchParams: Search
                       </td>
                       {view === 'assigned' ? (
                         <td className={s.sapNum}>
-                          <bdi dir="ltr">{row.progress}%</bdi>
+                          <span className="inline-flex items-center justify-end gap-2">
+                            <span aria-hidden="true" className="h-1.5 w-14 overflow-hidden rounded-full bg-secondary">
+                              <span className="block h-full rounded-full bg-primary" style={{ inlineSize: `${Math.max(0, Math.min(100, Number(row.progress) || 0))}%` }} />
+                            </span>
+                            <bdi className="tabular-nums" dir="ltr">
+                              {row.progress}%
+                            </bdi>
+                          </span>
                         </td>
                       ) : null}
                     </tr>
@@ -247,7 +277,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Search
 
       {view === 'team' ? (
         <section aria-labelledby="tasks-workload-title" className={`${s.sapDoc} ${s.sapRegister}`}>
-          <div className={s.sapWindow}>
+          <div className={`${s.sapWindow} mb-5`}>
             <h2 className={s.sapTitle} id="tasks-workload-title">
               <span>{x('workload_title')}</span>
               <span className={s.sapTitleMeta}>{t('rows_shown', { count: workload.length })}</span>

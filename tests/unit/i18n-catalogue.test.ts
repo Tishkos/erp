@@ -17,7 +17,7 @@
  * makes an Arabic translation a code change rather than a file (§25).
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { MENU, allMenuItems } from '@domain/menu';
 import { DOCUMENT_STATUSES } from '@domain/statuses';
@@ -127,7 +127,14 @@ describe('§25 · no user-facing sentence is written into a component', () => {
 
   const offenders: string[] = [];
 
+  // The vendored Intent UI components (src/components/intent) are written in
+  // TypeScript generics — `<T extends Omit<…>>` — which this pattern reads as
+  // words between tags. Their user-facing words come from the `intent`
+  // namespace (no results, no data, the toggles); a new one goes there too.
+  const VENDORED = `${sep}components${sep}intent${sep}`;
+
   for (const file of tsxFiles) {
+    if (file.includes(VENDORED)) continue;
     const source = readFileSync(file, 'utf8');
 
     for (const match of source.matchAll(JSX_TEXT)) {

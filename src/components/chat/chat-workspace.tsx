@@ -22,12 +22,12 @@ import {
   Paperclip,
   Search,
   SendHorizontal,
-  Upload,
   Users,
   X,
 } from 'lucide-react';
 import { Field, Flash, Form, Grid, Submit, SubmitRow, admin as s } from '@/components/admin';
 import { IconDialog } from '@/components/admin/icon-dialog';
+import { cn } from '@/components/intent/cn';
 import {
   busyAction,
   muteAction,
@@ -61,7 +61,7 @@ import {
   useChat,
   type ChatSeed,
 } from './chat-store';
-import { initials, listStamp } from './format';
+import { AVATAR_CLASS, initials, listStamp } from './format';
 
 export interface RecordIntent {
   readonly type: string;
@@ -444,8 +444,8 @@ export function ChatWorkspace({
                     </div>
                   ) : null}
                   {rows.length > 0 ? (
-                    <table aria-labelledby="chat-list-title" className={`${s.sapTable} ${s.sapRegisterTable} ${s.sapAsideTable}`}>
-                      <thead>
+                    <table aria-labelledby="chat-list-title" className={cn(s.sapTable, s.sapRegisterTable, s.sapAsideTable, 'w-full')}>
+                      <thead className="sr-only">
                         <tr>
                           <th scope="col">{t('col_conversation')}</th>
                           <th className={s.sapNum} scope="col">
@@ -532,7 +532,7 @@ export function ChatWorkspace({
                         title={t('back_to_list')}
                         type="button"
                       >
-                        <ArrowLeft aria-hidden="true" />
+                        <ArrowLeft aria-hidden="true" className="rtl:-scale-x-100" />
                       </button>
                     ) : null}{' '}
                     <bdi dir="auto">{thread.name}</bdi>{' '}
@@ -572,9 +572,9 @@ export function ChatWorkspace({
                 </div>
 
                 {thread.record ? (
-                  <div className={s.sapBody}>
+                  <div className={cn(s.sapBody, 'px-5 py-2.5')}>
                     {thread.record.accessible ? (
-                      <span className={s.sapNote}>
+                      <span className={cn(s.sapNote, 'inline-flex flex-wrap items-center gap-1')}>
                         <Link2 aria-hidden="true" size={12} /> {t('about_record')}:{' '}
                         {thread.record.href ? (
                           <a className={s.sapLink} href={thread.record.href}>
@@ -590,12 +590,16 @@ export function ChatWorkspace({
                   </div>
                 ) : null}
 
-                <div className={`${s.sapTableWrap} ${s.sapRegisterTableWrap}`} onScroll={onScroll} ref={scroller}>
-                  <div className={s.sapBody}>
+                <div
+                  className={cn(s.sapTableWrap, s.sapRegisterTableWrap, 'h-[min(40rem,62vh)] rounded-none border-x-0 border-b-0 bg-muted/40')}
+                  onScroll={onScroll}
+                  ref={scroller}
+                >
+                  <div className={cn(s.sapBody, 'px-3 py-4 sm:px-5')}>
                     {thread.hasMore ? (
-                      <p>
+                      <p className="mb-4 flex justify-center">
                         <button
-                          className={s.sapIconButton}
+                          className={cn(s.sapIconButton, 'h-8 min-h-8 rounded-full border-border bg-overlay px-3 text-xs text-fg shadow-xs')}
                           onClick={async () => {
                             const before = scroller.current?.scrollHeight ?? 0;
                             const ok = await loadEarlier(thread.id);
@@ -617,7 +621,7 @@ export function ChatWorkspace({
                         <strong>{t('say_hello')}</strong>
                       </div>
                     ) : (
-                      <ul aria-label={t('messages')} aria-live="polite" className={s.fileList}>
+                      <ul aria-label={t('messages')} aria-live="polite" className="m-0 flex list-none flex-col gap-4 p-0">
                         {thread.messages.map((message) => (
                           <MessageItem
                             dividerAt={hasUnreadDivider ?? null}
@@ -634,27 +638,36 @@ export function ChatWorkspace({
                   </div>
                 </div>
 
-                <div className={s.sapBody}>
+                <div className={cn(s.sapBody, 'border-t border-border px-3 pb-4 pt-2 sm:px-5')}>
                   {typingNames.length > 0 ? (
-                    <p className={s.sapNote} role="status">
+                    <p className={cn(s.sapNote, 'mb-1.5 px-1 italic')} role="status">
                       {typingNames.length === 1 ? t('typing_one', { name: typingNames[0]! }) : t('typing_many', { names: typingNames.join(', ') })}
                     </p>
                   ) : null}
 
                   {mayWrite ? (
-                    <form onSubmit={submit}>
+                    <form className="flex flex-col gap-2" onSubmit={submit}>
                       {replyTo ? (
-                        <div className={s.sapTitleActions}>
-                          <span className={s.sapNote}>
+                        <div className="flex items-center gap-2 rounded-lg border-s-2 border-primary bg-muted py-1 pe-1 ps-3">
+                          <span className={cn(s.sapNote, 'min-w-0 flex-1 truncate')}>
                             {t('replying_to')} <bdi dir="auto">{replyTo.senderName}</bdi>: <bdi dir="auto">{replyTo.preview}</bdi>
                           </span>
-                          <button aria-label={t('cancel')} className={s.sapIconButton} onClick={() => setReplyTo(null)} title={t('cancel')} type="button">
+                          <button
+                            aria-label={t('cancel')}
+                            className={cn(s.sapIconButton, 'size-7 min-h-7 min-w-7 rounded-full p-0')}
+                            onClick={() => setReplyTo(null)}
+                            title={t('cancel')}
+                            type="button"
+                          >
                             <X aria-hidden="true" />
                           </button>
                         </div>
                       ) : null}
+                      {/* One rounded box: the text, the files picked, then the buttons. */}
+                      <div className="rounded-xl border border-input bg-[var(--w-field,var(--ui-bg))] shadow-xs transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-4 focus-within:ring-ring/20">
                       <textarea
                         aria-label={t('message')}
+                        className="block min-h-14 w-full resize-none rounded-xl border-0 bg-transparent px-3.5 pb-1 pt-3 shadow-none hover:border-0 focus:border-0 focus:bg-transparent focus:shadow-none"
                         maxLength={CHAT_MESSAGE_MAX_LENGTH}
                         onBlur={() => {
                           clearTimeout(typingTimer.current);
@@ -668,7 +681,7 @@ export function ChatWorkspace({
                         value={text}
                       />
                       {files.length > 0 ? (
-                        <ul className={s.fileList}>
+                        <ul className={cn(s.fileList, 'mx-3 mb-1 mt-0')}>
                           {files.map((file, index) => (
                             <li key={`${file.name}-${index}`}>
                               <span className={s.fileIcon}>
@@ -690,11 +703,17 @@ export function ChatWorkspace({
                           ))}
                         </ul>
                       ) : null}
-                      <div className={s.sapEntryBar}>
-                        <label className={s.uploadPicker}>
-                          <Upload aria-hidden="true" />
+                      <div className={cn(s.sapEntryBar, 'm-0 gap-2 px-2 pb-2')}>
+                        <label
+                          className={cn(
+                            s.uploadPicker,
+                            'order-0 h-8 rounded-lg border-0 bg-transparent px-2.5 py-0 text-sm font-medium text-muted-fg hover:bg-secondary hover:text-fg focus-within:outline-2 focus-within:outline-ring',
+                          )}
+                        >
+                          <Paperclip aria-hidden="true" />
                           <span>{t('attach')}</span>
                           <input
+                            className="sr-only"
                             multiple
                             onChange={(event) => {
                               pickFiles(event.target.files);
@@ -703,11 +722,12 @@ export function ChatWorkspace({
                             type="file"
                           />
                         </label>
-                        <button type="submit">
-                          <SendHorizontal aria-hidden="true" />
+                        <button className={cn(s.primary, 'order-2 h-8 min-h-8 rounded-lg px-3')} type="submit">
+                          <SendHorizontal aria-hidden="true" className="rtl:-scale-x-100" />
                           <span>{t('send')}</span>
                         </button>
-                        <span className={s.sapNote}>{t('composer_hint')}</span>
+                        <span className={cn(s.sapNote, 'order-1 me-auto hidden min-w-0 truncate sm:inline')}>{t('composer_hint')}</span>
+                      </div>
                       </div>
                     </form>
                   ) : (
@@ -780,10 +800,12 @@ function MessageItem({ message, env, dividerAt }: { readonly message: MessageVie
   return (
     <>
       {dividerAt !== null && message.seq === dividerAt ? (
-        <li id="chat-unread-divider">
-          <div className={s.sapNote}>
-            <strong>{t('unread_from_here')}</strong>
+        <li className="flex items-center gap-3" id="chat-unread-divider">
+          <span aria-hidden="true" className="h-px flex-1 bg-primary/40" />
+          <div className="text-xs text-primary-subtle-fg">
+            <strong className="font-semibold">{t('unread_from_here')}</strong>
           </div>
+          <span aria-hidden="true" className="h-px flex-1 bg-primary/40" />
         </li>
       ) : null}
       {message.kind === 'system' ? <SystemRow env={env} message={message} /> : <MessageRow env={env} message={message} quoteOf={quote} />}
@@ -818,40 +840,45 @@ function ConversationItem({
       line = who ? `${who}: ${body}` : body;
     }
   }
+  // A messenger's row: the round avatar, the name with what is known about it, the last line under it;
+  // the whole row opens the conversation (the link is stretched over its cell), the open one in the accent's tint.
+  const cell = selected ? 'bg-primary-subtle' : '';
   return (
-    <tr aria-current={selected ? 'true' : undefined} className={selected ? s.sapRowSelected : undefined}>
-      <td>
-        <a
-          href={`/chat?c=${c.id}`}
-          onClick={(event) => {
-            event.preventDefault();
-            openConversation(c.id);
-          }}
-        >
-          <span className={s.personCell}>
-            <span className={s.avatarSmall}>{c.kind === 'group' ? <Users aria-hidden="true" size={14} /> : initials(c.name)}</span>
-            <strong title={c.name}>
+    <tr aria-current={selected ? 'true' : undefined} className="[&>td]:border-border">
+      <td className={cn('relative w-full max-w-0 py-2.5 ps-4', cell)}>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <a
+            className="flex min-w-0 items-center gap-3 text-fg no-underline after:absolute after:inset-0 after:content-[''] hover:text-fg"
+            href={`/chat?c=${c.id}`}
+            onClick={(event) => {
+              event.preventDefault();
+              openConversation(c.id);
+            }}
+          >
+            <span className={cn(s.avatarSmall, AVATAR_CLASS, 'size-9 text-xs')}>
+              {c.kind === 'group' ? <Users aria-hidden="true" size={14} /> : initials(c.name)}
+            </span>
+            <strong className={cn('truncate text-sm', selected || c.unread > 0 ? 'font-semibold' : 'font-medium')} title={c.name}>
               <bdi dir="auto">{clip(c.name, 18)}</bdi>
             </strong>
-          </span>
-        </a>{' '}
-        {c.other && c.other.presence !== 'offline' ? (
-          <PresencePill locale={locale} now={now} person={c.other} showLastSeen={false} timeZone={timeZone} />
-        ) : null}
-        {c.muted ? <BellOff aria-label={t('muted')} size={12} /> : null}
-        {c.aboutRecord ? <Link2 aria-label={t('about_record')} size={12} /> : null}
+          </a>
+          {c.other && c.other.presence !== 'offline' ? (
+            <PresencePill locale={locale} now={now} person={c.other} showLastSeen={false} timeZone={timeZone} />
+          ) : null}
+          {c.muted ? <BellOff aria-label={t('muted')} className="shrink-0 text-muted-fg" size={12} /> : null}
+          {c.aboutRecord ? <Link2 aria-label={t('about_record')} className="shrink-0 text-muted-fg" size={12} /> : null}
+        </div>
         {line || c.lastMessageAt ? (
-          <span className={s.sapNote} title={line}>
-            <br />
+          <span className={cn(s.sapNote, 'block truncate ps-12', c.unread > 0 ? 'text-fg' : '')} title={line}>
             {line ? <bdi dir="auto">{clip(line, 22)}</bdi> : null}
             {line && c.lastMessageAt ? ' · ' : ''}
-            {c.lastMessageAt ? listStamp(c.lastMessageAt, now, locale, timeZone) : ''}
+            {c.lastMessageAt ? <span className="tabular-nums">{listStamp(c.lastMessageAt, now, locale, timeZone)}</span> : ''}
           </span>
         ) : null}
       </td>
-      <td className={s.sapNum}>
+      <td className={cn(s.sapNum, 'w-px whitespace-nowrap pe-4 ps-1 align-middle', cell)}>
         {c.unread > 0 ? (
-          <span aria-label={t('unread_count', { count: c.unread })} className={s.sapIconCount}>
+          <span aria-label={t('unread_count', { count: c.unread })} className={cn(s.sapIconCount, 'min-h-5 min-w-5 rounded-full px-1.5 tabular-nums')}>
             {c.mentioned ? `@${c.unread}` : c.unread}
           </span>
         ) : null}

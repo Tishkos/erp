@@ -7168,6 +7168,58 @@
   font-weight: 500;
 }
 
+/* ── Editable grids outside a document window, and content in a window ──── */
+.sapLineGrid input:not([type='checkbox']):not([type='radio']),
+.sapLineGrid select,
+.sapCellField {
+  min-block-size: 2rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--ui-input);
+  border-radius: var(--radius-md);
+  background: var(--w-field, var(--ui-bg));
+  color: var(--ui-fg);
+  font-size: 0.875rem;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+}
+
+.sapLineGrid input:focus,
+.sapLineGrid select:focus,
+.sapCellField:focus {
+  border-color: var(--ui-ring);
+  background: var(--w-field, var(--ui-bg));
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ui-ring) 20%, transparent);
+}
+
+.sapLineGrid .sapRowRemove button {
+  min-inline-size: 1.75rem;
+  min-block-size: 1.75rem;
+  border-radius: var(--radius-md);
+  color: var(--ui-muted-fg);
+  font-weight: 500;
+}
+
+.sapLineGrid .sapRowRemove button:hover {
+  border-color: color-mix(in oklab, var(--ui-danger) 50%, var(--ui-border));
+  background: var(--ui-danger-subtle);
+  color: var(--ui-danger-subtle-fg);
+}
+
+/* Stacked list windows keep the same gap as every other card. */
+.sapRegister .sapWindow {
+  margin-block-end: 1.25rem;
+}
+
+/* A note or a form placed straight in a window sits on its inset, not on its edge. */
+.sapWindow > .sapNote {
+  margin: 0;
+  padding: 0.75rem 1.25rem;
+}
+
+.sapWindow > .form {
+  padding: 1rem 1.25rem 1.25rem;
+}
+
 /* ── Phone ──────────────────────────────────────────────────────────────── */
 @media (max-width: 40rem) {
   .sapTitle {

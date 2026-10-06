@@ -140,7 +140,7 @@ export default async function AutomationPage({ searchParams }: { searchParams: S
               reasonPlaceholder={x('switch_reason_hint')}
               tone={settings.enabled ? 'danger' : 'primary'}
             />
-            <Form action={savePauseThreshold}>
+            <Form action={savePauseThreshold} className="mt-4 border-t border-border pt-4">
               <FilterRow>
                 <Field defaultValue={settings.pauseAfterFailures} label={x('pause_after')} max={20} min={1} name="threshold" required type="number" />
                 <SubmitRow>

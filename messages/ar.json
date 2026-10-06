@@ -3007,7 +3007,7 @@
       "check": "الفحص",
       "check_hint": "swift_pending، recurring_overdue، service_unconfirmed…",
       "scope": "النطاق",
-      "scope_hint": "all · type:import · bank:ARAB · method:SWIFT · supplier:<id>",
+      "scope_hint": "all · type:import · bank:ARAB · method:SWIFT · supplier:ID",
       "limit_days": "المهلة (أيام)",
       "escalate_days": "التصعيد بعد (أيام)",
       "escalate_role": "التصعيد إلى دور",
@@ -9095,6 +9095,13 @@
         "year_start": "بداية هذه السنة"
       }
     }
+  },
+  "intent": {
+    "no_results": "لا توجد نتائج.",
+    "no_data": "لا توجد بيانات",
+    "no_data_hint": "لا تتوفر أي معلومات في هذا القسم حالياً.",
+    "toggle_navbar": "إظهار التنقل أو إخفاؤه",
+    "toggle_sidebar": "إظهار الشريط الجانبي أو إخفاؤه"
   },
   "home": {
     "table": "جدول",

@@ -1,6 +1,9 @@
+import { Fragment } from 'react';
 import Link from 'next/link';
+import { ChevronRight } from 'lucide-react';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { admin as s } from '@/components/admin';
+import { cn } from '@/components/intent/cn';
 import { Panel } from '@/components/ui';
 import { formatBusinessDate, formatMoney, formatQuantity, type Locale } from '@/i18n/config';
 import { relationshipsHref, stepKey, toneOf, type RelGraph, type RelNode, type RelStep } from '@/server/domain/relationships';
@@ -19,6 +22,9 @@ import { formatFacts } from '@/server/services/exception-text';
  * open is not in it, so nothing here decides who sees what. This file only words and draws. Existing classes
  * only; no client code.
  */
+/** A note inside the card keeps the card's inset instead of touching its edges. */
+const HINT = 'mx-5 mt-4';
+
 export async function RelatedRecords({
   graph,
   variant,
@@ -39,26 +45,30 @@ export async function RelatedRecords({
   const { root } = graph;
   const chainHref = relationshipsHref(root.kind, root.key);
 
+  // The chain as a stepper (the Intent UI redesign): the numbered status chips with a chevron between each
+  // step and the next, on the same inset as the rest of the card.
   const chips = (
-    <span className={s.inlineRow}>
+    <span className={cn(s.inlineRow, 'flex flex-wrap items-center gap-1.5 px-5 py-3')}>
       {graph.steps.map((step, index) => {
         const tone = step.state === 'present' ? 'approved' : step.state === 'pending' ? 'draft' : 'submitted';
         const count = step.nodes.length + step.more;
         return (
-          <span
-            className={`status status--${tone}`}
-            data-status={tone}
-            key={step.code}
-            title={step.state === 'present' ? r('chip_present') : step.state === 'pending' ? r('not_yet') : r('unavailable')}
-          >
-            <bdi dir="auto">{`${index + 1}. ${r(`step.${stepKey(step.code)}`)}`}</bdi>
-            {step.state === 'present' ? (
-              <>
-                {' · '}
-                <bdi dir="ltr">{`${count}${step.truncated ? '+' : ''}`}</bdi>
-              </>
-            ) : null}
-          </span>
+          <Fragment key={step.code}>
+            {index > 0 ? <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-muted-fg rtl:-scale-x-100" /> : null}
+            <span
+              className={`status status--${tone}`}
+              data-status={tone}
+              title={step.state === 'present' ? r('chip_present') : step.state === 'pending' ? r('not_yet') : r('unavailable')}
+            >
+              <bdi dir="auto">{`${index + 1}. ${r(`step.${stepKey(step.code)}`)}`}</bdi>
+              {step.state === 'present' ? (
+                <>
+                  {' · '}
+                  <bdi className="tabular-nums" dir="ltr">{`${count}${step.truncated ? '+' : ''}`}</bdi>
+                </>
+              ) : null}
+            </span>
+          </Fragment>
         );
       })}
     </span>
@@ -95,8 +105,9 @@ export async function RelatedRecords({
     return node.figure.value;
   };
 
-  const tableWrap = variant === 'window' ? s.sapTableWrap : 'table-wrap';
-  const tableClass = variant === 'window' ? s.sapTable : 'list';
+  // The register spans the card edge to edge (no box of its own inside the card), rows divided, no column rules.
+  const tableWrap = cn(variant === 'window' ? s.sapTableWrap : 'table-wrap', 'rounded-none border-x-0');
+  const tableClass = cn(variant === 'window' ? s.sapTable : 'list', '[&_td+td]:border-s-0 [&_th+th]:border-s-0');
   const numeric = variant === 'window' ? s.sapNum : 'numeric';
 
   const columns = 6;
@@ -119,7 +130,7 @@ export async function RelatedRecords({
           {noteText(node) ? (
             <>
               <br />
-              <span className="muted">
+              <span className="muted text-xs">
                 <bdi dir="auto">{noteText(node)}</bdi>
               </span>
             </>
@@ -149,11 +160,11 @@ export async function RelatedRecords({
 
   const body = (
     <>
-      <p className={s.sectionHint}>
+      <p className={cn(s.sectionHint, HINT, 'mb-0')}>
         <bdi dir="auto">{r('root_line', { kind: r(`kind.${root.kind}`), label: root.label, name: root.name ?? '' })}</bdi>
       </p>
       {graph.steps.length === 0 ? (
-        <p className={s.sectionHint}>{r('none')}</p>
+        <p className={cn(s.sectionHint, HINT, 'mb-0')}>{r('none')}</p>
       ) : (
         <>
           {chips}
@@ -200,7 +211,7 @@ export async function RelatedRecords({
           </div>
         </>
       )}
-      <p className={s.sectionHint}>{r('scope_hint')}</p>
+      <p className={cn(s.sectionHint, HINT, 'mb-4')}>{r('scope_hint')}</p>
     </>
   );
 
@@ -209,7 +220,7 @@ export async function RelatedRecords({
       <Panel flush title={r('title')}>
         {body}
         {linkToChain ? (
-          <p className={s.sectionHint}>
+          <p className={cn(s.sectionHint, HINT, 'mb-4 mt-0')}>
             <Link className={s.sapPlainLink} href={chainHref}>
               {r('open_chain')}
             </Link>

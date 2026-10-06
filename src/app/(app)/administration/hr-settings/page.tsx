@@ -65,10 +65,10 @@ export default async function HrSettingsPage({ searchParams }: { searchParams: S
 
   const activeForm = (action: (form: FormData) => Promise<void>, code: string, active: boolean) =>
     mayConfigure ? (
-      <Form action={action}>
+      <Form action={action} className="flex flex-wrap items-center gap-2">
         <Hidden name="code" value={code} />
         <Hidden name="active" value={active ? '0' : '1'} />
-        {active ? <input aria-label={admin('reason')} name="reason" placeholder={admin('reason')} required type="text" /> : null}
+        {active ? <input aria-label={admin('reason')} className="h-8 min-h-8 w-36 min-w-0 flex-1" name="reason" placeholder={admin('reason')} required type="text" /> : null}
         <Submit label={active ? t('deactivate') : t('activate')} small tone="secondary" />
       </Form>
     ) : active ? (
@@ -134,7 +134,7 @@ export default async function HrSettingsPage({ searchParams }: { searchParams: S
                     <td>{activeForm(setPayComponentActive, row.code, row.active)}</td>
                     {mayConfigure ? (
                       <td>
-                        <NewRecordDialog buttonLabel={t('edit')} closeLabel={admin('close')} title={t('edit_component', { code: row.code })}>
+                        <NewRecordDialog buttonLabel={t('edit')} closeLabel={admin('close')} quiet title={t('edit_component', { code: row.code })}>
                           <Form action={savePayComponent}>
                             <Hidden name="code" value={row.code} />
                             <Hidden name="existing" value="1" />
@@ -181,7 +181,7 @@ export default async function HrSettingsPage({ searchParams }: { searchParams: S
             </table>
           </div>
           {mayConfigure ? (
-            <Form action={savePayComponent}>
+            <Form action={savePayComponent} className="px-5 pb-5 pt-4">
               <p className={s.sapGridCaption}>{t('new_component')}</p>
               <Grid>
                 <Field hint={admin('code_hint')} label={t('code')} name="code" required />
@@ -266,7 +266,7 @@ export default async function HrSettingsPage({ searchParams }: { searchParams: S
             </table>
           </div>
           {mayConfigure ? (
-            <Form action={saveLeaveType}>
+            <Form action={saveLeaveType} className="px-5 pb-5 pt-4">
               <p className={s.sapGridCaption}>{t('new_leave_type')}</p>
               <Grid>
                 <Field hint={admin('code_hint')} label={t('code')} name="code" required />
@@ -321,11 +321,11 @@ export default async function HrSettingsPage({ searchParams }: { searchParams: S
                     <td>
                       {row.holidays.length === 0 ? '—' : null}
                       {row.holidays.map((holiday, index) => (
-                        <span key={holiday.id}>
+                        <span className="flex flex-wrap items-center gap-x-1 py-0.5" key={holiday.id}>
                           {index > 0 ? ' · ' : ''}
                           <bdi dir="ltr">{formatBusinessDate(holiday.holidayDate, locale as Locale)}</bdi> <bdi dir="auto">{locale === 'ar' && holiday.nameAr ? holiday.nameAr : holiday.nameEn}</bdi>
                           {mayConfigure ? (
-                            <Form action={removeCalendarHoliday}>
+                            <Form action={removeCalendarHoliday} className="ms-2 inline-flex align-middle">
                               <Hidden name="calendar_code" value={row.code} />
                               <Hidden name="holiday_date" value={holiday.holidayDate} />
                               <Submit label={t('remove')} small tone="secondary" />
@@ -341,7 +341,7 @@ export default async function HrSettingsPage({ searchParams }: { searchParams: S
           </div>
           {mayConfigure ? (
             <>
-              <Form action={saveCalendar}>
+              <Form action={saveCalendar} className="px-5 pb-5 pt-4">
                 <p className={s.sapGridCaption}>{t('new_calendar')}</p>
                 <Grid>
                   <Field hint={admin('code_hint')} label={t('code')} name="code" required />
@@ -354,7 +354,7 @@ export default async function HrSettingsPage({ searchParams }: { searchParams: S
                   <Submit label={t('save')} />
                 </SubmitRow>
               </Form>
-              <Form action={addCalendarHoliday}>
+              <Form action={addCalendarHoliday} className="border-t border-border px-5 pb-5 pt-4">
                 <p className={s.sapGridCaption}>{t('add_holiday')}</p>
                 <Grid>
                   <Select label={t('calendars')} name="calendar_code" options={calendars.map((c) => ({ value: c.code, label: `${c.code} · ${c.year}` }))} required />
@@ -444,7 +444,7 @@ export default async function HrSettingsPage({ searchParams }: { searchParams: S
             </table>
           </div>
           {mayConfigure ? (
-            <Form action={saveReviewCycle}>
+            <Form action={saveReviewCycle} className="px-5 pb-5 pt-4">
               <p className={s.sapGridCaption}>{t('new_cycle')}</p>
               <Grid>
                 <Field hint={admin('code_hint')} id="f-cycle-code" label={t('code')} name="code" required />
@@ -487,7 +487,7 @@ export default async function HrSettingsPage({ searchParams }: { searchParams: S
             </table>
           </div>
           {mayConfigure ? (
-            <Form action={saveHrParameters}>
+            <Form action={saveHrParameters} className="px-5 pb-5 pt-4">
               <p className={s.sapGridCaption}>{t('limits_change')}</p>
               <Grid>
                 <Field defaultValue={String(limits.contract_expiry_warning_days)} label={t('limit_contract_expiry_warning_days')} name="contract_expiry_warning_days" />

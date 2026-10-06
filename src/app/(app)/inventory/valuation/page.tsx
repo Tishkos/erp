@@ -108,9 +108,9 @@ export default async function InventoryValuationPage({ searchParams }: { searchP
               {result?.finalThrough ? ` · ${t('final_through', { date: day(result.finalThrough) })}` : ''}
             </span>
           </h2>
-          {result && result.status === 'provisional' ? <p className={s.sapNote}>{t('provisional_note')}</p> : null}
+          {result && result.status === 'provisional' ? <p className={`${s.sapNote} px-5 py-2.5`}>{t('provisional_note')}</p> : null}
           {result && result.flags.length > 0 ? (
-            <p className={s.sapNote}>
+            <p className={`${s.sapNote} px-5 py-2.5`}>
               {t('flagged_note', { count: result.flags.length })}
               {result.flags.map((flag) => (
                 <span key={flag.layerId}>

@@ -126,7 +126,7 @@ export default async function ApprovalsPage({ searchParams }: { searchParams: Se
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
 
       <section aria-labelledby="approvals-title" className={`${s.sapDoc} ${s.sapRegister}`}>
-        <div className={s.sapWindow}>
+        <div className={`${s.sapWindow} mb-5`}>
           <h2 className={s.sapTitle} id="approvals-title">
             <span>{t('approvals.inbox')}</span>
             <span className={s.sapTitleMeta}>{t('rows_shown', { count: center.total })}</span>
@@ -248,7 +248,7 @@ export default async function ApprovalsPage({ searchParams }: { searchParams: Se
       </section>
 
       <section aria-labelledby="approvals-submissions-title" className={`${s.sapDoc} ${s.sapRegister}`}>
-        <div className={s.sapWindow}>
+        <div className={`${s.sapWindow} mb-5`}>
           <h2 className={s.sapTitle} id="approvals-submissions-title">
             <span>{t('approvals.my_submissions')}</span>
             <span className={s.sapTitleMeta}>{t('rows_shown', { count: data.submissions.length })}</span>
@@ -293,7 +293,7 @@ export default async function ApprovalsPage({ searchParams }: { searchParams: Se
       </section>
 
       <section aria-labelledby="approvals-decisions-title" className={`${s.sapDoc} ${s.sapRegister}`}>
-        <div className={s.sapWindow}>
+        <div className={`${s.sapWindow} mb-5`}>
           <h2 className={s.sapTitle} id="approvals-decisions-title">
             <span>{t('approvals.my_decisions')}</span>
             <span className={s.sapTitleMeta}>{t('rows_shown', { count: data.decisions.length })}</span>

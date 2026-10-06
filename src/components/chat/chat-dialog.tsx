@@ -38,7 +38,8 @@ export function ChatDialog({
   return (
     <dialog
       aria-labelledby={titleId}
-      className={s.dialog}
+      // Centred: the reset that came with the Intent UI cascade takes the browser's own `margin: auto` off a dialog.
+      className={`${s.dialog} m-auto`}
       onClick={(event) => {
         if (event.target === ref.current) onClose();
       }}

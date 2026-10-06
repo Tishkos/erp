@@ -37,6 +37,10 @@ import {
  */
 export const dynamic = 'force-dynamic';
 
+/** The form under a register: on the card's inset, its fields in columns, the caption and the button across. */
+const AFTER_TABLE =
+  'gap-x-5 gap-y-4 px-5 pb-5 pt-4 sm:grid-cols-2 lg:grid-cols-3 [&>[class*=submitRow]]:col-span-full [&>p]:col-span-full [&>p]:m-0';
+
 export default async function PayablesSettingsPage({
   searchParams,
 }: {
@@ -103,7 +107,7 @@ export default async function PayablesSettingsPage({
                       </td>
                       <td>
                         {mayConfigure ? (
-                          <Form action={setTypeActive}>
+                          <Form action={setTypeActive} className="flex flex-wrap items-center gap-x-3 gap-y-2">
                             <Hidden name="code" value={type.code} />
                             <Checkbox defaultChecked={type.active} label={t('active')} name="active" />
                             <Submit label={t('save')} small tone="secondary" />
@@ -152,7 +156,7 @@ export default async function PayablesSettingsPage({
                       <td>{stage.active ? '✓' : '—'}</td>
                       {mayConfigure ? (
                         <td>
-                          <Form action={updateStage}>
+                          <Form action={updateStage} className="flex flex-wrap items-end gap-x-3 gap-y-2 [&>*]:min-w-0">
                             <Hidden name="type" value={stage.payableTypeCode} />
                             <Hidden name="code" value={stage.code} />
                             <Field
@@ -227,7 +231,7 @@ export default async function PayablesSettingsPage({
                 </table>
               </div>
               {mayConfigure ? (
-                <Form action={setTimeLimit}>
+                <Form action={setTimeLimit} className={AFTER_TABLE}>
                   <p className={s.sapGridCaption}>{t('new_limit')}</p>
                   <Field hint={t('check_hint')} label={t('check')} name="check" required />
                   <Field defaultValue="all" hint={t('scope_hint')} label={t('scope')} name="scope" />
@@ -279,7 +283,7 @@ export default async function PayablesSettingsPage({
                 </table>
               </div>
               {mayConfigure ? (
-                <Form action={saveReasonCode}>
+                <Form action={saveReasonCode} className={AFTER_TABLE}>
                   <p className={s.sapGridCaption}>{t('new_reason')}</p>
                   <Field label={t('code')} name="code" required />
                   <Field label={t('name')} name="name" required />
@@ -329,7 +333,7 @@ export default async function PayablesSettingsPage({
                 </table>
               </div>
               {mayConfigure ? (
-                <Form action={saveExpenseCategory}>
+                <Form action={saveExpenseCategory} className={AFTER_TABLE}>
                   <p className={s.sapGridCaption}>{t('new_category')}</p>
                   <Field label={t('code')} name="code" required />
                   <Field label={t('name')} name="name" required />
@@ -369,7 +373,7 @@ export default async function PayablesSettingsPage({
                       </td>
                       <td>
                         {mayConfigure ? (
-                          <Form action={updateEventCode}>
+                          <Form action={updateEventCode} className="flex flex-wrap items-end gap-x-3 gap-y-2 [&>*]:min-w-0">
                             <Hidden name="code" value={code.code} />
                             <Field
                               defaultValue={code.name}

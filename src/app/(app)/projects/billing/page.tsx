@@ -199,7 +199,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
 
       <section aria-labelledby="billing-title" className={`${s.sapDoc} ${s.sapRegister}`}>
-        <div className={s.sapWindow}>
+        <div className={`${s.sapWindow} mb-5`}>
           <h2 className={s.sapTitle} id="billing-title">
             <span>{view ? `${view.project.code} · ${view.project.name}` : page('project_billing')}</span>
             <span className={s.sapTitleMeta}>{x('billing_plan')}</span>
@@ -226,7 +226,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
 
           {view ? (
             <>
-              <p className={s.sapNote}>
+              <p className={`${s.sapNote} px-5 py-3`}>
                 <span className={`status status--${chipOf(view.project.status)} ${s.sapRegisterStatus}`} data-status={chipOf(view.project.status)}>
                   {x(`status_${view.project.status}`)}
                 </span>{' '}
@@ -330,7 +330,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
               </div>
             </>
           ) : (
-            <p className={s.sapNote}>{x('no_customer_projects')}</p>
+            <p className={`${s.sapNote} px-5 py-3`}>{x('no_customer_projects')}</p>
           )}
         </div>
       </section>
@@ -449,7 +449,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
               <span>{x('revenue_recognition')}</span>
               <span className={s.sapTitleMeta}>{x('to_period_end', { day: day(periodEnd) })}</span>
             </h2>
-            <p className={s.sapNote}>
+            <p className={`${s.sapNote} px-5 py-3`}>
               {policy.ratified
                 ? x('recognition_ratified', {
                     by: policy.ratifiedByName ?? '—',
@@ -457,7 +457,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
                   })
                 : x('recognition_not_ratified')}
             </p>
-            {figures?.onerous ? <p className={s.sapNote}>{x('recognition_onerous')}</p> : null}
+            {figures?.onerous ? <p className={`${s.sapNote} px-5 pb-3`}>{x('recognition_onerous')}</p> : null}
             {figures ? (
               <div className={s.sapTableWrap}>
                 <table aria-labelledby="billing-recognition-title" className={s.sapTable}>

@@ -232,6 +232,13 @@ html:has(.erp-root[data-palette]),
     background-color: var(--ui-bg);
     color: var(--ui-fg);
   }
+
+  /* Tailwind's reset takes every margin away, the browser's `margin: auto`
+     that centres a modal <dialog> with it — every window opened in the top
+     corner. Given back here, after the reset in the same layer. */
+  dialog:modal {
+    margin: auto;
+  }
 }
 
 @utility touch-target {

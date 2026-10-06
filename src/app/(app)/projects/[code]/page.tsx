@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { TreeCode } from '../tree-code';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Checkbox, Field, Flash, Form, Grid, Hidden, Pill, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
 import { NewRecordDialog } from '@/components/admin/dialog';
@@ -301,7 +302,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
             {view.tree.map((element) => (
               <tr key={element.id}>
                 <td>
-                  <bdi dir="ltr">{`${'· '.repeat(Math.max(0, element.level - 1))}${element.code}`}</bdi>
+                  <TreeCode code={element.code} level={element.level} />
                 </td>
                 <td>
                   <bdi dir="auto">{element.name}</bdi>
@@ -385,7 +386,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
                 {elements.map((e) => (
                   <tr key={e.wbsCode}>
                     <td>
-                      <bdi dir="ltr">{`${'· '.repeat(Math.max(0, e.level - 1))}${e.wbsCode}`}</bdi> <bdi dir="auto">{e.name}</bdi>
+                      <TreeCode code={e.wbsCode} level={e.level} /> <bdi dir="auto">{e.name}</bdi>
                     </td>
                     <td className={s.sapNum}>{money(toDecimalString(plan.planned.get(e.wbsCode) ?? 0n, 4n))}</td>
                     <td className={s.sapNum}>{money(e.originalIqd)}</td>
@@ -404,7 +405,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
               </tbody>
             </table>
           </div>
-          <p className={s.sapNote}>
+          <p className={`${s.sapNote} px-5 py-3`}>
             <Link className={s.sapLink} href={`/projects/plan?project=${encodeURIComponent(row.code)}`}>
               {page('cost_plan')}
             </Link>
@@ -470,7 +471,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
             </table>
           </div>
           {mayEdit && can(principal, 'create', ps.PERMISSION_OBJECT) ? (
-            <p className={s.sapNote}>
+            <p className={`${s.sapNote} px-5 py-3`}>
               <Link className={s.sapLink} href={`/projects/budgets/new?project=${encodeURIComponent(row.code)}`}>
                 {x('new_budget')}
               </Link>

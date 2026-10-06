@@ -132,15 +132,15 @@ export default async function UserPage({
       <div className={s.profileGrid}>
         <div className={s.profileStack}>
           <Panel>
-            <div className={s.profileCard}>
+            <div className={`${s.profileCard} border-0 bg-transparent px-1 pb-1 pt-2 shadow-none`}>
               {user.image ? (
-                <img alt="" className={`${s.avatarLarge} ${s.profileAvatar}`} src={user.image} />
+                <img alt="" className={`${s.avatarLarge} ${s.profileAvatar} size-20 rounded-full border-0`} src={user.image} />
               ) : (
-                <span className={`${s.avatarLarge} ${s.profileAvatar}`}>{initials}</span>
+                <span className={`${s.avatarLarge} ${s.profileAvatar} size-20 rounded-full border-0 bg-primary-subtle text-2xl font-semibold text-primary-subtle-fg`}>{initials}</span>
               )}
               <h2>{user.displayName}</h2>
               <p>{user.email}</p>
-              <span style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+              <span className="flex flex-wrap justify-center gap-1.5">
                 <Pill label={user.isActive ? t('active') : t('inactive')} on={user.isActive} />
                 {user.isSuperUser ? <Pill label={t('users.super_user')} on={true} /> : null}
                 {user.mustChangePassword ? <Pill label={t('users.must_change_password')} on={null} /> : null}
@@ -304,11 +304,11 @@ export default async function UserPage({
 
           <Panel flush title={t('users.sessions')}>
             {sessions.length === 0 ? (
-              <p className="muted" style={{ padding: '1rem' }}>
+              <p className="muted p-5 text-sm">
                 {t('users.sessions_empty')}
               </p>
             ) : (
-              <div className="table-wrap" style={{ border: 0 }}>
+              <div className="table-wrap rounded-none border-0">
                 <table className="list">
                   <thead>
                     <tr>

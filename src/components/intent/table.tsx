@@ -1,5 +1,7 @@
 "use client"
 
+import { useTranslations } from "next-intl"
+
 import { ChevronDownIcon, ChevronRightIcon } from "@/components/intent/icons"
 import { createContext, use } from "react"
 import { Button } from "react-aria-components/Button"
@@ -272,12 +274,7 @@ const TableBody = <T extends object>({ renderEmptyState, ...props }: TableBodyPr
               aria-hidden
             />
 
-            <div className="absolute top-[65%] space-y-0.5 px-2 text-center">
-              <CardTitle className="font-semibold text-lg">No data found</CardTitle>
-              <CardDescription>
-                No information is currently available in this section.
-              </CardDescription>
-            </div>
+            <TableEmptyText />
           </div>
         )}
       </>
@@ -285,6 +282,17 @@ const TableBody = <T extends object>({ renderEmptyState, ...props }: TableBodyPr
     {...props}
   />
 )
+
+// The default empty state's words, from the catalogue (a component, so the hook has one).
+function TableEmptyText() {
+  const t = useTranslations("intent")
+  return (
+    <div className="absolute top-[65%] space-y-0.5 px-2 text-center">
+      <CardTitle className="font-semibold text-lg">{t("no_data")}</CardTitle>
+      <CardDescription>{t("no_data_hint")}</CardDescription>
+    </div>
+  )
+}
 
 interface TableColumnProps extends ColumnProps {
   isResizable?: boolean

@@ -138,17 +138,17 @@ export default async function StockLedgerPage({ searchParams }: { searchParams: 
         </form>
 
         {!filter.itemCode ? (
-          <p className="muted" style={{ padding: '0 1rem 1rem' }}>
+          <p className="muted px-5 py-3 text-sm">
             {t('stock_ledger.choose_item')}
           </p>
         ) : accounts.length === 0 ? (
-          <p className="muted" style={{ padding: '0 1rem 1rem' }}>
+          <p className="muted px-5 py-3 text-sm">
             {t('stock_ledger.none', { item: chosen?.name ?? filter.itemCode })}
           </p>
         ) : (
           accounts.map((account) => (
-            <section key={account.warehouseCode} style={{ padding: '0 0 1rem' }}>
-              <h3 style={{ padding: '0.5rem 1rem 0' }}>
+            <section className="pb-4" key={account.warehouseCode}>
+              <h3 className="px-5 pb-2.5 pt-4 text-sm font-semibold text-fg">
                 <bdi dir="auto">{chosen?.name ?? filter.itemCode}</bdi>
                 {' — '}
                 <bdi dir="auto">{account.warehouseName}</bdi> <bdi dir="ltr">({account.warehouseCode})</bdi>

@@ -85,8 +85,8 @@ export default async function UsersPage({ searchParams }: { searchParams: Search
                 <Grid>
                   {/* Roles are the CEO's to give: nobody else is shown a heading with nothing under it. */}
                   {data.roles.length > 0 ? (
-                    <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
-                      <legend className="muted" style={{ fontSize: '0.78rem', fontWeight: 600 }}>
+                    <fieldset className="m-0 border-0 p-0">
+                      <legend className="muted mb-1.5 text-xs font-medium">
                         {t('users.roles')}
                       </legend>
                       {data.roles.map((r) => (
@@ -96,8 +96,8 @@ export default async function UsersPage({ searchParams }: { searchParams: Search
                       ))}
                     </fieldset>
                   ) : null}
-                  <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
-                    <legend className="muted" style={{ fontSize: '0.78rem', fontWeight: 600 }}>
+                  <fieldset className="m-0 border-0 p-0">
+                    <legend className="muted mb-1.5 text-xs font-medium">
                       {t('users.branches')}
                     </legend>
                     {data.branches
@@ -108,8 +108,8 @@ export default async function UsersPage({ searchParams }: { searchParams: Search
                         </div>
                       ))}
                   </fieldset>
-                  <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
-                    <legend className="muted" style={{ fontSize: '0.78rem', fontWeight: 600 }}>
+                  <fieldset className="m-0 border-0 p-0">
+                    <legend className="muted mb-1.5 text-xs font-medium">
                       {t('users.departments')}
                     </legend>
                     {data.departments
@@ -189,9 +189,9 @@ export default async function UsersPage({ searchParams }: { searchParams: Search
                   <td>
                     <Link className={admin.personCell} href={`/administration/users/${row.id}`}>
                       {row.image ? (
-                        <img alt="" className={admin.avatarSmall} src={row.image} />
+                        <img alt="" className={`${admin.avatarSmall} rounded-full border-0`} src={row.image} />
                       ) : (
-                        <span className={admin.avatarSmall}>{row.displayName.slice(0, 1).toUpperCase()}</span>
+                        <span className={`${admin.avatarSmall} size-7 rounded-full border-0 bg-primary-subtle text-xs font-semibold text-primary-subtle-fg`}>{row.displayName.slice(0, 1).toUpperCase()}</span>
                       )}
                       <span>{row.displayName}</span>
                     </Link>

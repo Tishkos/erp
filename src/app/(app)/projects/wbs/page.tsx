@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { TreeCode } from '../tree-code';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Checkbox, Field, FilterRow, Flash, Form, Grid, Hidden, Pill, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
 import { NewRecordDialog } from '@/components/admin/dialog';
@@ -173,7 +174,7 @@ export default async function WbsPage({ searchParams }: { searchParams: SearchPa
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
 
       <section aria-labelledby="wbs-title" className={`${s.sapDoc} ${s.sapRegister}`}>
-        <div className={s.sapWindow}>
+        <div className={`${s.sapWindow} mb-5`}>
           <h2 className={s.sapTitle} id="wbs-title">
             <span>{view ? `${view.project.code} · ${view.project.name}` : page('wbs')}</span>
             {view ? <span className={s.sapTitleMeta}>{t('rows_shown', { count: view.tree.length })}</span> : null}
@@ -190,7 +191,7 @@ export default async function WbsPage({ searchParams }: { searchParams: SearchPa
 
           {view ? (
             <>
-              <p className={s.sapNote}>
+              <p className={`${s.sapNote} px-5 py-3`}>
                 <span className={`status status--${chipOf(view.project.status)} ${s.sapRegisterStatus}`} data-status={chipOf(view.project.status)}>
                   {x(`status_${view.project.status}`)}
                 </span>{' '}
@@ -229,7 +230,7 @@ export default async function WbsPage({ searchParams }: { searchParams: SearchPa
                     {view.tree.map((element) => (
                       <tr key={element.id}>
                         <td>
-                          <bdi dir="ltr">{`${'· '.repeat(Math.max(0, element.level - 1))}${element.code}`}</bdi>
+                          <TreeCode code={element.code} level={element.level} />
                         </td>
                         <td>
                           <bdi dir="auto">{element.name}</bdi>
@@ -259,7 +260,7 @@ export default async function WbsPage({ searchParams }: { searchParams: SearchPa
                         </td>
                         {mayEdit ? (
                           <td>
-                            <NewRecordDialog buttonLabel={x('edit')} closeLabel={t('close')} title={x('edit_element', { code: element.code })}>
+                            <NewRecordDialog buttonLabel={x('edit')} closeLabel={t('close')} quiet title={x('edit_element', { code: element.code })}>
                               {elementForm(updateWbsElement, element, [])}
                               {can(principal, 'submit', ps.PERMISSION_OBJECT) ? (
                                 <Form action={raiseStopLine}>
@@ -299,7 +300,7 @@ export default async function WbsPage({ searchParams }: { searchParams: SearchPa
               </div>
             </>
           ) : (
-            <p className={s.sapNote}>{x('no_projects')}</p>
+            <p className={`${s.sapNote} px-5 py-3`}>{x('no_projects')}</p>
           )}
         </div>
       </section>
@@ -381,7 +382,7 @@ export default async function WbsPage({ searchParams }: { searchParams: SearchPa
                       {mayEdit ? (
                         <td>
                           {a.status === 'open' ? (
-                            <NewRecordDialog buttonLabel={x('edit')} closeLabel={t('close')} title={x('edit_activity', { code: a.code })}>
+                            <NewRecordDialog buttonLabel={x('edit')} closeLabel={t('close')} quiet title={x('edit_activity', { code: a.code })}>
                               <Form action={updateProjectActivity}>
                                 <Hidden name="project_code" value={view.project.code} />
                                 <Hidden name="activity_code" value={a.code} />

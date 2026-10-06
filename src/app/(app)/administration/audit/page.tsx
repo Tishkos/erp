@@ -123,7 +123,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Search
         flush
       >
         {result.rows.length === 0 ? (
-          <p className="muted" style={{ padding: '1rem' }}>
+          <p className="muted p-5 text-sm">
             {list('no_rows')}
           </p>
         ) : (
@@ -168,8 +168,8 @@ export default async function AuditPage({ searchParams }: { searchParams: Search
             </table>
           </div>
         )}
-        <div style={{ padding: '0.75rem' }}>
-          <p className="muted" style={{ margin: '0 0 0.5rem', fontSize: '0.8125rem' }}>
+        <div className="px-5 py-3">
+          <p className="muted mb-2 mt-0 text-[0.8125rem]">
             {list('row_count', { count: result.total ?? result.rows.length })}
           </p>
           {pages > 1 ? (

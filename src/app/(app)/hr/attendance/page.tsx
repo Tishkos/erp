@@ -85,7 +85,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
             </FilterRow>
           </form>
 
-          <Form action={saveAttendanceSheet}>
+          <Form action={saveAttendanceSheet} className="[&>[class*=submitRow]]:px-5 [&>[class*=submitRow]]:pb-5">
             <input name="branch" type="hidden" value={branchParam} />
             <input name="day" type="hidden" value={day.day} />
             <input name="department" type="hidden" value={departmentParam} />

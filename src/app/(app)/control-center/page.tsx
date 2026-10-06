@@ -139,7 +139,7 @@ export default async function ControlCenterPage({ searchParams }: { searchParams
       </form>
 
       <section aria-labelledby="cc-summary-title" className={`${s.sapDoc} ${s.sapRegister}`}>
-        <div className={s.sapWindow}>
+        <div className={`${s.sapWindow} mb-5`}>
           <h2 className={s.sapTitle} id="cc-summary-title">
             <span>{x('summary')}</span>
             <span className={s.sapTitleMeta}>{x('checks_count', { count: number(summary.total) })}</span>
@@ -205,8 +205,8 @@ export default async function ControlCenterPage({ searchParams }: { searchParams
                 <span>{x(`domain_${d}`)}</span>
                 <span className={s.sapTitleMeta}>{x('domain_meta', { count: number(results.length), attention: number(attention) })}</span>
               </h2>
-              <div className={s.sapTableWrap}>
-                <table aria-labelledby={`cc-${d}-title`} className={s.sapTable}>
+              <div className={`${s.sapTableWrap} rounded-none border-x-0 border-b-0`}>
+                <table aria-labelledby={`cc-${d}-title`} className={`${s.sapTable} min-w-[36rem] [&_td]:whitespace-normal [&_td]:break-words [&_td+td]:border-s-0 [&_th+th]:border-s-0`}>
                   <thead>
                     <tr>
                       <th scope="col">{x('col_check')}</th>

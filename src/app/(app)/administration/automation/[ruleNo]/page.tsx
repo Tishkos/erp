@@ -188,7 +188,7 @@ export default async function AutomationRulePage({ params, searchParams }: { par
       </DocumentWindow>
 
       <section aria-labelledby="automation-versions-title" className={`${s.sapDoc} ${s.sapRegister}`}>
-        <div className={s.sapWindow}>
+        <div className={`${s.sapWindow} mb-5`}>
           <h2 className={s.sapTitle} id="automation-versions-title">
             <span>{x('versions_title')}</span>
             <span className={s.sapTitleMeta}>{versions.length}</span>
@@ -232,7 +232,7 @@ export default async function AutomationRulePage({ params, searchParams }: { par
       </section>
 
       <section aria-labelledby="automation-runs-title" className={`${s.sapDoc} ${s.sapRegister}`}>
-        <div className={s.sapWindow}>
+        <div className={`${s.sapWindow} mb-5`}>
           <h2 className={s.sapTitle} id="automation-runs-title">
             <span>{x('runs_of_rule')}</span>
             <span className={s.sapTitleMeta}>

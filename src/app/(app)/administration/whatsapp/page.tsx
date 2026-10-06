@@ -99,9 +99,9 @@ export default async function WhatsappPage({ searchParams }: { searchParams: Sea
               </tbody>
             </table>
           </div>
-          <p className={s.sapNote}>{t('bridge_note')}</p>
+          <p className={`${s.sapNote} px-5 py-3`}>{t('bridge_note')}</p>
           {mayConfigure && status.paired ? (
-            <Form action={clearPairing}>
+            <Form action={clearPairing} className="border-t border-border px-5 pb-5 pt-4">
               <p className={s.sapGridCaption}>{t('forget_pairing')}</p>
               <Grid>
                 <Field hint={t('forget_pairing_hint')} label={admin('reason')} name="reason" required />
@@ -156,10 +156,10 @@ export default async function WhatsappPage({ searchParams }: { searchParams: Sea
                     <td>{yes(row.isCeo)}</td>
                     <td>
                       {mayConfigure ? (
-                        <Form action={setContactActive}>
+                        <Form action={setContactActive} className="flex flex-wrap items-center gap-2">
                           <Hidden name="id" value={row.id} />
                           <Hidden name="active" value={row.active ? '0' : '1'} />
-                          {row.active ? <input aria-label={admin('reason')} name="reason" placeholder={admin('reason')} required type="text" /> : null}
+                          {row.active ? <input aria-label={admin('reason')} className="h-8 min-h-8 w-36 min-w-0 flex-1" name="reason" placeholder={admin('reason')} required type="text" /> : null}
                           <Submit label={row.active ? t('deactivate') : t('activate')} small tone="secondary" />
                         </Form>
                       ) : row.active ? (
@@ -174,7 +174,7 @@ export default async function WhatsappPage({ searchParams }: { searchParams: Sea
             </table>
           </div>
           {mayConfigure ? (
-            <Form action={saveContact}>
+            <Form action={saveContact} className="px-5 pb-5 pt-4">
               <p className={s.sapGridCaption}>{t('new_contact')}</p>
               <Grid>
                 <Select label={column('user')} name="user_id" options={people.filter((p) => p.isActive).map((p) => ({ value: p.id, label: `${p.displayName} · ${p.email}` }))} required />
@@ -241,7 +241,7 @@ export default async function WhatsappPage({ searchParams }: { searchParams: Sea
               </tbody>
             </table>
           </div>
-          <p className={s.sapNote}>{t('rules_note')}</p>
+          <p className={`${s.sapNote} px-5 py-3`}>{t('rules_note')}</p>
         </div>
       </section>
 
@@ -267,7 +267,7 @@ export default async function WhatsappPage({ searchParams }: { searchParams: Sea
                     </td>
                     <td>
                       {mayConfigure ? (
-                        <Form action={saveSetting}>
+                        <Form action={saveSetting} className="flex flex-wrap items-center gap-2">
                           <Hidden name="key" value={row.key} />
                           {/* The group id and its name may be cleared — that
                               is how the bot goes back to direct messages
@@ -292,7 +292,7 @@ export default async function WhatsappPage({ searchParams }: { searchParams: Sea
               </tbody>
             </table>
           </div>
-          <p className={s.sapNote}>{t('settings_note')}</p>
+          <p className={`${s.sapNote} px-5 py-3`}>{t('settings_note')}</p>
         </div>
       </section>
 

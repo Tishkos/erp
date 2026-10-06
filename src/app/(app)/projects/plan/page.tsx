@@ -223,7 +223,7 @@ export default async function PlanPage({ searchParams }: { searchParams: SearchP
 
           {view ? (
             <>
-              <p className={s.sapNote}>
+              <p className={`${s.sapNote} px-5 py-3`}>
                 <span className={`status status--${chipOf(view.project.status)} ${s.sapRegisterStatus}`} data-status={chipOf(view.project.status)}>
                   {x(`status_${view.project.status}`)}
                 </span>{' '}
@@ -233,7 +233,7 @@ export default async function PlanPage({ searchParams }: { searchParams: SearchP
                 {shown && !shown.isCurrent ? ` · ${x('older_version')}` : null}
               </p>
               {shown === null ? (
-                <p className={s.sapNote}>{x('no_plan_yet')}</p>
+                <p className={`${s.sapNote} px-5 pb-3`}>{x('no_plan_yet')}</p>
               ) : (
                 <div className={`${s.sapTableWrap} ${s.sapRegisterTableWrap}`}>
                   <table aria-labelledby="plan-title" className={`${s.sapTable} ${s.sapRegisterTable}`}>
@@ -292,7 +292,7 @@ export default async function PlanPage({ searchParams }: { searchParams: SearchP
               )}
             </>
           ) : (
-            <p className={s.sapNote}>{x('no_projects')}</p>
+            <p className={`${s.sapNote} px-5 py-3`}>{x('no_projects')}</p>
           )}
         </div>
       </section>

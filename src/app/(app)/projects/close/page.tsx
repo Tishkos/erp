@@ -134,7 +134,7 @@ export default async function ClosePage({ searchParams }: { searchParams: Search
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
 
       <section aria-labelledby="close-title" className={`${s.sapDoc} ${s.sapRegister}`}>
-        <div className={s.sapWindow}>
+        <div className={`${s.sapWindow} mb-5`}>
           <h2 className={s.sapTitle} id="close-title">
             <span>{view ? `${view.project.code} · ${view.project.name}` : page('project_close')}</span>
             <span className={s.sapTitleMeta}>{view ? x('close_checks_meta', { count: failing }) : ''}</span>
@@ -151,7 +151,7 @@ export default async function ClosePage({ searchParams }: { searchParams: Search
 
           {view ? (
             <>
-              <p className={s.sapNote}>
+              <p className={`${s.sapNote} px-5 py-3`}>
                 <span className={`status status--${chipOf(view.project.status)} ${s.sapRegisterStatus}`} data-status={chipOf(view.project.status)}>
                   {x(`status_${view.project.status}`)}
                 </span>{' '}
@@ -189,7 +189,7 @@ export default async function ClosePage({ searchParams }: { searchParams: Search
               </div>
             </>
           ) : (
-            <p className={s.sapNote}>{x('no_projects')}</p>
+            <p className={`${s.sapNote} px-5 py-3`}>{x('no_projects')}</p>
           )}
         </div>
       </section>
@@ -201,7 +201,7 @@ export default async function ClosePage({ searchParams }: { searchParams: Search
               <span>{x('settlement_preview')}</span>
               <span className={s.sapTitleMeta}>{x('to_period_end', { day: day(today) })}</span>
             </h2>
-            <p className={s.sapNote}>{x(figures.kind === 'asset' ? 'settlement_asset_note' : 'settlement_result_note')}</p>
+            <p className={`${s.sapNote} px-5 py-3`}>{x(figures.kind === 'asset' ? 'settlement_asset_note' : 'settlement_result_note')}</p>
             <div className={s.sapTableWrap}>
               <table aria-labelledby="close-figures-title" className={s.sapTable}>
                 <thead>

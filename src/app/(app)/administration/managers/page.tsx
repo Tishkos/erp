@@ -60,7 +60,7 @@ export default async function ManagersPage({ searchParams }: { searchParams: Sea
           searchLabel={t('search')}
         />
         {rows.every((r) => r.managers.length === 0) ? (
-          <p className="muted" style={{ padding: '1rem' }}>
+          <p className="muted p-5 text-sm">
             {t('managers.empty')}
           </p>
         ) : null}
@@ -86,7 +86,7 @@ export default async function ManagersPage({ searchParams }: { searchParams: Sea
                     {managers.length === 0
                       ? t('departments.no_manager')
                       : managers.map((m) => (
-                          <span key={m.userId} style={{ display: 'block' }}>
+                          <span className="block" key={m.userId}>
                             <Link href={`/administration/users/${m.userId}`}>{m.displayName}</Link>
                           </span>
                         ))}

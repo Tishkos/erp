@@ -351,7 +351,7 @@ export default async function PayrollRunPage({ params, searchParams }: { params:
               <span>{x('typed_title')}</span>
               <span className={s.sapTitleMeta}>{x('typed_hint')}</span>
             </h2>
-            <Form action={savePayrollTyped}>
+            <Form action={savePayrollTyped} className="[&>[class*=submitRow]]:px-5 [&>[class*=submitRow]]:pb-5">
               {hidden}
               <input name="rows" type="hidden" value={detail.lines.length} />
               <input name="codes" type="hidden" value={manual.map((m) => m.code).join(',')} />

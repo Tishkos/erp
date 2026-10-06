@@ -196,7 +196,7 @@ export default async function ExceptionPage({ params, searchParams }: { params: 
       </DocumentWindow>
 
       <section aria-labelledby="exception-road-title" className={`${s.sapDoc} ${s.sapRegister}`}>
-        <div className={s.sapWindow}>
+        <div className={`${s.sapWindow} mb-5`}>
           <h2 className={s.sapTitle} id="exception-road-title">
             <span>{x('history_title')}</span>
             <span className={s.sapTitleMeta}>{t('rows_shown', { count: detail.history.length })}</span>

@@ -1,5 +1,7 @@
 import Link from 'next/link';
+import { ChevronRight } from 'lucide-react';
 import { getTranslations } from 'next-intl/server';
+import { cn } from '@/components/intent/cn';
 import { Panel } from '@/components/ui';
 import { AdminPage, Flash, Pill, admin as s } from '@/components/admin';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -47,11 +49,17 @@ export default async function PermissionsPage({ searchParams }: { searchParams: 
       <div className={s.profileGrid}>
         <div className={s.profileStack}>
           <Panel title={t('permissions.pick_role')}>
-            <div className={s.roleTabs} style={{ flexDirection: 'column' }}>
+            {/* The roles as a list of Intent's nav items: the open one in the accent's tint, the rest quiet. */}
+            <div className={cn(s.roleTabs, 'flex-col gap-0.5 border-0 bg-transparent')}>
               {all.map((r) => (
                 <Link
                   aria-current={selected?.code === r.code ? 'page' : undefined}
-                  className={s.roleTab}
+                  className={cn(
+                    s.roleTab,
+                    'grid min-w-0 gap-0.5 rounded-lg border-0 bg-transparent px-3 py-2 text-fg no-underline shadow-none transition-colors hover:bg-muted',
+                    '[&>small]:text-xs [&>small]:text-muted-fg [&>strong]:text-sm [&>strong]:font-medium',
+                    'aria-[current=page]:bg-primary-subtle aria-[current=page]:text-primary-subtle-fg aria-[current=page]:[&>strong]:font-semibold aria-[current=page]:[&>strong]:text-primary-subtle-fg',
+                  )}
                   href={`/administration/permissions?role=${encodeURIComponent(r.code)}`}
                   key={r.code}
                 >
@@ -65,14 +73,26 @@ export default async function PermissionsPage({ searchParams }: { searchParams: 
           </Panel>
 
           <Panel>
-            <details>
-              <summary className={s.grantSummary} style={{ background: 'transparent', paddingInline: 0 }}>
+            <details className="group">
+              <summary
+                className={cn(
+                  s.grantSummary,
+                  'flex cursor-pointer list-none items-center justify-start gap-2 rounded-lg bg-transparent px-0 py-1 text-sm font-medium text-fg before:hidden hover:bg-transparent [&::-webkit-details-marker]:hidden',
+                )}
+              >
+                <ChevronRight
+                  aria-hidden="true"
+                  className="size-4 shrink-0 text-muted-fg transition-transform group-open:rotate-90 rtl:-scale-x-100 rtl:group-open:-rotate-90"
+                />
                 {t('permissions.how_title')}
               </summary>
-              <p className={s.sectionHint} style={{ marginBlockStart: '0.6rem' }}>
-                {t('permissions.how_body')}
-              </p>
-              <dl className={s.verbHelp} style={{ gridTemplateColumns: '1fr' }}>
+              <p className={cn(s.sectionHint, 'mt-3')}>{t('permissions.how_body')}</p>
+              <dl
+                className={cn(
+                  s.verbHelp,
+                  'grid grid-cols-1 gap-2 [&>div]:grid [&>div]:gap-0.5 [&>div]:rounded-lg [&>div]:border [&>div]:border-border [&>div]:bg-muted/40 [&>div]:px-3 [&>div]:py-2 [&_dd]:m-0 [&_dd]:text-xs [&_dd]:text-muted-fg [&_dt]:text-sm [&_dt]:font-medium [&_dt]:text-fg',
+                )}
+              >
                 {PERMISSION_VERBS.map((verb) => (
                   <div key={verb}>
                     <dt>{verbs(verb)}</dt>

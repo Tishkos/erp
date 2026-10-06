@@ -1,5 +1,7 @@
 "use client"
 
+import { useTranslations } from "next-intl"
+
 import { Bars2Icon } from "@/components/intent/icons"
 import { LayoutGroup, motion } from "motion/react"
 import { createContext, use, useCallback, useId, useMemo, useState } from "react"
@@ -306,11 +308,12 @@ interface NavbarTriggerProps extends ButtonProps {
 
 const NavbarTrigger = ({ className, onPress, ...props }: NavbarTriggerProps) => {
   const { toggleNavbar } = useNavbar()
+  const t = useTranslations("intent")
   return (
     <Button
       data-slot="navbar-trigger"
       intent="plain"
-      aria-label={props["aria-label"] || "Toggle Navbar"}
+      aria-label={props["aria-label"] || t("toggle_navbar")}
       size="sq-sm"
       className={cx("-ms-2 lg:hidden", className)}
       onPress={(event) => {
@@ -320,7 +323,7 @@ const NavbarTrigger = ({ className, onPress, ...props }: NavbarTriggerProps) => 
       {...props}
     >
       <Bars2Icon />
-      <span className="sr-only">Toggle Navbar</span>
+      <span className="sr-only">{t("toggle_navbar")}</span>
     </Button>
   )
 }

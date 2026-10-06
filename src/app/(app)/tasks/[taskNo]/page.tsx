@@ -34,6 +34,15 @@ import { addWatcher, removeWatcher, replyInChat, stepTask, updateTask } from '..
  */
 export const dynamic = 'force-dynamic';
 
+/** The priority as Intent's badge (the same word, read at a glance) — as on My Tasks. */
+const BADGE = 'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap';
+const PRIORITY_LOOK: Record<string, string> = {
+  low: 'bg-secondary text-muted-fg',
+  normal: 'bg-secondary text-secondary-fg',
+  high: 'bg-warning-subtle text-warning-subtle-fg',
+  urgent: 'bg-danger-subtle text-danger-subtle-fg',
+};
+
 /** The steps taken without saying anything; a step that must say why gets its own box. */
 const PLAIN: readonly TaskAction[] = ['accept', 'start', 'resume', 'submit', 'complete'];
 /** The steps that cannot be taken without a reason. */
@@ -99,13 +108,28 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
     { label: column('reference'), value: <bdi dir="ltr">{row.taskNo}</bdi> },
     { label: column('status'), value: x(`status_${row.status}`), status: tone },
     { label: x('title_field'), value: <bdi dir="auto">{row.title}</bdi> },
-    { label: x('priority'), value: x(`priority_${row.priority}`) },
+    {
+      label: x('priority'),
+      value: <span className={`${BADGE} ${PRIORITY_LOOK[row.priority] ?? PRIORITY_LOOK.normal}`}>{x(`priority_${row.priority}`)}</span>,
+    },
     { label: x('section'), value: <bdi dir="auto">{detail.departmentName}</bdi> },
     { label: x('assignee'), value: person(detail.assignee) },
     { label: x('assigned_by'), value: person(detail.assignedBy) },
     { label: x('created_by'), value: person(detail.createdBy) },
     { label: x('due'), value: <bdi dir="ltr">{dueText}</bdi> },
-    { label: x('progress'), value: <bdi dir="ltr">{detail.progress}%</bdi> },
+    {
+      label: x('progress'),
+      value: (
+        <span className="inline-flex items-center gap-2">
+          <span aria-hidden="true" className="h-1.5 w-20 overflow-hidden rounded-full bg-secondary">
+            <span className="block h-full rounded-full bg-primary" style={{ inlineSize: `${Math.max(0, Math.min(100, Number(detail.progress) || 0))}%` }} />
+          </span>
+          <bdi className="tabular-nums" dir="ltr">
+            {detail.progress}%
+          </bdi>
+        </span>
+      ),
+    },
     ...(detail.related
       ? [
           {
@@ -282,7 +306,7 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
       </DocumentWindow>
 
       <section aria-labelledby="task-watchers-title" className={`${s.sapDoc} ${s.sapRegister}`}>
-        <div className={s.sapWindow}>
+        <div className={`${s.sapWindow} mb-5`}>
           <h2 className={s.sapTitle} id="task-watchers-title">
             <span>{x('watchers')}</span>
             <span className={s.sapTitleMeta}>{t('rows_shown', { count: detail.watchers.length })}</span>

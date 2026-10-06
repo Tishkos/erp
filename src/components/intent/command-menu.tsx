@@ -1,5 +1,7 @@
 "use client"
 
+import { useTranslations } from "next-intl"
+
 import { MagnifyingGlassIcon } from "@/components/intent/icons"
 import { createContext, use, useEffect } from "react"
 import { Autocomplete, type AutocompleteProps, useFilter } from "react-aria-components/Autocomplete"
@@ -224,12 +226,15 @@ const CommandMenuDescription = ({ className, ...props }: CommandMenuDescriptionP
   return <MenuDescription className={cn("col-start-3 row-start-1 ms-auto", className)} {...props} />
 }
 
+function CommandMenuEmpty() {
+  const t = useTranslations("intent")
+  return <div className="col-span-full p-4 text-center text-muted-fg text-sm">{t("no_results")}</div>
+}
+
 const renderer: CollectionRenderer = {
   CollectionRoot(props) {
     if (props.collection.size === 0) {
-      return (
-        <div className="col-span-full p-4 text-center text-muted-fg text-sm">No results found.</div>
-      )
+      return <CommandMenuEmpty />
     }
     return <DefaultCollectionRenderer.CollectionRoot {...props} />
   },

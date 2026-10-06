@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { TreeCode } from '../tree-code';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Field, FilterRow, Flash, Form, Grid, Hidden, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
 import { NewRecordDialog } from '@/components/admin/dialog';
@@ -161,7 +162,7 @@ export default async function ProgressPage({ searchParams }: { searchParams: Sea
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
 
       <section aria-labelledby="progress-title" className={`${s.sapDoc} ${s.sapRegister}`}>
-        <div className={s.sapWindow}>
+        <div className={`${s.sapWindow} mb-5`}>
           <h2 className={s.sapTitle} id="progress-title">
             <span>{view ? `${view.project.code} · ${view.project.name}` : page('progress')}</span>
             <span className={s.sapTitleMeta}>{x('as_of', { day: day(asOf) })}</span>
@@ -179,7 +180,7 @@ export default async function ProgressPage({ searchParams }: { searchParams: Sea
 
           {view ? (
             <>
-              <p className={s.sapNote}>
+              <p className={`${s.sapNote} px-5 py-3`}>
                 <span className={`status status--${chipOf(view.project.status)} ${s.sapRegisterStatus}`} data-status={chipOf(view.project.status)}>
                   {x(`status_${view.project.status}`)}
                 </span>{' '}
@@ -230,7 +231,7 @@ export default async function ProgressPage({ searchParams }: { searchParams: Sea
                     {ev.map((r) => (
                       <tr key={r.code}>
                         <td>
-                          <bdi dir="ltr">{`${'· '.repeat(Math.max(0, r.level - 1))}${r.code}`}</bdi> <bdi dir="auto">{r.name}</bdi>
+                          <TreeCode code={r.code} level={r.level} /> <bdi dir="auto">{r.name}</bdi>
                         </td>
                         <td className={s.sapNum}>{r.measuredPercent === null ? '—' : `${Number(r.measuredPercent)} %`}</td>
                         <td className={s.sapNum}>{money(r.budgetIqd)}</td>
@@ -253,7 +254,7 @@ export default async function ProgressPage({ searchParams }: { searchParams: Sea
               </div>
             </>
           ) : (
-            <p className={s.sapNote}>{x('no_projects')}</p>
+            <p className={`${s.sapNote} px-5 py-3`}>{x('no_projects')}</p>
           )}
         </div>
       </section>

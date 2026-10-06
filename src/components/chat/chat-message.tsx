@@ -23,6 +23,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { admin as s } from '@/components/admin';
+import { cn } from '@/components/intent/cn';
 import { CHAT_REACTIONS, sizeText } from '@domain/chat';
 import type { FileView, MessageView, QuoteView } from '@/server/services/chat-read';
 import type { PendingMessage } from './chat-store';
@@ -36,6 +37,26 @@ const REACTION_ICON: Record<(typeof CHAT_REACTIONS)[number], LucideIcon> = {
   done: CircleCheck,
   eyes: Eye,
 };
+
+/*
+ * The messenger's look (the Intent UI redesign, 2026-10-06): a message is a
+ * bubble — one's own at the end of the line in the accent, everybody else's
+ * at the start in the secondary fill — with the name, the time and the
+ * receipt above it in small muted type. The message's own buttons (react,
+ * reply, withdraw) wait beside the name and come forward when the message is
+ * pointed at or focused; on a touch screen, where nothing is pointed at, they
+ * stay in view.
+ */
+const META = 'flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 px-1 text-xs text-muted-fg';
+const ACTION =
+  'size-7 min-h-7 min-w-7 rounded-full p-0 text-muted-fg transition-opacity [&_svg]:size-3.5 pointer-fine:opacity-0 pointer-fine:group-hover/msg:opacity-100 pointer-fine:group-focus-within/msg:opacity-100 pointer-fine:aria-expanded:opacity-100';
+const BUBBLE = 'max-w-full rounded-2xl px-3.5 py-2 text-sm leading-relaxed [overflow-wrap:anywhere]';
+const MINE = 'rounded-se-md bg-primary text-primary-fg [&_a]:text-primary-fg [&_a]:underline [&_a]:underline-offset-2';
+const THEIRS =
+  'rounded-ss-md bg-secondary text-secondary-fg [&_a]:text-primary-subtle-fg [&_a]:underline [&_a]:underline-offset-2';
+const QUOTE =
+  'inline-flex max-w-full items-center gap-1.5 truncate rounded-lg border-s-2 border-primary bg-muted px-2.5 py-1 text-xs text-muted-fg no-underline hover:text-fg [&_svg]:shrink-0';
+const FILES = 'm-0 w-full min-w-0 max-w-sm rounded-xl border border-border bg-overlay px-3 py-0.5 shadow-xs';
 
 export interface RowEnv {
   readonly locale: string;
@@ -66,9 +87,9 @@ export function SystemRow({ message, env }: { readonly message: MessageView; rea
   const names = (meta.names ?? []).join(', ');
   const known = ['created', 'added', 'removed', 'left', 'renamed'].includes(message.body);
   return (
-    <li id={`m-${message.id}`}>
-      <div className={s.sapNote}>
-        <span className={s.timelineWhen}>{stamp(message.createdAt, env)}</span>{' '}
+    <li className="flex justify-center" id={`m-${message.id}`}>
+      <div className="max-w-full rounded-full bg-muted px-3 py-1 text-center text-xs text-muted-fg">
+        <span className="tabular-nums">{stamp(message.createdAt, env)}</span>{' '}
         {known ? t(`system.${message.body}`, { actor: message.senderName, names, title: meta.title ?? '' }) : ''}
       </div>
     </li>
@@ -90,9 +111,12 @@ function StatusMark({ message }: { readonly message: MessageView }) {
     .map((r) => `${r.name}: ${r.seenAt ? t('status.seen') : r.deliveredAt ? t('status.delivered') : t('status.sent')}`)
     .join('\n');
   return (
-    <span className={s.sapNote} title={detail} data-status={status.state}>
-      <Icon aria-hidden="true" size={13} />{' '}
-      {t(`status.${status.state}`)}
+    <span
+      className="inline-flex items-center gap-1 text-xs text-muted-fg data-[status=seen]:text-primary-subtle-fg"
+      data-status={status.state}
+      title={detail}
+    >
+      <Icon aria-hidden="true" size={13} /> {t(`status.${status.state}`)}
       {group && status.state !== 'sent' ? ` ${count}/${status.total}` : ''}
     </span>
   );
@@ -103,15 +127,15 @@ function FileRow({ file }: { readonly file: FileView }) {
   const open = `/chat/files/${file.id}${file.kind === 'file' ? '' : '?inline=1'}`;
   const Icon = file.kind === 'image' ? ImageIcon : FileText;
   return (
-    <li>
+    <li className="last:border-b-0">
       <span className={s.fileIcon}>
         <Icon aria-hidden="true" />
       </span>
-      <span className={s.fileBody}>
-        <a href={open} rel="noreferrer" target={file.kind === 'file' ? undefined : '_blank'}>
+      <span className={cn(s.fileBody, 'min-w-0')}>
+        <a className="truncate" href={open} rel="noreferrer" target={file.kind === 'file' ? undefined : '_blank'}>
           <bdi dir="auto">{file.fileName}</bdi>
         </a>
-        <span className={s.fileMeta}>
+        <span className={cn(s.fileMeta, 'truncate')}>
           {sizeText(file.sizeBytes)} · {file.contentType}
         </span>
       </span>
@@ -129,60 +153,61 @@ export function MessageRow({ message, env, quoteOf }: { readonly message: Messag
   const images = message.files.filter((f) => f.kind === 'image');
   const picking = env.reactFor === message.id;
   const ownName = t('you');
+  const side = message.mine ? 'items-end' : 'items-start';
 
   return (
-    <li id={`m-${message.id}`} data-mine={message.mine ? 'true' : undefined}>
-      <div>
-        <div className={s.sapTitleActions}>
-          <strong className={s.timelineAction}>
+    <li className={cn('group/msg flex flex-col', side)} data-mine={message.mine ? 'true' : undefined} id={`m-${message.id}`}>
+      <div className={cn('flex min-w-0 max-w-[min(40rem,88%)] flex-col gap-1', side)}>
+        <div className={cn(META, message.mine ? 'justify-end' : 'justify-start')}>
+          <strong className="text-xs font-semibold text-fg">
             <bdi dir="auto">{message.mine ? ownName : message.senderName}</bdi>
           </strong>
-          <span className={s.timelineWhen} title={dateTimeOf(message.createdAt, env.locale, env.timeZone)}>
+          <span className="tabular-nums" title={dateTimeOf(message.createdAt, env.locale, env.timeZone)}>
             {stamp(message.createdAt, env)}
           </span>
-          {message.mentionsMe && !message.mine ? <span className={s.sapIconCount}>@</span> : null}
+          {message.mentionsMe && !message.mine ? <span className={cn(s.sapIconCount, 'rounded-full')}>@</span> : null}
           {message.mine ? <StatusMark message={message} /> : null}
           {message.retracted || !env.mayWrite ? null : (
-            <>
+            <span className="inline-flex items-center gap-0.5">
               <button
                 aria-expanded={picking}
                 aria-label={t('react')}
-                className={s.sapIconButton}
+                className={cn(s.sapIconButton, ACTION)}
                 onClick={() => env.onReactMenu(picking ? null : message.id)}
                 title={t('react')}
                 type="button"
               >
                 <SmilePlus aria-hidden="true" />
               </button>
-              <button aria-label={t('reply')} className={s.sapIconButton} onClick={() => env.onReply(quoteOf)} title={t('reply')} type="button">
-                <CornerUpLeft aria-hidden="true" />
+              <button aria-label={t('reply')} className={cn(s.sapIconButton, ACTION)} onClick={() => env.onReply(quoteOf)} title={t('reply')} type="button">
+                <CornerUpLeft aria-hidden="true" className="rtl:-scale-x-100" />
               </button>
               {message.mine ? (
-                <button aria-label={t('withdraw')} className={s.sapIconButton} onClick={() => env.onWithdraw(message)} title={t('withdraw')} type="button">
+                <button aria-label={t('withdraw')} className={cn(s.sapIconButton, ACTION)} onClick={() => env.onWithdraw(message)} title={t('withdraw')} type="button">
                   <Trash2 aria-hidden="true" />
                 </button>
               ) : null}
-            </>
+            </span>
           )}
         </div>
 
         {message.replyTo ? (
           <a
-            className={s.sapNote}
+            className={QUOTE}
             href={`#m-${message.replyTo.id}`}
             onClick={(event) => {
               event.preventDefault();
               env.onJump(message.replyTo!.id);
             }}
           >
-            <CornerUpLeft aria-hidden="true" size={12} />{' '}
+            <CornerUpLeft aria-hidden="true" size={12} className="rtl:-scale-x-100" />{' '}
             {message.replyTo.available ? (
               message.replyTo.retracted ? (
                 t('quote_withdrawn')
               ) : (
-                <>
+                <span className="truncate">
                   <bdi dir="auto">{message.replyTo.senderName}</bdi>: <bdi dir="auto">{message.replyTo.preview}</bdi>
-                </>
+                </span>
               )
             ) : (
               t('quote_unavailable')
@@ -191,23 +216,31 @@ export function MessageRow({ message, env, quoteOf }: { readonly message: Messag
         ) : null}
 
         {message.retracted ? (
-          <div className={s.sapNote}>
-            <Undo2 aria-hidden="true" size={12} />{' '}
-            {t('retracted', { name: message.retracted.byName })}
-            {message.retracted.reason ? ` — ${message.retracted.reason}` : ''}
+          <div className="inline-flex max-w-full items-center gap-1.5 rounded-2xl border border-dashed border-input px-3.5 py-2 text-sm italic text-muted-fg">
+            <Undo2 aria-hidden="true" className="shrink-0" size={13} />
+            <span>
+              {t('retracted', { name: message.retracted.byName })}
+              {message.retracted.reason ? ` — ${message.retracted.reason}` : ''}
+            </span>
           </div>
-        ) : (
-          <div dir="auto">{renderBody(message.body, message.mentionNames)}</div>
-        )}
+        ) : message.body ? (
+          <div className={cn(BUBBLE, message.mine ? MINE : THEIRS)} dir="auto">
+            {renderBody(message.body, message.mentionNames)}
+          </div>
+        ) : null}
 
-        {images.map((file) => (
-          <a href={`/chat/files/${file.id}?inline=1`} key={file.id} rel="noreferrer" target="_blank">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img alt={file.fileName} loading="lazy" src={`/chat/files/${file.id}?inline=1`} width={240} />
-          </a>
-        ))}
+        {images.length > 0 ? (
+          <div className={cn('flex flex-wrap gap-2', message.mine ? 'justify-end' : 'justify-start')}>
+            {images.map((file) => (
+              <a className="block overflow-hidden rounded-xl border border-border bg-muted" href={`/chat/files/${file.id}?inline=1`} key={file.id} rel="noreferrer" target="_blank">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img alt={file.fileName} className="block h-auto max-h-64 w-auto max-w-60 object-cover" loading="lazy" src={`/chat/files/${file.id}?inline=1`} width={240} />
+              </a>
+            ))}
+          </div>
+        ) : null}
         {message.files.length > 0 ? (
-          <ul className={s.fileList}>
+          <ul className={cn(s.fileList, FILES)}>
             {message.files.map((file) => (
               <FileRow file={file} key={file.id} />
             ))}
@@ -215,7 +248,7 @@ export function MessageRow({ message, env, quoteOf }: { readonly message: Messag
         ) : null}
 
         {picking ? (
-          <div className={s.sapTitleActions}>
+          <div className="flex flex-wrap items-center gap-0.5 rounded-full border border-border bg-overlay p-1 shadow-lg">
             {CHAT_REACTIONS.map((code) => {
               const Icon = REACTION_ICON[code];
               const mine = message.reactions.find((r) => r.reaction === code)?.mine ?? false;
@@ -223,7 +256,10 @@ export function MessageRow({ message, env, quoteOf }: { readonly message: Messag
                 <button
                   aria-label={t(`reaction.${code}`)}
                   aria-pressed={mine}
-                  className={s.sapIconButton}
+                  className={cn(
+                    s.sapIconButton,
+                    'size-8 min-h-8 min-w-8 rounded-full p-0 aria-pressed:bg-primary-subtle aria-pressed:text-primary-subtle-fg',
+                  )}
                   key={code}
                   onClick={() => {
                     env.onReact(message.id, code, !mine);
@@ -239,7 +275,7 @@ export function MessageRow({ message, env, quoteOf }: { readonly message: Messag
           </div>
         ) : null}
         {message.reactions.length > 0 ? (
-          <div className={s.sapTitleActions}>
+          <div className={cn('flex flex-wrap gap-1', message.mine ? 'justify-end' : 'justify-start')}>
             {message.reactions.map((reaction) => {
               const code = reaction.reaction as (typeof CHAT_REACTIONS)[number];
               const Icon = REACTION_ICON[code] ?? SmilePlus;
@@ -247,7 +283,11 @@ export function MessageRow({ message, env, quoteOf }: { readonly message: Messag
                 <button
                   aria-label={`${t(`reaction.${code}`)}: ${reaction.names.join(', ')}`}
                   aria-pressed={reaction.mine}
-                  className={s.sapIconButton}
+                  className={cn(
+                    s.sapIconButton,
+                    'h-7 min-h-7 min-w-0 gap-1 rounded-full border-border bg-overlay px-2 text-xs font-medium text-fg tabular-nums [&_svg]:size-3.5',
+                    'aria-pressed:border-primary/40 aria-pressed:bg-primary-subtle aria-pressed:text-primary-subtle-fg',
+                  )}
                   disabled={!env.mayWrite}
                   key={reaction.reaction}
                   onClick={() => env.onReact(message.id, reaction.reaction, !reaction.mine)}
@@ -255,7 +295,7 @@ export function MessageRow({ message, env, quoteOf }: { readonly message: Messag
                   type="button"
                 >
                   <Icon aria-hidden="true" />
-                  <span className={reaction.mine ? s.sapIconCount : undefined}>{reaction.count}</span>
+                  <span>{reaction.count}</span>
                 </button>
               );
             })}
@@ -285,47 +325,60 @@ export function PendingRow({
   const failed = pending.state === 'failed';
   const Icon = failed ? TriangleAlert : pending.state === 'sent' ? Check : Clock;
   return (
-    <li data-pending={pending.state}>
-      <div>
-        <div className={s.sapTitleActions}>
-          <strong className={s.timelineAction}>{t('you')}</strong>
-          <span className={s.timelineWhen}>{timeOf(pending.createdAt, env.locale, env.timeZone)}</span>
-          <span className={s.sapNote} data-status={pending.state}>
+    <li className="flex flex-col items-end" data-pending={pending.state}>
+      <div className="flex min-w-0 max-w-[min(40rem,88%)] flex-col items-end gap-1">
+        <div className={cn(META, 'justify-end')}>
+          <strong className="text-xs font-semibold text-fg">{t('you')}</strong>
+          <span className="tabular-nums">{timeOf(pending.createdAt, env.locale, env.timeZone)}</span>
+          <span
+            className="inline-flex items-center gap-1 text-xs text-muted-fg data-[status=failed]:text-danger-subtle-fg"
+            data-status={pending.state}
+          >
             <Icon aria-hidden="true" size={13} /> {t(`status.${pending.state === 'failed' ? 'failed' : pending.state}`)}
           </span>
           {failed ? (
-            <>
-              <button aria-label={t('retry')} className={s.sapIconButton} onClick={() => onRetry(pending.clientId)} title={t('retry')} type="button">
+            <span className="inline-flex items-center gap-0.5">
+              <button aria-label={t('retry')} className={cn(s.sapIconButton, 'size-7 min-h-7 min-w-7 rounded-full p-0 [&_svg]:size-3.5')} onClick={() => onRetry(pending.clientId)} title={t('retry')} type="button">
                 <RotateCcw aria-hidden="true" />
               </button>
-              <button aria-label={t('discard')} className={s.sapIconButton} onClick={() => onDiscard(pending.clientId)} title={t('discard')} type="button">
+              <button aria-label={t('discard')} className={cn(s.sapIconButton, 'size-7 min-h-7 min-w-7 rounded-full p-0 [&_svg]:size-3.5')} onClick={() => onDiscard(pending.clientId)} title={t('discard')} type="button">
                 <Trash2 aria-hidden="true" />
               </button>
-            </>
+            </span>
           ) : null}
         </div>
         {pending.replyTo ? (
-          <div className={s.sapNote}>
-            <CornerUpLeft aria-hidden="true" size={12} /> <bdi dir="auto">{pending.replyTo.senderName}</bdi>: <bdi dir="auto">{pending.replyTo.preview}</bdi>
+          <div className={QUOTE}>
+            <CornerUpLeft aria-hidden="true" size={12} className="rtl:-scale-x-100" />{' '}
+            <span className="truncate">
+              <bdi dir="auto">{pending.replyTo.senderName}</bdi>: <bdi dir="auto">{pending.replyTo.preview}</bdi>
+            </span>
           </div>
         ) : null}
-        {pending.body ? <div dir="auto">{renderBody(pending.body, [])}</div> : null}
+        {pending.body ? (
+          <div
+            className={cn(BUBBLE, MINE, failed ? 'opacity-100 ring-2 ring-danger/60' : 'opacity-75')}
+            dir="auto"
+          >
+            {renderBody(pending.body, [])}
+          </div>
+        ) : null}
         {pending.fileNames.length > 0 ? (
-          <ul className={s.fileList}>
+          <ul className={cn(s.fileList, FILES)}>
             {pending.fileNames.map((name, index) => (
-              <li key={`${name}-${index}`}>
+              <li className="last:border-b-0" key={`${name}-${index}`}>
                 <span className={s.fileIcon}>
                   <FileText aria-hidden="true" />
                 </span>
-                <span className={s.fileBody}>
-                  <bdi dir="auto">{name}</bdi>
+                <span className={cn(s.fileBody, 'min-w-0')}>
+                  <bdi className="truncate" dir="auto">{name}</bdi>
                 </span>
               </li>
             ))}
           </ul>
         ) : null}
         {failed && pending.error ? (
-          <div className={s.sapNote} role="alert">
+          <div className="rounded-lg bg-danger-subtle px-2.5 py-1 text-xs text-danger-subtle-fg" role="alert">
             {pending.error}
           </div>
         ) : null}
@@ -333,4 +386,3 @@ export function PendingRow({
     </li>
   );
 }
-

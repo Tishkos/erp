@@ -44,6 +44,10 @@ export function listStamp(iso: string, now: Date, locale: string, zone: string):
   return dayKey(iso, zone) === dayKey(now.toISOString(), zone) ? timeOf(iso, locale, zone) : dateOf(iso, locale, zone);
 }
 
+/** A person's or a group's round initials, in the accent's tint (the Intent UI redesign). */
+export const AVATAR_CLASS =
+  'shrink-0 rounded-full border-0 bg-primary-subtle font-semibold text-primary-subtle-fg [&_svg]:size-3.5';
+
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return '?';

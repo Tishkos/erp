@@ -3007,7 +3007,7 @@
       "check": "Check",
       "check_hint": "swift_pending, recurring_overdue, service_unconfirmed…",
       "scope": "Scope",
-      "scope_hint": "all · type:import · bank:ARAB · method:SWIFT · supplier:<id>",
+      "scope_hint": "all · type:import · bank:ARAB · method:SWIFT · supplier:ID",
       "limit_days": "Limit (days)",
       "escalate_days": "Escalate after (days)",
       "escalate_role": "Escalate to role",
@@ -9095,6 +9095,13 @@
         "year_start": "Start of this year"
       }
     }
+  },
+  "intent": {
+    "no_results": "No results found.",
+    "no_data": "No data found",
+    "no_data_hint": "No information is currently available in this section.",
+    "toggle_navbar": "Show or hide the navigation",
+    "toggle_sidebar": "Show or hide the sidebar"
   },
   "home": {
     "table": "Table",

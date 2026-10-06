@@ -116,7 +116,7 @@ export default async function ExceptionsPage({ searchParams }: { searchParams: S
             <SavedViewsMenu state={saved} />
           </ListToolbar>
 
-          <p className={s.hint}>
+          <p className={`${s.hint} m-0 border-b border-border px-5 py-2.5`}>
             {last
               ? x('last_check', {
                   when: formatTimestamp(last.finishedAt, locale as Locale),

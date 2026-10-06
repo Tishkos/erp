@@ -94,7 +94,7 @@ export default async function ProjectCostsPage({ searchParams }: { searchParams:
           </form>
 
           {journal !== null ? (
-            <p className={s.sapNote}>
+            <p className={`${s.sapNote} px-5 py-3`}>
               {x('journal_reconciliation', { items: money(result.totalIqd), journal: money(toDecimalString(journal, 4n)) })}
               {toDecimalString(journal, 4n) === result.totalIqd ? ` · ${x('reconciled')}` : ` · ${x('stock_at_issue_note')}`}
             </p>

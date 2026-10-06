@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { FileText, Folder } from 'lucide-react';
 import { notFound, redirect } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import {
@@ -323,7 +324,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Se
             <h2 className={s.sapTitle} id="link-file-title">
               <span>{t('link_file_title', { name: linkingFile.name })}</span>
             </h2>
-            <Form action={linkFileAction}>
+            <Form action={linkFileAction} className="p-5">
               <Hidden name="path" value={linkingFile.path} />
               <Hidden name="return_to" value={folderHref(here)} />
               <Grid>
@@ -343,7 +344,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Se
 
       {listing ? (
         <section aria-labelledby="documents-title" className={`${s.sapDoc} ${s.sapRegister}`}>
-          <div className={s.sapWindow}>
+          <div className={`${s.sapWindow} mb-5`}>
             <h2 className={s.sapTitle} id="documents-title">
               <span>{title}</span>
               <span className={s.sapTitleMeta}>{a('rows_shown', { count: shown.length })}</span>
@@ -413,11 +414,13 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Se
                       <tr key={entry.path}>
                         <td>
                           {entry.isFolder ? (
-                            <Link className={s.sapLink} href={folderHref(entry.path, { linkTo: keep.linkTo! })}>
+                            <Link className={`${s.sapLink} inline-flex items-center gap-2`} href={folderHref(entry.path, { linkTo: keep.linkTo! })}>
+                              <Folder aria-hidden="true" className="size-4 shrink-0 fill-primary-subtle text-primary-subtle-fg" />
                               <bdi dir="auto">{entry.name}</bdi>
                             </Link>
                           ) : (
-                            <a className={s.sapLink} href={fileHref}>
+                            <a className={`${s.sapLink} inline-flex items-center gap-2`} href={fileHref}>
+                              <FileText aria-hidden="true" className="size-4 shrink-0 text-muted-fg" />
                               <bdi dir="auto">{entry.name}</bdi>
                             </a>
                           )}

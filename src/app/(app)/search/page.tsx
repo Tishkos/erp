@@ -170,7 +170,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Searc
       variant="sap"
     >
       <section aria-labelledby="search-title" className={`${s.sapDoc} ${s.sapRegister}`}>
-        <div className={s.sapWindow}>
+        <div className={`${s.sapWindow} mb-5`}>
           <h2 className={s.sapTitle} id="search-title">
             <span>{pageNames('global_search')}</span>
             <span className={s.sapTitleMeta}>{shown}</span>
@@ -224,7 +224,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Searc
 
       {screens.length > 0 ? (
         <section aria-labelledby="search-screen" className={`${s.sapDoc} ${s.sapRegister}`}>
-          <div className={s.sapWindow}>
+          <div className={`${s.sapWindow} mb-5`}>
             <h2 className={s.sapTitle} id="search-screen">
               <span>{t('types.screen')}</span>
               <span className={s.sapTitleMeta}>{t('shown', { count: screens.length })}</span>
@@ -257,7 +257,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Searc
 
       {groups.map((group) => (
         <section aria-labelledby={`search-${group.key}`} className={`${s.sapDoc} ${s.sapRegister}`} key={group.key}>
-          <div className={s.sapWindow}>
+          <div className={`${s.sapWindow} mb-5`}>
             <h2 className={s.sapTitle} id={`search-${group.key}`}>
               <span>{group.label}</span>
               <span className={s.sapTitleMeta}>

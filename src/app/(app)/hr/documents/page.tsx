@@ -83,6 +83,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Se
                 </label>
                 <input
                   accept=".pdf,.jpg,.jpeg,.png,.webp,.heic"
+                  className="w-full min-w-0 rounded-lg border border-input bg-[var(--w-field,var(--ui-bg))] p-1 text-sm text-muted-fg shadow-xs file:me-3 file:h-7 file:cursor-pointer file:rounded-md file:border-0 file:bg-secondary file:px-3 file:text-sm file:font-medium file:text-fg hover:file:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   id="hr-document-scan"
                   name="file"
                   type="file"

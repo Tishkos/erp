@@ -1,5 +1,7 @@
 import Link from 'next/link';
+import { Check } from 'lucide-react';
 import { getLocale, getTranslations } from 'next-intl/server';
+import { cn } from '@/components/intent/cn';
 import { Panel } from '@/components/ui';
 import {
   AdminPage,
@@ -31,6 +33,12 @@ import { changePassword, saveAvatar, saveMyAppearance, saveProfile } from './act
  * before accepting a new one.
  */
 export const dynamic = 'force-dynamic';
+
+/** A choice on the appearance panel: an Intent card that rings when it is the one chosen (by more than colour — a tick too). */
+const CHOICE =
+  'group relative cursor-pointer border border-border bg-overlay shadow-xs transition-[border-color,box-shadow] hover:border-input has-[:checked]:ring-2 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring';
+/** The person's picture or initials, round. */
+const AVATAR = 'size-20 rounded-full border-0 bg-primary-subtle text-2xl font-semibold text-primary-subtle-fg';
 
 export default async function ProfilePage({ searchParams }: { searchParams: SearchParams }) {
   const [t, sv, admin, locale, context, outcome, params] = await Promise.all([
@@ -76,32 +84,35 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
       <div className={s.profileGrid}>
         <div className={s.profileStack}>
           <Panel>
-            <div className={s.profileCard}>
+            {/* The panel is the card; the identity inside it is not a second one. */}
+            <div className={cn(s.profileCard, 'gap-1.5 border-0 bg-transparent px-1 pb-1 pt-2 shadow-none')}>
               {user.image ? (
-                <img alt="" className={`${s.avatarLarge} ${s.profileAvatar}`} src={user.image} />
+                <img alt="" className={cn(s.avatarLarge, s.profileAvatar, AVATAR)} src={user.image} />
               ) : (
-                <span className={`${s.avatarLarge} ${s.profileAvatar}`}>{initials}</span>
+                <span className={cn(s.avatarLarge, s.profileAvatar, AVATAR)}>{initials}</span>
               )}
-              <h2>{user.displayName}</h2>
-              <p>{user.email}</p>
+              <h2 className="mt-2 text-lg font-semibold text-fg">{user.displayName}</h2>
+              <p className="text-sm text-muted-fg">{user.email}</p>
               <Pill label={roleLabel} on={true} />
 
-              <form action={saveAvatar} className={s.profileActions}>
+              <form action={saveAvatar} className={cn(s.profileActions, 'mt-4 gap-2 border-border pt-4 text-start')}>
                 <label className={s.label} htmlFor="f-avatar">
                   {t('avatar_choose')}
                 </label>
-                <input accept="image/png,image/jpeg,image/webp" id="f-avatar" name="avatar" type="file" />
+                <input
+                  accept="image/png,image/jpeg,image/webp"
+                  className="w-full min-w-0 text-sm text-muted-fg file:me-3 file:h-9 file:cursor-pointer file:rounded-lg file:border file:border-solid file:border-input file:bg-overlay file:px-3 file:text-sm file:font-medium file:text-fg file:shadow-xs hover:file:bg-secondary"
+                  id="f-avatar"
+                  name="avatar"
+                  type="file"
+                />
                 <span className={s.hint}>{t('avatar_hint')}</span>
                 <Submit label={t('avatar_upload')} />
               </form>
               {user.image ? (
-                <form action={saveAvatar} style={{ inlineSize: '100%' }}>
+                <form action={saveAvatar} className="w-full">
                   <input name="remove" type="hidden" value="1" />
-                  <button
-                    className={`${s.button} ${s.danger} ${s.small}`}
-                    style={{ inlineSize: '100%', justifyContent: 'center' }}
-                    type="submit"
-                  >
+                  <button className={cn(s.button, s.danger, s.small, 'w-full justify-center')} type="submit">
                     {t('avatar_remove')}
                   </button>
                 </form>
@@ -163,9 +174,19 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
           <Panel title={admin('company.appearance')}>
             <p className={s.sectionHint}>{admin('company.appearance_profile_hint')}</p>
             <Form action={saveMyAppearance}>
-              <div className={s.paletteChoices}>
+              {/* Each choice is a small preview of the screen it picks — the bar, a card with two rows and its
+                  primary button — painted by the swatch's own data-palette, so it is the real palette's tokens. A
+                  palette resets the accent to its own gold, so the button is the accent in use, carried in from outside. */}
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(6rem,1fr))] gap-2 sm:grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] sm:gap-3 [--swatch-primary:var(--w-primary)]">
                 {PALETTES.map((name) => (
-                  <label className={s.paletteChoice} key={name}>
+                  <label
+                    className={cn(
+                      s.paletteChoice,
+                      CHOICE,
+                      'grid justify-items-stretch gap-2 rounded-xl p-2 has-[:checked]:border-primary has-[:checked]:ring-primary/30',
+                    )}
+                    key={name}
+                  >
                     <input
                       defaultChecked={name === own.palette}
                       name="uiPalette"
@@ -173,30 +194,42 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
                       value={name}
                     />
                     <span
-                      className={s.paletteSwatch}
+                      className="block overflow-hidden rounded-lg border border-[var(--w-line-strong)] bg-[var(--w-canvas)]"
                       data-palette={name}
                     >
-                      <span className={s.paletteSwatchBar} />
-                      <span className={s.paletteSwatchBody}>
-                        <span className={s.paletteSwatchRow} />
-                        <span className={s.paletteSwatchRow} />
-                        <span className={s.paletteSwatchButton} />
+                      <span className="flex h-4 items-center gap-1 border-b border-[var(--w-line)] bg-[var(--w-chrome-a)] px-1.5">
+                        <span className="size-1.5 rounded-full bg-[var(--swatch-primary)]" />
+                        <span className="h-1 w-6 rounded-full bg-[var(--w-muted)] opacity-50" />
+                        <span className="ms-auto size-2 rounded-full bg-[var(--w-head-strong)]" />
+                      </span>
+                      <span className="m-1.5 grid gap-1 rounded-md border border-[var(--w-line)] bg-[var(--w-paper)] p-1.5 shadow-xs">
+                        <span className="block h-1.5 rounded-sm bg-[var(--w-head-strong)]" />
+                        <span className="block h-1.5 w-4/5 rounded-sm bg-[var(--w-head)]" />
+                        <span className="mt-0.5 block h-2.5 w-1/2 rounded-[0.2rem] bg-[var(--swatch-primary)]" />
                       </span>
                     </span>
-                    <span className={s.paletteName}>
+                    <span className={cn(s.paletteName, 'text-center text-xs font-medium text-fg')}>
                       {admin(`company.palette_${name}`)}
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute end-1 top-1 grid size-5 scale-0 place-items-center rounded-full bg-primary text-primary-fg shadow-sm transition-transform group-has-[:checked]:scale-100"
+                    >
+                      <Check className="size-3" strokeWidth={3} />
                     </span>
                   </label>
                 ))}
               </div>
-              <p className={s.sectionHint} style={{ marginBlockStart: '0.8rem' }}>
-                {admin('company.accent_hint')}
-              </p>
-              <div className={s.accentChoices}>
+              <p className={cn(s.sectionHint, 'mt-5')}>{admin('company.accent_hint')}</p>
+              <div className="flex flex-wrap gap-2">
                 {ACCENTS.map((name) => (
                   <label
                     key={name}
-                    className={s.accentChoice}
+                    className={cn(
+                      s.accentChoice,
+                      CHOICE,
+                      'inline-flex h-9 items-center gap-2 rounded-full pe-3.5 ps-1.5 has-[:checked]:border-[color:var(--w-primary)] has-[:checked]:ring-[color:color-mix(in_oklab,var(--w-primary)_28%,transparent)]',
+                    )}
                     data-accent={name}
                   >
                     <input
@@ -205,8 +238,11 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
                       type="radio"
                       value={name}
                     />
-                    <span className={s.accentDot} />
-                    <span className={s.paletteName}>
+                    {/* The dot is the accent itself (the label carries its data-accent); the tick shows on the chosen one. */}
+                    <span className="grid size-6 place-items-center rounded-full bg-[var(--w-primary)] text-[var(--w-primary-ink)] shadow-xs ring-1 ring-black/10">
+                      <Check aria-hidden="true" className="size-3.5 scale-0 transition-transform group-has-[:checked]:scale-100" strokeWidth={3} />
+                    </span>
+                    <span className={cn(s.paletteName, 'text-sm font-medium text-fg')}>
                       {admin(`company.accent_${name}`)}
                     </span>
                   </label>

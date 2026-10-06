@@ -181,7 +181,7 @@ export default async function StockMovementsPage({ searchParams }: { searchParam
             </SubmitRow>
           </FilterRow>
         </form>
-        <p className="muted" style={{ padding: '0 1rem' }}>
+        <p className="muted px-5 py-3 text-sm">
           {t('stock_movements.showing', { first, last, total })}
           {pages > 1 ? (
             <>

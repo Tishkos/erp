@@ -14,7 +14,7 @@ import type { PersonHit, ThreadView } from '@/server/services/chat-read';
 import { open as openConversation, pollNow } from './chat-store';
 import { PeoplePicker } from './chat-people';
 import { PresencePill } from './chat-presence';
-import { initials } from './format';
+import { AVATAR_CLASS, initials } from './format';
 
 /**
  * What a conversation is made of: who is in it, and — for a group's owner —
@@ -62,7 +62,7 @@ export function ConversationInfo({
       <ul className={s.fileList}>
         {thread.members.map((member) => (
           <li key={member.userId}>
-            <span className={s.avatarSmall}>{initials(member.name)}</span>
+            <span className={`${s.avatarSmall} ${AVATAR_CLASS} size-8 text-xs`}>{initials(member.name)}</span>
             <span className={s.fileBody}>
               <strong>
                 <bdi dir="auto">{member.userId === meId ? `${member.name} (${t('you')})` : member.name}</bdi>

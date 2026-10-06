@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { TreeCode } from '../tree-code';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Field, FilterRow, Flash, Form, Grid, Hidden, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
 import { NewRecordDialog } from '@/components/admin/dialog';
@@ -167,7 +168,7 @@ export default async function ForecastPage({ searchParams }: { searchParams: Sea
               rows.map((r) => (
                 <tr key={r.code}>
                   <td>
-                    <bdi dir="ltr">{`${'· '.repeat(Math.max(0, r.level - 1))}${r.code}`}</bdi> <bdi dir="auto">{r.name}</bdi>
+                    <TreeCode code={r.code} level={r.level} /> <bdi dir="auto">{r.name}</bdi>
                   </td>
                   <td className={s.sapNum}>
                     <bdi dir="ltr">{money(r.planIqd)}</bdi>

@@ -7,7 +7,7 @@ import { NewRecordDialog } from '@/components/admin/dialog';
 import { createGroupAction, openDirectAction, peopleAction } from '@/app/(app)/chat/actions';
 import type { PersonHit } from '@/server/services/chat-read';
 import { open as openConversation } from './chat-store';
-import { initials } from './format';
+import { AVATAR_CLASS, initials } from './format';
 
 /**
  * Choosing colleagues: a search box over the people chat can reach, and the
@@ -102,7 +102,7 @@ export function PeoplePicker({
         <ul className={s.fileList}>
           {visible.map((person) => (
             <li key={person.userId}>
-              <span className={s.avatarSmall}>{initials(person.name)}</span>
+              <span className={`${s.avatarSmall} ${AVATAR_CLASS} size-8 text-xs`}>{initials(person.name)}</span>
               <span className={s.fileBody}>
                 <strong>
                   <bdi dir="auto">{person.name}</bdi>

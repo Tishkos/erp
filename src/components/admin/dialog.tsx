@@ -20,12 +20,19 @@ export function NewRecordDialog({
   closeLabel,
   openOnLoad = false,
   wide = false,
+  quiet = false,
   children,
 }: {
   readonly buttonLabel: string;
   readonly title: string;
   readonly closeLabel: string;
   readonly openOnLoad?: boolean;
+  /**
+   * An opener on a row of a table ("Edit" beside every holiday, every leave
+   * type): a small outline button without the plus, rather than one primary
+   * "New …" button per row (the Intent UI redesign, 2026-10-06).
+   */
+  readonly quiet?: boolean;
   /**
    * For a form built round a grid of lines rather than a column of fields. A
    * document is read across as well as down, and 44rem cannot hold a line.
@@ -45,11 +52,11 @@ export function NewRecordDialog({
   return (
     <>
       <button
-        className={`${styles.button} ${styles.primary}`}
+        className={quiet ? `${styles.button} ${styles.small}` : `${styles.button} ${styles.primary}`}
         onClick={() => ref.current?.showModal()}
         type="button"
       >
-        <Plus aria-hidden="true" />
+        {quiet ? null : <Plus aria-hidden="true" />}
         <span>{buttonLabel}</span>
       </button>
       <dialog

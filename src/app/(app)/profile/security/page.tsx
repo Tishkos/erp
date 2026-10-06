@@ -100,7 +100,7 @@ export default async function SecurityPage({ searchParams }: { searchParams: Sea
                 <li>
                   <span>{t('mfa_otpauth')}</span>
                   <span>
-                    <code style={{ wordBreak: 'break-all' }}>{otpauth}</code>
+                    <code className="break-all">{otpauth}</code>
                   </span>
                 </li>
               </ul>
