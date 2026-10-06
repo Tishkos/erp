@@ -1,0 +1,248 @@
+/*
+ * Intent UI's theme, wired to this application's palettes (2026-10-06, by
+ * direction: "the current system looks extremely old — I want to update the
+ * UI completely … I want to see Intent UI").
+ *
+ * Intent UI's components are written in Tailwind utilities that read colour
+ * names (`bg-primary`, `text-muted-fg`, `border-input` …). Upstream binds
+ * those names to bare variables (`--primary`, `--accent`, `--border`), which
+ * this application already uses for something else — `--accent` alone is read
+ * 134 times as the brand colour, where Intent means a hover grey. So the theme
+ * lives under its own prefix, `--ui-*`, and the colour names point there.
+ *
+ * `--ui-*` is never written by hand per palette: it is derived from the
+ * palette's own `--w-*` tokens (admin.module.css), on the same elements the
+ * palettes are declared on — the wrapper and, through `html:has(…)`, the root
+ * — so a popover rendered at the end of <body> wears the same palette as the
+ * page it opened from. A page with no palette (an error page) gets Intent's
+ * own light theme from :root.
+ */
+@plugin "tailwindcss-react-aria-components";
+
+/* Dark is a palette, not a switch: the seven dark palettes (appearance.ts). */
+@custom-variant dark (&:where(:is(
+  html:has(.erp-root:is([data-palette='midnight'], [data-palette='carbon'], [data-palette='ocean'], [data-palette='obsidian_plum'], [data-palette='evergreen'], [data-palette='espresso'], [data-palette='lunar_slate'])),
+  [data-palette='midnight'], [data-palette='carbon'], [data-palette='ocean'], [data-palette='obsidian_plum'], [data-palette='evergreen'], [data-palette='espresso'], [data-palette='lunar_slate']
+) *));
+
+@theme inline {
+  --font-sans: var(--font-inter), var(--font-arabic-loaded), ui-sans-serif, system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-mono: "Cascadia Code", "SFMono-Regular", Consolas, ui-monospace, monospace;
+
+  --color-bg: var(--ui-bg);
+  --color-fg: var(--ui-fg);
+  --color-primary: var(--ui-primary);
+  --color-primary-fg: var(--ui-primary-fg);
+  --color-primary-subtle: var(--ui-primary-subtle);
+  --color-primary-subtle-fg: var(--ui-primary-subtle-fg);
+  --color-secondary: var(--ui-secondary);
+  --color-secondary-fg: var(--ui-secondary-fg);
+  --color-overlay: var(--ui-overlay);
+  --color-overlay-fg: var(--ui-overlay-fg);
+  --color-accent: var(--ui-accent);
+  --color-accent-fg: var(--ui-accent-fg);
+  --color-muted: var(--ui-muted);
+  --color-muted-fg: var(--ui-muted-fg);
+  --color-success: var(--ui-success);
+  --color-success-fg: var(--ui-success-fg);
+  --color-success-subtle: var(--ui-success-subtle);
+  --color-success-subtle-fg: var(--ui-success-subtle-fg);
+  --color-info-subtle: var(--ui-info-subtle);
+  --color-info-subtle-fg: var(--ui-info-subtle-fg);
+  --color-warning: var(--ui-warning);
+  --color-warning-fg: var(--ui-warning-fg);
+  --color-warning-subtle: var(--ui-warning-subtle);
+  --color-warning-subtle-fg: var(--ui-warning-subtle-fg);
+  --color-danger: var(--ui-danger);
+  --color-danger-fg: var(--ui-danger-fg);
+  --color-danger-subtle: var(--ui-danger-subtle);
+  --color-danger-subtle-fg: var(--ui-danger-subtle-fg);
+  --color-border: var(--ui-border);
+  --color-input: var(--ui-input);
+  --color-ring: var(--ui-ring);
+  --color-navbar: var(--ui-navbar);
+  --color-navbar-fg: var(--ui-navbar-fg);
+  --color-sidebar: var(--ui-sidebar);
+  --color-sidebar-fg: var(--ui-sidebar-fg);
+  --color-sidebar-primary: var(--ui-sidebar-primary);
+  --color-sidebar-primary-fg: var(--ui-sidebar-primary-fg);
+  --color-sidebar-accent: var(--ui-sidebar-accent);
+  --color-sidebar-accent-fg: var(--ui-sidebar-accent-fg);
+  --color-sidebar-border: var(--ui-sidebar-border);
+  --color-sidebar-ring: var(--ui-sidebar-ring);
+  --color-chart-1: var(--ui-chart-1);
+  --color-chart-2: var(--ui-chart-2);
+  --color-chart-3: var(--ui-chart-3);
+  --color-chart-4: var(--ui-chart-4);
+  --color-chart-5: var(--ui-chart-5);
+
+  /* The shadcn names the older Tailwind pieces were written with, onto the same theme. */
+  --color-background: var(--ui-bg);
+  --color-foreground: var(--ui-fg);
+  --color-card: var(--ui-overlay);
+  --color-card-foreground: var(--ui-overlay-fg);
+  --color-popover: var(--ui-overlay);
+  --color-popover-foreground: var(--ui-overlay-fg);
+  --color-primary-foreground: var(--ui-primary-fg);
+  --color-secondary-foreground: var(--ui-secondary-fg);
+  --color-muted-foreground: var(--ui-muted-fg);
+  --color-accent-foreground: var(--ui-accent-fg);
+  --color-destructive: var(--ui-danger);
+  --color-surface: var(--ui-bg);
+  --color-accent-soft: var(--ui-primary-subtle);
+  --color-accent-border: var(--ui-primary);
+  --color-border-strong: var(--ui-input);
+
+  --radius-sm: calc(var(--ui-radius) * 0.6);
+  --radius-md: calc(var(--ui-radius) * 0.8);
+  --radius-lg: var(--ui-radius);
+  --radius-xl: calc(var(--ui-radius) * 1.4);
+  --radius-2xl: calc(var(--ui-radius) * 1.8);
+  --radius-3xl: calc(var(--ui-radius) * 2.2);
+  --radius-4xl: calc(var(--ui-radius) * 2.6);
+}
+
+/* Intent UI's default light theme — what a page with no palette wears. */
+:root {
+  --ui-radius: 0.5rem;
+  --ui-bg: oklch(1 0 0);
+  --ui-fg: oklch(0.21 0.006 285.885);
+  --ui-primary: oklch(0.546 0.245 262.881);
+  --ui-primary-fg: oklch(1 0 0);
+  --ui-primary-subtle: oklch(0.623 0.214 259.815 / 0.15);
+  --ui-primary-subtle-fg: oklch(0.488 0.243 264.376);
+  --ui-secondary: oklch(0.92 0.004 286.32);
+  --ui-secondary-fg: oklch(0.141 0.005 285.823);
+  --ui-overlay: oklch(1 0 0);
+  --ui-overlay-fg: oklch(0.141 0.005 285.823);
+  --ui-accent: oklch(0.92 0.004 286.32);
+  --ui-accent-fg: oklch(0.141 0.005 285.823);
+  --ui-muted: oklch(0.967 0.001 286.375);
+  --ui-muted-fg: oklch(0.552 0.016 285.938);
+  --ui-success: oklch(0.596 0.145 163.225);
+  --ui-success-fg: oklch(1 0 0);
+  --ui-success-subtle: oklch(0.696 0.17 162.48 / 0.15);
+  --ui-success-subtle-fg: oklch(0.508 0.118 165.612);
+  --ui-info-subtle: oklch(0.685 0.169 237.323 / 0.15);
+  --ui-info-subtle-fg: oklch(0.5 0.134 242.749);
+  --ui-warning: oklch(0.828 0.189 84.429);
+  --ui-warning-fg: oklch(0.279 0.077 45.635);
+  --ui-warning-subtle: oklch(0.828 0.189 84.429 / 0.2);
+  --ui-warning-subtle-fg: oklch(0.555 0.163 48.998);
+  --ui-danger: oklch(0.577 0.245 27.325);
+  --ui-danger-fg: oklch(0.971 0.013 17.38);
+  --ui-danger-subtle: oklch(0.637 0.237 25.331 / 0.15);
+  --ui-danger-subtle-fg: oklch(0.505 0.213 27.518);
+  --ui-border: oklch(0.911 0.006 286.286);
+  --ui-input: oklch(0.871 0.006 286.286);
+  --ui-ring: oklch(0.546 0.245 262.881);
+  --ui-navbar: oklch(0.995 0 0);
+  --ui-navbar-fg: oklch(0.141 0.005 285.823);
+  --ui-sidebar: oklch(0.985 0 0);
+  --ui-sidebar-fg: oklch(0.141 0.005 285.823);
+  --ui-sidebar-primary: oklch(0.623 0.214 259.815 / 0.15);
+  --ui-sidebar-primary-fg: oklch(0.488 0.243 264.376);
+  --ui-sidebar-accent: oklch(0.92 0.004 286.32);
+  --ui-sidebar-accent-fg: oklch(0.141 0.005 285.823);
+  --ui-sidebar-border: oklch(0.901 0.006 286.286);
+  --ui-sidebar-ring: oklch(0.546 0.245 262.881);
+  --ui-chart-1: oklch(0.546 0.245 262.881);
+  --ui-chart-2: oklch(0.623 0.214 259.815);
+  --ui-chart-3: oklch(0.707 0.165 254.624);
+  --ui-chart-4: oklch(0.809 0.105 251.813);
+  --ui-chart-5: oklch(0.882 0.059 254.128);
+}
+
+/*
+ * Inside the application, every value comes from the palette and its accent.
+ * `--w-primary` / `--w-primary-ink` / `--w-primary-strong` are the accent's
+ * own colour, the ink on it, and its darker step for text on a tint.
+ */
+html:has(.erp-root[data-palette]),
+[data-palette] {
+  --ui-bg: var(--w-bg);
+  --ui-fg: var(--w-text);
+  --ui-primary: var(--w-primary);
+  --ui-primary-fg: var(--w-primary-ink);
+  --ui-primary-subtle: color-mix(in oklab, var(--w-primary) 14%, transparent);
+  --ui-primary-subtle-fg: var(--w-primary-strong);
+  --ui-secondary: var(--w-head-strong);
+  --ui-secondary-fg: var(--w-text);
+  --ui-overlay: var(--w-paper);
+  --ui-overlay-fg: var(--w-text);
+  --ui-accent: var(--w-head-strong);
+  --ui-accent-fg: var(--w-text);
+  --ui-muted: var(--w-head);
+  --ui-muted-fg: var(--w-muted);
+  --ui-success-subtle: color-mix(in oklab, var(--status-posted) 15%, transparent);
+  --ui-success-subtle-fg: var(--status-posted);
+  --ui-info-subtle: color-mix(in oklab, var(--status-approved) 15%, transparent);
+  --ui-info-subtle-fg: var(--status-approved);
+  --ui-warning-subtle: color-mix(in oklab, var(--status-submitted) 16%, transparent);
+  --ui-warning-subtle-fg: var(--status-submitted);
+  --ui-danger-subtle: color-mix(in oklab, var(--status-rejected) 14%, transparent);
+  --ui-danger-subtle-fg: var(--status-rejected);
+  --ui-border: var(--w-line);
+  --ui-input: var(--w-line-strong);
+  --ui-ring: var(--w-primary);
+  --ui-navbar: var(--w-chrome-a);
+  --ui-navbar-fg: var(--w-chrome-text);
+  --ui-sidebar: var(--w-canvas);
+  --ui-sidebar-fg: var(--w-text);
+  --ui-sidebar-primary: color-mix(in oklab, var(--w-primary) 14%, transparent);
+  --ui-sidebar-primary-fg: var(--w-primary-strong);
+  --ui-sidebar-accent: var(--w-head-strong);
+  --ui-sidebar-accent-fg: var(--w-text);
+  --ui-sidebar-border: var(--w-line);
+  --ui-sidebar-ring: var(--w-primary);
+  --ui-chart-1: var(--w-primary);
+  --ui-chart-2: color-mix(in oklab, var(--w-primary) 78%, var(--w-bg));
+  --ui-chart-3: color-mix(in oklab, var(--w-primary) 58%, var(--w-bg));
+  --ui-chart-4: color-mix(in oklab, var(--w-primary) 40%, var(--w-bg));
+  --ui-chart-5: color-mix(in oklab, var(--w-primary) 24%, var(--w-bg));
+}
+
+/* From Intent UI's own base layer: quiet borders and scrollbars, crisp type. */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--ui-border, currentColor);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--ui-border) transparent;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background-color: var(--ui-bg);
+    color: var(--ui-fg);
+  }
+}
+
+@utility touch-target {
+  position: relative;
+
+  &::before {
+    content: "";
+    position: absolute;
+    display: block;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    height: 100%;
+    min-height: 44px;
+    min-width: 44px;
+    z-index: 9999;
+  }
+}

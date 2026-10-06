@@ -1,3 +1,7 @@
+/* Hand-written styles, in the legacy layer: Intent UI utilities win over them (see globals.css). */
+@layer theme, base, legacy, components, utilities;
+
+@layer legacy {
 /*
  * The administration screens' furniture — forms, key/value blocks, inline
  * action rows and the record-history timeline. Everything is in the
@@ -220,8 +224,8 @@
    field's, in the ink of something you cannot change. Previously these were
    spans carrying class names that are in no stylesheet, which is why they were
    the one unstyled thing in a styled row. */
+/* Rendered beside `.input` (ReadOnlyField): `composes` cannot live inside the legacy layer. */
 .readOnlyBox {
-  composes: input;
   display: flex;
   align-items: center;
   color: var(--text-muted);
@@ -1753,10 +1757,7 @@
 
 /* A date input. The browser draws the calendar; this only makes its button
    findable and keeps the height in line with every other field. */
-.dateInput {
-  composes: input;
-}
-/* The calendar is the point of a date box, so it is drawn in the accent
+/* (Always rendered beside `.input`.) The calendar is the point of a date box, so it is drawn in the accent
    instead of at half opacity — at 55% grey on a grey field it read as
    decoration and people could not find it. */
 .dateInput::-webkit-calendar-picker-indicator {
@@ -1789,35 +1790,40 @@
    .sapPage classes so none of it escapes onto the rest of the application. */
 :global(html:has(.erp-root[data-palette])),
 :global([data-palette]) {
-  --w-bg: #fbfbf4;
-  --w-canvas: #f3f2e9;
-  --w-line: #aeb8ad;
-  --w-line-strong: #87968d;
-  --w-rule: #c7cec3;
-  --w-field: #fffef4;
-  --w-field-ro: #edf1e7;
-  --w-label: #2d4038;
-  --w-text: #17241f;
-  --w-muted: #68766e;
-  --w-title-a: #e5e9e5;
-  --w-title-b: #cdd5d0;
-  --w-title-line: #e0a415;
-  --w-head: #e7ebe3;
-  --w-head-strong: #dbe2d8;
-  --w-filler: #f8f8f0;
-  --w-selected: #fff2af;
-  --w-selected-strong: #f7cf7a;
-  --w-amber-a: #ffd978;
-  --w-amber-b: #e9aa24;
-  --w-amber-line: #b77d0b;
-  --w-focus: #fff5b8;
-  --w-chrome-a: #dfe3dc;
-  --w-chrome-b: #c4ccc2;
-  --w-chrome-line: #a3aea0;
-  --w-chrome-text: #22322a;
-  --w-accent-ink: #3a2600;
+  --w-bg: #ffffff;
+  --w-canvas: #f7f7f5;
+  --w-line: #e7e5e2;
+  --w-line-strong: #d6d3cf;
+  --w-rule: #efedea;
+  --w-field: #ffffff;
+  --w-field-ro: #f5f5f3;
+  --w-label: #44403c;
+  --w-text: #1c1917;
+  --w-muted: #6f6a64;
+  --w-title-a: #ffffff;
+  --w-title-b: #ffffff;
+  --w-head: #fafaf9;
+  --w-head-strong: #f3f2f0;
+  --w-filler: #ffffff;
+  --w-chrome-a: #ffffff;
+  --w-chrome-b: #ffffff;
+  --w-chrome-line: #e7e5e2;
+  --w-chrome-text: #1c1917;
   --w-paper: #ffffff;
-  --w-band: #f6f7f0;
+  --w-band: #fafaf9;
+  --w-primary: #f59e0b;
+  --w-primary-ink: #3b1d02;
+  --w-primary-strong: #a85a06;
+  --w-amber-a: #f59e0b;
+  --w-amber-b: #f59e0b;
+  --w-amber-line: #a85a06;
+  --w-accent-ink: #3b1d02;
+  --w-selected: color-mix(in srgb, #f59e0b 10%, var(--w-bg));
+  --w-selected-strong: color-mix(in srgb, #f59e0b 22%, var(--w-bg));
+  --w-title-line: #f59e0b;
+  --w-focus: var(--w-field);
+  --w-check: #f59e0b;
+  --w-check-ink: #3b1d02;
 
   /* The chips — a document's status, and a figure that is a problem.
      These were four sets of hard-coded pastels, which is why every dark
@@ -1870,7 +1876,7 @@
 .sapDoc,
 .sapPage {
   color: var(--w-text);
-  font-family: Tahoma, "Segoe UI", Arial, sans-serif;
+  font-family: inherit;
   font-size: 0.8rem;
 }
 
@@ -2904,7 +2910,7 @@
 
 .sapPage .sapPageHeader h1 {
   color: var(--w-label);
-  font-family: Tahoma, "Segoe UI", Arial, sans-serif;
+  font-family: inherit;
   font-size: 1.05rem;
   font-weight: 700;
   letter-spacing: 0;
@@ -3018,7 +3024,7 @@
   color: var(--w-label);
   background: linear-gradient(180deg, var(--w-title-a), var(--w-title-b));
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%);
-  font-family: Tahoma, "Segoe UI", Arial, sans-serif;
+  font-family: inherit;
   font-size: 0.75rem;
   font-weight: 700;
 }
@@ -3139,7 +3145,7 @@
   border-radius: var(--w-radius-sm);
   color: var(--w-text);
   background: var(--w-field);
-  font-family: Tahoma, "Segoe UI", Arial, sans-serif;
+  font-family: inherit;
   font-size: 0.78rem;
   box-shadow: none;
 }
@@ -3839,95 +3845,80 @@
    a blue title bar, amber buttons. */
 :global(html:has(.erp-root[data-palette='classic'])),
 :global([data-palette='classic']) {
-  --w-bg: #eef2f7;
-  --w-canvas: #dfe6ee;
-  --w-line: #9fb2c6;
-  --w-line-strong: #7f9db9;
-  --w-rule: #b6c4d3;
+  /* Modernised for the Intent UI redesign: flat title and chrome, lighter lines. */
+  --w-bg: #f9fafc;
+  --w-canvas: #e8edf3;
+  --w-line: #c8d2de;
+  --w-line-strong: #a4b9cd;
+  --w-rule: #d8dfe8;
   --w-field: #ffffff;
-  --w-field-ro: #e7ebf1;
+  --w-field-ro: #eef1f5;
   --w-label: #16344f;
   --w-text: #101d28;
   --w-muted: #4a6076;
-  --w-title-a: #d6e8f6;
-  --w-title-b: #a7cae3;
-  --w-title-line: #3f7fb5;
-  --w-head: #dbe4ed;
-  --w-head-strong: #cfdae6;
-  --w-filler: #eef2f7;
-  --w-selected: #fff2af;
-  --w-selected-strong: #f7cf7a;
-  --w-amber-a: #fbd071;
-  --w-amber-b: #eaa621;
-  --w-amber-line: #b47c12;
-  --w-focus: #ffffcc;
-  --w-chrome-a: #cfe0ef;
-  --w-chrome-b: #9dbfd9;
-  --w-chrome-line: #6f9bbd;
+  --w-title-a: #f9fafc;
+  --w-title-b: #f9fafc;
+  --w-head: #ecf0f5;
+  --w-head-strong: #e0e7ef;
+  --w-filler: #f9fafc;
+  --w-chrome-a: #f9fafc;
+  --w-chrome-b: #f9fafc;
+  --w-chrome-line: #c8d2de;
   --w-chrome-text: #0f3350;
+  --w-paper: #f9fafc;
 }
 
 /* Cooler and quieter than classic, for a room with a lot of screens in it. */
 :global(html:has(.erp-root[data-palette='slate'])),
 :global([data-palette='slate']) {
-  --w-bg: #f4f6f8;
-  --w-canvas: #e3e8ed;
-  --w-line: #a8b3bf;
-  --w-line-strong: #8593a2;
-  --w-rule: #c2cad3;
+  /* Modernised for the Intent UI redesign: flat title and chrome, lighter lines. */
+  --w-bg: #fbfcfd;
+  --w-canvas: #ebeff3;
+  --w-line: #cdd4db;
+  --w-line-strong: #a8b3bd;
+  --w-rule: #dfe3e8;
   --w-field: #ffffff;
-  --w-field-ro: #eaeef2;
+  --w-field-ro: #f1f4f6;
   --w-label: #23323f;
   --w-text: #131c24;
   --w-muted: #566573;
-  --w-title-a: #dde4ea;
-  --w-title-b: #bcc8d3;
-  --w-title-line: #4c667e;
-  --w-head: #dfe5eb;
-  --w-head-strong: #d2dae2;
-  --w-filler: #f2f5f7;
-  --w-selected: #fdf0b8;
-  --w-selected-strong: #f4cd82;
-  --w-amber-a: #cfd8e0;
-  --w-amber-b: #9fb0bf;
-  --w-amber-line: #6f8496;
-  --w-focus: #fff6c9;
-  --w-chrome-a: #d5dde4;
-  --w-chrome-b: #adbcc9;
-  --w-chrome-line: #7c8f9f;
+  --w-title-a: #fbfcfd;
+  --w-title-b: #fbfcfd;
+  --w-head: #eef2f5;
+  --w-head-strong: #e2e8ed;
+  --w-filler: #fbfcfd;
+  --w-chrome-a: #fbfcfd;
+  --w-chrome-b: #fbfcfd;
+  --w-chrome-line: #cdd4db;
   --w-chrome-text: #1d2a35;
+  --w-paper: #fbfcfd;
 }
 
 /* Near-neutral chrome, white paper. The one to pick when the company's own
    colours are doing the talking elsewhere. */
 :global(html:has(.erp-root[data-palette='graphite'])),
 :global([data-palette='graphite']) {
-  --w-bg: #f7f7f6;
-  --w-canvas: #e6e6e4;
-  --w-line: #b0b0ad;
-  --w-line-strong: #8d8d89;
-  --w-rule: #c9c9c5;
+  /* Modernised for the Intent UI redesign: flat title and chrome, lighter lines. */
+  --w-bg: #fcfcfc;
+  --w-canvas: #eeeeec;
+  --w-line: #d2d2d1;
+  --w-line-strong: #aeaeac;
+  --w-rule: #e3e3e1;
   --w-field: #ffffff;
-  --w-field-ro: #eeeeec;
+  --w-field-ro: #f4f4f2;
   --w-label: #2b2b29;
   --w-text: #161615;
   --w-muted: #63635f;
-  --w-title-a: #e4e4e1;
-  --w-title-b: #c9c9c5;
-  --w-title-line: #7a7a75;
-  --w-head: #e6e6e3;
-  --w-head-strong: #dadad6;
-  --w-filler: #f4f4f2;
-  --w-selected: #fbf0bb;
-  --w-selected-strong: #f2cd85;
-  --w-amber-a: #d8d8d4;
-  --w-amber-b: #b4b4af;
-  --w-amber-line: #868681;
-  --w-focus: #fdf7cf;
-  --w-chrome-a: #dededa;
-  --w-chrome-b: #c0c0bb;
-  --w-chrome-line: #8f8f8a;
+  --w-title-a: #fcfcfc;
+  --w-title-b: #fcfcfc;
+  --w-head: #f2f2f1;
+  --w-head-strong: #e8e8e5;
+  --w-filler: #fcfcfc;
+  --w-chrome-a: #fcfcfc;
+  --w-chrome-b: #fcfcfc;
+  --w-chrome-line: #d2d2d1;
   --w-chrome-text: #232320;
+  --w-paper: #fcfcfc;
 }
 
 /* ── Choosing the palette ─────────────────────────────────────────────────
@@ -4210,53 +4201,73 @@
 :global(html:has(.erp-root[data-palette][data-accent='red'])),
 :global([data-palette][data-accent='red']),
 :global([data-accent='red']:not(html)) {
-  --w-amber-a: #f2b6a6;
-  --w-amber-b: #d96a50;
-  --w-amber-line: #a63d26;
-  --w-accent-ink: #3d0f05;
-  --w-selected: #fbe3dc;
-  --w-selected-strong: #f0af9c;
-  --w-title-line: #b4462e;
-  --w-focus: #ffe9e2;
+  --w-primary: #dc2626;
+  --w-primary-ink: #ffffff;
+  --w-primary-strong: #b91c1c;
+  --w-amber-a: #dc2626;
+  --w-amber-b: #dc2626;
+  --w-amber-line: #b91c1c;
+  --w-accent-ink: #ffffff;
+  --w-selected: color-mix(in srgb, #dc2626 10%, var(--w-bg));
+  --w-selected-strong: color-mix(in srgb, #dc2626 22%, var(--w-bg));
+  --w-title-line: #dc2626;
+  --w-focus: var(--w-field);
+  --w-check: #dc2626;
+  --w-check-ink: #ffffff;
 }
 
 :global(html:has(.erp-root[data-palette][data-accent='blue'])),
 :global([data-palette][data-accent='blue']),
 :global([data-accent='blue']:not(html)) {
-  --w-amber-a: #c6ddf3;
-  --w-amber-b: #6f9fce;
-  --w-amber-line: #37678f;
-  --w-accent-ink: #0d2740;
-  --w-selected: #e0edfa;
-  --w-selected-strong: #accdea;
-  --w-title-line: #3d76a3;
-  --w-focus: #e9f3fd;
+  --w-primary: #155dfc;
+  --w-primary-ink: #ffffff;
+  --w-primary-strong: #1447e6;
+  --w-amber-a: #155dfc;
+  --w-amber-b: #155dfc;
+  --w-amber-line: #1447e6;
+  --w-accent-ink: #ffffff;
+  --w-selected: color-mix(in srgb, #155dfc 10%, var(--w-bg));
+  --w-selected-strong: color-mix(in srgb, #155dfc 22%, var(--w-bg));
+  --w-title-line: #155dfc;
+  --w-focus: var(--w-field);
+  --w-check: #155dfc;
+  --w-check-ink: #ffffff;
 }
 
 :global(html:has(.erp-root[data-palette][data-accent='green'])),
 :global([data-palette][data-accent='green']),
 :global([data-accent='green']:not(html)) {
-  --w-amber-a: #c4e3bd;
-  --w-amber-b: #6da868;
-  --w-amber-line: #39702f;
-  --w-accent-ink: #0e260b;
-  --w-selected: #e2f2dd;
-  --w-selected-strong: #abd6a1;
-  --w-title-line: #417f38;
-  --w-focus: #edf7e9;
+  --w-primary: #15803d;
+  --w-primary-ink: #ffffff;
+  --w-primary-strong: #166534;
+  --w-amber-a: #15803d;
+  --w-amber-b: #15803d;
+  --w-amber-line: #166534;
+  --w-accent-ink: #ffffff;
+  --w-selected: color-mix(in srgb, #15803d 10%, var(--w-bg));
+  --w-selected-strong: color-mix(in srgb, #15803d 22%, var(--w-bg));
+  --w-title-line: #15803d;
+  --w-focus: var(--w-field);
+  --w-check: #15803d;
+  --w-check-ink: #ffffff;
 }
 
 :global(html:has(.erp-root[data-palette][data-accent='purple'])),
 :global([data-palette][data-accent='purple']),
 :global([data-accent='purple']:not(html)) {
-  --w-amber-a: #d9ccee;
-  --w-amber-b: #977bc9;
-  --w-amber-line: #644a99;
-  --w-accent-ink: #1e1136;
-  --w-selected: #ece5f7;
-  --w-selected-strong: #c2addf;
-  --w-title-line: #6f55a6;
-  --w-focus: #f3eefb;
+  --w-primary: #9333ea;
+  --w-primary-ink: #ffffff;
+  --w-primary-strong: #7e22ce;
+  --w-amber-a: #9333ea;
+  --w-amber-b: #9333ea;
+  --w-amber-line: #7e22ce;
+  --w-accent-ink: #ffffff;
+  --w-selected: color-mix(in srgb, #9333ea 10%, var(--w-bg));
+  --w-selected-strong: color-mix(in srgb, #9333ea 22%, var(--w-bg));
+  --w-title-line: #9333ea;
+  --w-focus: var(--w-field);
+  --w-check: #9333ea;
+  --w-check-ink: #ffffff;
 }
 
 /* ── Choosing the accent ──────────────────────────────────────────────────
@@ -4516,31 +4527,25 @@
    the same way they do in the light. */
 :global(html:has(.erp-root[data-palette='midnight'])),
 :global([data-palette='midnight']) {
+  /* Modernised for the Intent UI redesign: flat title and chrome, lighter lines. */
   --w-bg: #1d232a;
   --w-canvas: #151a20;
-  --w-line: #3a4550;
+  --w-line: #313b45;
   --w-line-strong: #4d5a66;
-  --w-rule: #333e48;
+  --w-rule: #2b353e;
   --w-field: #232b33;
   --w-field-ro: #20272e;
   --w-label: #d3dde5;
   --w-text: #e6edf3;
   --w-muted: #8b98a5;
-  --w-title-a: #2a333c;
-  --w-title-b: #1f272e;
-  --w-title-line: #b98c1e;
-  --w-head: #2a333c;
+  --w-title-a: #1d232a;
+  --w-title-b: #1d232a;
+  --w-head: #252d35;
   --w-head-strong: #313c46;
   --w-filler: #1a2027;
-  --w-selected: #3f3a1f;
-  --w-selected-strong: #6b5a23;
-  --w-amber-a: #ffd978;
-  --w-amber-b: #e9aa24;
-  --w-amber-line: #b77d0b;
-  --w-focus: #4a431f;
-  --w-chrome-a: #242c34;
-  --w-chrome-b: #1a2128;
-  --w-chrome-line: #0e1317;
+  --w-chrome-a: #1d232a;
+  --w-chrome-b: #1d232a;
+  --w-chrome-line: #313b45;
   --w-chrome-text: #dfe7ee;
   --w-paper: #262e35;
   --w-band: #222932;
@@ -4548,31 +4553,25 @@
 
 :global(html:has(.erp-root[data-palette='carbon'])),
 :global([data-palette='carbon']) {
+  /* Modernised for the Intent UI redesign: flat title and chrome, lighter lines. */
   --w-bg: #222220;
   --w-canvas: #191918;
-  --w-line: #40403d;
+  --w-line: #373734;
   --w-line-strong: #55554f;
-  --w-rule: #383835;
+  --w-rule: #30302e;
   --w-field: #2a2a28;
   --w-field-ro: #262624;
   --w-label: #ddddd8;
   --w-text: #ecece8;
   --w-muted: #97978f;
-  --w-title-a: #2e2e2b;
-  --w-title-b: #232321;
-  --w-title-line: #b98c1e;
-  --w-head: #2d2d2a;
+  --w-title-a: #222220;
+  --w-title-b: #222220;
+  --w-head: #292926;
   --w-head-strong: #343431;
   --w-filler: #1f1f1d;
-  --w-selected: #3e3a22;
-  --w-selected-strong: #665827;
-  --w-amber-a: #ffd978;
-  --w-amber-b: #e9aa24;
-  --w-amber-line: #b77d0b;
-  --w-focus: #45401f;
-  --w-chrome-a: #2b2b28;
-  --w-chrome-b: #202020;
-  --w-chrome-line: #111110;
+  --w-chrome-a: #222220;
+  --w-chrome-b: #222220;
+  --w-chrome-line: #373734;
   --w-chrome-text: #e4e4df;
   --w-paper: #2c2c29;
   --w-band: #272724;
@@ -4580,63 +4579,51 @@
 
 :global(html:has(.erp-root[data-palette='pearl'])),
 :global([data-palette='pearl']) {
+  /* Modernised for the Intent UI redesign: flat title and chrome, lighter lines. */
   --w-bg: #ffffff;
-  --w-canvas: #f3f5f9;
-  --w-line: #c8d2df;
-  --w-line-strong: #8b9cb2;
-  --w-rule: #dce3ed;
+  --w-canvas: #f7f9fb;
+  --w-line: #e1e6ed;
+  --w-line-strong: #aebac9;
+  --w-rule: #eef1f6;
   --w-field: #ffffff;
-  --w-field-ro: #f1f4f8;
+  --w-field-ro: #f7f8fb;
   --w-label: #30415a;
   --w-text: #1c2940;
   --w-muted: #607087;
   --w-title-a: #ffffff;
-  --w-title-b: #e8edf5;
-  --w-title-line: #e0a415;
-  --w-head: #edf1f7;
-  --w-head-strong: #e3eaf3;
-  --w-filler: #f8fafd;
-  --w-selected: #fff2af;
-  --w-selected-strong: #f7cf7a;
-  --w-amber-a: #ffd978;
-  --w-amber-b: #e9aa24;
-  --w-amber-line: #b77d0b;
-  --w-focus: #fff5b8;
+  --w-title-b: #ffffff;
+  --w-head: #f7f9fb;
+  --w-head-strong: #eef2f8;
+  --w-filler: #ffffff;
   --w-chrome-a: #ffffff;
-  --w-chrome-b: #edf1f7;
-  --w-chrome-line: #c8d2df;
+  --w-chrome-b: #ffffff;
+  --w-chrome-line: #e1e6ed;
   --w-chrome-text: #30415a;
   --w-paper: #ffffff;
-  --w-band: #f6f8fc;
+  --w-band: #fbfcfe;
 }
 
 :global(html:has(.erp-root[data-palette='ocean'])),
 :global([data-palette='ocean']) {
+  /* Modernised for the Intent UI redesign: flat title and chrome, lighter lines. */
   --w-bg: #142b3b;
   --w-canvas: #0b1b29;
-  --w-line: #35546a;
+  --w-line: #2b485c;
   --w-line-strong: #52748b;
-  --w-rule: #294557;
+  --w-rule: #223c4d;
   --w-field: #193447;
   --w-field-ro: #172e3f;
   --w-label: #d2e7f2;
   --w-text: #edf7fc;
   --w-muted: #9cb9ca;
-  --w-title-a: #23465a;
-  --w-title-b: #183748;
-  --w-title-line: #e9aa24;
-  --w-head: #1e3c4f;
+  --w-title-a: #142b3b;
+  --w-title-b: #142b3b;
+  --w-head: #1a3547;
   --w-head-strong: #284b60;
   --w-filler: #102635;
-  --w-selected: #394334;
-  --w-selected-strong: #57593a;
-  --w-amber-a: #ffd978;
-  --w-amber-b: #e9aa24;
-  --w-amber-line: #b77d0b;
-  --w-focus: #354433;
-  --w-chrome-a: #1b384b;
-  --w-chrome-b: #102738;
-  --w-chrome-line: #294b61;
+  --w-chrome-a: #142b3b;
+  --w-chrome-b: #142b3b;
+  --w-chrome-line: #2b485c;
   --w-chrome-text: #dceef7;
   --w-paper: #193244;
   --w-band: #173041;
@@ -4644,24 +4631,25 @@
 
 :global(html:has(.erp-root[data-palette='obsidian_plum'])),
 :global([data-palette='obsidian_plum']) {
+  /* Modernised for the Intent UI redesign: flat title and chrome, lighter lines. */
   --w-canvas: #1b1622;
   --w-bg: #292131;
-  --w-line: #53445f;
+  --w-line: #463a51;
   --w-line-strong: #786484;
-  --w-rule: #493b54;
+  --w-rule: #3e3248;
   --w-field: #342b3e;
   --w-field-ro: #2d2535;
   --w-text: #f4eef7;
   --w-label: #e8dcef;
   --w-muted: #bcabc7;
-  --w-title-a: #43334e;
-  --w-title-b: #34283e;
-  --w-head: #3a2e44;
+  --w-title-a: #292131;
+  --w-title-b: #292131;
+  --w-head: #33293c;
   --w-head-strong: #4a3956;
   --w-filler: #251d2d;
-  --w-chrome-a: #392b44;
-  --w-chrome-b: #251d2d;
-  --w-chrome-line: #51405e;
+  --w-chrome-a: #292131;
+  --w-chrome-b: #292131;
+  --w-chrome-line: #463a51;
   --w-chrome-text: #efe4f5;
   --w-paper: #2e2537;
   --w-band: #31273a;
@@ -4669,24 +4657,25 @@
 
 :global(html:has(.erp-root[data-palette='evergreen'])),
 :global([data-palette='evergreen']) {
+  /* Modernised for the Intent UI redesign: flat title and chrome, lighter lines. */
   --w-canvas: #101e19;
   --w-bg: #1c2e25;
-  --w-line: #3d594a;
+  --w-line: #334c3f;
   --w-line-strong: #62816f;
-  --w-rule: #344e40;
+  --w-rule: #2c4337;
   --w-field: #263c30;
   --w-field-ro: #213328;
   --w-text: #edf6ee;
   --w-label: #d7e9da;
   --w-muted: #a7c1ad;
-  --w-title-a: #304d3c;
-  --w-title-b: #243c2e;
-  --w-head: #2a4434;
+  --w-title-a: #1c2e25;
+  --w-title-b: #1c2e25;
+  --w-head: #243b2e;
   --w-head-strong: #365440;
   --w-filler: #18291f;
-  --w-chrome-a: #284434;
-  --w-chrome-b: #182b21;
-  --w-chrome-line: #395544;
+  --w-chrome-a: #1c2e25;
+  --w-chrome-b: #1c2e25;
+  --w-chrome-line: #334c3f;
   --w-chrome-text: #e2f0e5;
   --w-paper: #20372a;
   --w-band: #243a2d;
@@ -4694,24 +4683,25 @@
 
 :global(html:has(.erp-root[data-palette='espresso'])),
 :global([data-palette='espresso']) {
+  /* Modernised for the Intent UI redesign: flat title and chrome, lighter lines. */
   --w-canvas: #211914;
   --w-bg: #30251e;
-  --w-line: #605044;
+  --w-line: #524339;
   --w-line-strong: #897262;
-  --w-rule: #534337;
+  --w-rule: #47392e;
   --w-field: #3d3027;
   --w-field-ro: #362a22;
   --w-text: #f7efe3;
   --w-label: #ecddca;
   --w-muted: #c7b29b;
-  --w-title-a: #4d3a2c;
-  --w-title-b: #3b2d23;
-  --w-head: #433326;
+  --w-title-a: #30251e;
+  --w-title-b: #30251e;
+  --w-head: #3b2d23;
   --w-head-strong: #554031;
   --w-filler: #2a2019;
-  --w-chrome-a: #443225;
-  --w-chrome-b: #2c211a;
-  --w-chrome-line: #5b4636;
+  --w-chrome-a: #30251e;
+  --w-chrome-b: #30251e;
+  --w-chrome-line: #524339;
   --w-chrome-text: #f1e4d1;
   --w-paper: #362a22;
   --w-band: #3a2d24;
@@ -4719,24 +4709,25 @@
 
 :global(html:has(.erp-root[data-palette='lunar_slate'])),
 :global([data-palette='lunar_slate']) {
+  /* Modernised for the Intent UI redesign: flat title and chrome, lighter lines. */
   --w-canvas: #222935;
   --w-bg: #2e3745;
-  --w-line: #55647a;
+  --w-line: #49576a;
   --w-line-strong: #8190a5;
-  --w-rule: #48576b;
+  --w-rule: #3f4c5e;
   --w-field: #394555;
   --w-field-ro: #323d4c;
   --w-text: #f3f6fb;
   --w-label: #e0e8f3;
   --w-muted: #b4c2d4;
-  --w-title-a: #455369;
-  --w-title-b: #354154;
-  --w-head: #3b485b;
+  --w-title-a: #2e3745;
+  --w-title-b: #2e3745;
+  --w-head: #364152;
   --w-head-strong: #4a5970;
   --w-filler: #293240;
-  --w-chrome-a: #3c495e;
-  --w-chrome-b: #2b3545;
-  --w-chrome-line: #526177;
+  --w-chrome-a: #2e3745;
+  --w-chrome-b: #2e3745;
+  --w-chrome-line: #49576a;
   --w-chrome-text: #e6edf8;
   --w-paper: #333f50;
   --w-band: #354153;
@@ -4744,165 +4735,176 @@
 
 :global(html:has(.erp-root[data-palette='ivory_linen'])),
 :global([data-palette='ivory_linen']) {
-  --w-canvas: #f2ece0;
-  --w-bg: #fffcf5;
-  --w-line: #cec2ae;
-  --w-line-strong: #a7977e;
-  --w-rule: #e1d7c6;
-  --w-field: #fffef9;
-  --w-field-ro: #f1eadc;
+  /* Modernised for the Intent UI redesign: flat title and chrome, lighter lines. */
+  --w-canvas: #f7f2ea;
+  --w-bg: #fffefc;
+  --w-line: #e4ddd1;
+  --w-line-strong: #c1b6a4;
+  --w-rule: #f0ebe1;
+  --w-field: #fffffd;
+  --w-field-ro: #f7f2e9;
   --w-text: #302a21;
   --w-label: #4b4031;
   --w-muted: #665642;
-  --w-title-a: #faf4e7;
-  --w-title-b: #e7dcc7;
-  --w-head: #f0e7d6;
-  --w-head-strong: #e7dbc5;
-  --w-filler: #f9f4ea;
-  --w-chrome-a: #faf4e9;
-  --w-chrome-b: #e8ddc9;
-  --w-chrome-line: #cbbda4;
+  --w-title-a: #fffefc;
+  --w-title-b: #fffefc;
+  --w-head: #f8f4eb;
+  --w-head-strong: #f1e9db;
+  --w-filler: #fffefc;
+  --w-chrome-a: #fffefc;
+  --w-chrome-b: #fffefc;
+  --w-chrome-line: #e4ddd1;
   --w-chrome-text: #4b4031;
-  --w-paper: #fffdf8;
-  --w-band: #f7f1e6;
+  --w-paper: #fffefd;
+  --w-band: #fbf8f1;
 }
 
 :global(html:has(.erp-root[data-palette='glacier'])),
 :global([data-palette='glacier']) {
-  --w-canvas: #eaf3f8;
+  /* Modernised for the Intent UI redesign: flat title and chrome, lighter lines. */
+  --w-canvas: #f1f7fa;
   --w-bg: #ffffff;
-  --w-line: #bed1df;
-  --w-line-strong: #829eb2;
-  --w-rule: #d4e4ed;
+  --w-line: #dbe6ed;
+  --w-line-strong: #a8bbc9;
+  --w-rule: #eaf2f6;
   --w-field: #ffffff;
-  --w-field-ro: #eaf2f8;
+  --w-field-ro: #f2f7fb;
   --w-text: #1b3044;
   --w-label: #29495f;
   --w-muted: #496175;
-  --w-title-a: #f3faff;
-  --w-title-b: #d5e8f4;
-  --w-head: #e3f0f8;
-  --w-head-strong: #d3e6f2;
-  --w-filler: #f5fafe;
-  --w-chrome-a: #f5fbff;
-  --w-chrome-b: #d9eaf5;
-  --w-chrome-line: #b9cfdc;
+  --w-title-a: #ffffff;
+  --w-title-b: #ffffff;
+  --w-head: #f2f8fc;
+  --w-head-strong: #e5f0f7;
+  --w-filler: #ffffff;
+  --w-chrome-a: #ffffff;
+  --w-chrome-b: #ffffff;
+  --w-chrome-line: #dbe6ed;
   --w-chrome-text: #29495f;
   --w-paper: #ffffff;
-  --w-band: #f1f7fc;
+  --w-band: #f8fbfe;
 }
 
 :global(html:has(.erp-root[data-palette='sage_white'])),
 :global([data-palette='sage_white']) {
-  --w-canvas: #edf3ec;
-  --w-bg: #fcfefb;
-  --w-line: #c1d0be;
-  --w-line-strong: #899f86;
-  --w-rule: #d9e3d6;
+  /* Modernised for the Intent UI redesign: flat title and chrome, lighter lines. */
+  --w-canvas: #f3f7f2;
+  --w-bg: #fefffe;
+  --w-line: #dce5db;
+  --w-line-strong: #acbcaa;
+  --w-rule: #ecf1ea;
   --w-field: #ffffff;
-  --w-field-ro: #eaf1e7;
+  --w-field-ro: #f2f7f0;
   --w-text: #25352a;
   --w-label: #354e3b;
   --w-muted: #4e6651;
-  --w-title-a: #f4f8f0;
-  --w-title-b: #dbe7d4;
-  --w-head: #e7efdf;
-  --w-head-strong: #d8e4cf;
-  --w-filler: #f5f8f1;
-  --w-chrome-a: #f3f8ef;
-  --w-chrome-b: #dfe9d7;
-  --w-chrome-line: #bacdb5;
+  --w-title-a: #fefffe;
+  --w-title-b: #fefffe;
+  --w-head: #f4f8f0;
+  --w-head-strong: #e7efe2;
+  --w-filler: #fefffe;
+  --w-chrome-a: #fefffe;
+  --w-chrome-b: #fefffe;
+  --w-chrome-line: #dce5db;
   --w-chrome-text: #354e3b;
-  --w-paper: #fefffc;
-  --w-band: #f1f6ec;
+  --w-paper: #fffffe;
+  --w-band: #f8fbf5;
 }
 
 :global(html:has(.erp-root[data-palette='porcelain_rose'])),
 :global([data-palette='porcelain_rose']) {
-  --w-canvas: #f5eff1;
-  --w-bg: #fffcfd;
-  --w-line: #d7c3cb;
-  --w-line-strong: #ab8b98;
-  --w-rule: #e8d8df;
+  /* Modernised for the Intent UI redesign: flat title and chrome, lighter lines. */
+  --w-canvas: #f9f4f6;
+  --w-bg: #fffefe;
+  --w-line: #e9dee2;
+  --w-line-strong: #c4aeb7;
+  --w-rule: #f4ebef;
   --w-field: #ffffff;
-  --w-field-ro: #f4eaf0;
+  --w-field-ro: #f8f2f6;
   --w-text: #392b36;
   --w-label: #573e50;
   --w-muted: #715568;
-  --w-title-a: #fff6f9;
-  --w-title-b: #edd8e1;
-  --w-head: #f3e5eb;
-  --w-head-strong: #e9d3de;
-  --w-filler: #fcf6f8;
-  --w-chrome-a: #fff8fa;
-  --w-chrome-b: #efdee5;
-  --w-chrome-line: #d5bfc9;
+  --w-title-a: #fffefe;
+  --w-title-b: #fffefe;
+  --w-head: #faf3f5;
+  --w-head-strong: #f2e4eb;
+  --w-filler: #fffefe;
+  --w-chrome-a: #fffefe;
+  --w-chrome-b: #fffefe;
+  --w-chrome-line: #e9dee2;
   --w-chrome-text: #573e50;
-  --w-paper: #fffefe;
-  --w-band: #faf0f4;
+  --w-paper: #ffffff;
+  --w-band: #fdf7f9;
 }
 
 :global(html:has(.erp-root[data-palette='dune_bronze'])),
 :global([data-palette='dune_bronze']) {
-  --w-canvas: #c8b99f;
-  --w-bg: #e0d5c2;
-  --w-line: #ab997d;
-  --w-line-strong: #806e51;
-  --w-rule: #c0af94;
-  --w-field: #eee4d2;
-  --w-field-ro: #d4c7b0;
+  /* Modernised for the Intent UI redesign: flat title and chrome, lighter lines. */
+  --w-canvas: #d7ccb9;
+  --w-bg: #f4f0ea;
+  --w-line: #ccc0ae;
+  --w-line-strong: #a3957f;
+  --w-rule: #dad0bf;
+  --w-field: #faf7f2;
+  --w-field-ro: #e1d7c7;
   --w-text: #30291f;
   --w-label: #3d3324;
   --w-muted: #473b29;
-  --w-title-a: #cbbb9e;
-  --w-title-b: #b5a58a;
-  --w-head: #d0c1a6;
-  --w-head-strong: #c3b191;
-  --w-filler: #d7cbb5;
-  --w-chrome-a: #cdbda1;
-  --w-chrome-b: #b5a58a;
-  --w-chrome-line: #948165;
+  --w-title-a: #f4f0ea;
+  --w-title-b: #f4f0ea;
+  --w-head: #e4dbcb;
+  --w-head-strong: #d7cab5;
+  --w-filler: #f4f0ea;
+  --w-chrome-a: #f4f0ea;
+  --w-chrome-b: #f4f0ea;
+  --w-chrome-line: #ccc0ae;
   --w-chrome-text: #30291f;
-  --w-paper: #e8decb;
-  --w-band: #dbcfb7;
+  --w-paper: #f7f3ed;
+  --w-band: #e8e0d1;
 }
 
 :global(html:has(.erp-root[data-palette='harbor_mist'])),
 :global([data-palette='harbor_mist']) {
-  --w-canvas: #a5b5be;
-  --w-bg: #ccd6db;
-  --w-line: #8da1ad;
-  --w-line-strong: #637e8c;
-  --w-rule: #a5b8c1;
-  --w-field: #dde6eb;
-  --w-field-ro: #bfccd3;
+  /* Modernised for the Intent UI redesign: flat title and chrome, lighter lines. */
+  --w-canvas: #becad0;
+  --w-bg: #edf1f2;
+  --w-line: #b8c5cc;
+  --w-line-strong: #8ca1ab;
+  --w-rule: #c9d5da;
+  --w-field: #f5f8f9;
+  --w-field-ro: #d1dbdf;
   --w-text: #1d303b;
   --w-label: #213641;
   --w-muted: #293a44;
-  --w-title-a: #b3c3cc;
-  --w-title-b: #91a5b0;
-  --w-head: #b8c9d2;
-  --w-head-strong: #a7bbc7;
-  --w-filler: #c2cfd6;
-  --w-chrome-a: #b5c6d0;
-  --w-chrome-b: #91a5b0;
-  --w-chrome-line: #738e9e;
+  --w-title-a: #edf1f2;
+  --w-title-b: #edf1f2;
+  --w-head: #d5dfe4;
+  --w-head-strong: #c3d1d8;
+  --w-filler: #edf1f2;
+  --w-chrome-a: #edf1f2;
+  --w-chrome-b: #edf1f2;
+  --w-chrome-line: #b8c5cc;
   --w-chrome-text: #1d303b;
-  --w-paper: #d4dee4;
-  --w-band: #c3d0d8;
+  --w-paper: #f0f3f6;
+  --w-band: #d8e1e5;
 }
 
 :global(html:has(.erp-root[data-palette][data-accent='gold'])),
 :global([data-palette][data-accent='gold']),
 :global([data-accent='gold']:not(html)) {
-  --w-amber-a: #ffd978;
-  --w-amber-b: #e9aa24;
-  --w-amber-line: #b77d0b;
-  --w-accent-ink: #3a2600;
-  --w-selected: #fff2af;
-  --w-selected-strong: #f7cf7a;
-  --w-title-line: #e0a415;
-  --w-focus: #fff5b8;
+  --w-primary: #f59e0b;
+  --w-primary-ink: #3b1d02;
+  --w-primary-strong: #a85a06;
+  --w-amber-a: #f59e0b;
+  --w-amber-b: #f59e0b;
+  --w-amber-line: #a85a06;
+  --w-accent-ink: #3b1d02;
+  --w-selected: color-mix(in srgb, #f59e0b 10%, var(--w-bg));
+  --w-selected-strong: color-mix(in srgb, #f59e0b 22%, var(--w-bg));
+  --w-title-line: #f59e0b;
+  --w-focus: var(--w-field);
+  --w-check: #f59e0b;
+  --w-check-ink: #3b1d02;
 }
 
 :global(html:has(.erp-root[data-palette])),
@@ -4943,8 +4945,9 @@
   --input: var(--w-line-strong);
   --ring: var(--w-title-line);
   --focus-ring: 0 0 0 2px var(--w-title-line);
-  --w-check: #e9aa24;
-  --w-check-ink: #ffffff;
+  /* The checkbox wears the accent (the Intent UI redesign, 2026-10-06). */
+  --w-check: var(--w-primary);
+  --w-check-ink: var(--w-primary-ink);
   --w-color-scheme: light;
   color-scheme: var(--w-color-scheme);
 }
@@ -4971,7 +4974,7 @@
 :global([data-palette='espresso']),
 :global([data-palette='lunar_slate']) {
   --w-color-scheme: dark;
-  --w-check-ink: #17241f;
+  --w-check-ink: var(--w-primary-ink);
   --w-selected: color-mix(in srgb, var(--w-amber-b) 18%, var(--w-bg));
   --w-selected-strong: color-mix(in srgb, var(--w-amber-b) 28%, var(--w-bg));
   --w-focus: color-mix(in srgb, var(--w-amber-b) 16%, var(--w-field));
@@ -5891,4 +5894,5 @@
 
 .chartWide .chartSvg {
   block-size: 12rem;
+}
 }

@@ -1,3 +1,7 @@
+/* Hand-written styles, in the legacy layer: Intent UI utilities win over them (see globals.css). */
+@layer theme, base, legacy, components, utilities;
+
+@layer legacy {
 /*
  * Sign-in — the first screen anyone sees.
  *
@@ -19,7 +23,7 @@
   min-block-size: 100dvh;
   background: var(--w-canvas);
   color: var(--w-text);
-  font-family: Tahoma, "Segoe UI", Arial, sans-serif;
+  font-family: inherit;
   font-size: 0.8rem;
   color-scheme: light;
 }
@@ -348,4 +352,5 @@
   .body {
     padding: 1.25rem;
   }
+}
 }

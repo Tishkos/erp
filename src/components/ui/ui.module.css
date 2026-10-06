@@ -1,3 +1,7 @@
+/* Hand-written styles, in the legacy layer: Intent UI utilities win over them (see globals.css). */
+@layer theme, base, legacy, components, utilities;
+
+@layer legacy {
 /*
  * Shared admin UI primitives.
  *
@@ -803,4 +807,5 @@ html[dir="rtl"] .directionalIcon {
 html[lang="ar"] .dialogBadge {
   letter-spacing: 0;
   text-transform: none;
+}
 }

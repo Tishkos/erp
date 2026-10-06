@@ -1,14 +1,25 @@
 /*
- * Tailwind, without preflight. The application's own base styles are the
- * hand-written rules below; Tailwind's reset would undo them everywhere.
- * Only the theme and the utilities are imported, for the shadcn/ui
- * components (sign-in form) that are written against them.
+ * The cascade, in order (2026-10-06, the Intent UI redesign):
+ *
+ *   theme      Tailwind's design tokens
+ *   base       Tailwind's reset (preflight) — below everything hand-written
+ *   legacy     the application's own stylesheets, as they were, wrapped
+ *   components
+ *   utilities  Tailwind's utilities — Intent UI's components are written in
+ *              them, so they win over a legacy rule that happens to match
+ *
+ * Each stylesheet that holds a legacy layer repeats the order line first, so
+ * whichever the browser reads first fixes the same order.
  */
+@layer theme, base, legacy, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
 @import "tailwindcss/utilities.css" layer(utilities);
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "./intent-theme.css";
 
+@layer legacy {
 :root {
   color-scheme: light;
 
@@ -3292,38 +3303,6 @@ html[dir="rtl"] .coa-directional-icon {
   color: var(--danger, #b42318);
   background: var(--danger-soft, rgba(180, 35, 24, 0.08));
 }
-@theme inline {
-  --color-surface: var(--surface);
-  --color-accent-soft: var(--accent-soft);
-  --color-accent-border: var(--accent-border);
-  --color-border-strong: var(--border-strong);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --color-foreground: var(--foreground);
-  --color-background: var(--background);
-}
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-}
 
 /* User menu — a real account menu: identity, then actions, then sign out. */
 .erp-user-panel__identity {
@@ -3830,7 +3809,7 @@ html[dir="rtl"] .coa-directional-icon {
    than fight; anything not restated here is deliberately left alone. */
 
 .erp-shell {
-  font-family: Tahoma, "Segoe UI", Arial, sans-serif;
+  font-family: inherit;
 }
 
 .erp-header {
@@ -4748,4 +4727,5 @@ html:has([data-palette]) body {
 
 .erp-appearance-preview[data-appearance="studio"] .erp-appearance-preview__title {
   block-size: 0.32rem;
+}
 }

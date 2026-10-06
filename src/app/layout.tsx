@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { Inter, Noto_Sans_Arabic, Geist } from 'next/font/google';
+import { Inter, Noto_Sans_Arabic } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 import { directionOf } from '@/i18n/config';
@@ -8,8 +8,7 @@ import { clientMessages } from '@/i18n/client-messages';
 import './globals.css';
 import { cn } from "@/lib/utils";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
-
+// Inter is the face (Intent UI's own); Noto Sans Arabic carries the Arabic. `--font-sans` is built from both (globals.css).
 const inter = Inter({
   subsets: ['latin'],
   display: 'swap',
@@ -56,7 +55,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
 
   return (
     <html
-      className={cn(inter.variable, notoSansArabic.variable, "font-sans", geist.variable)}
+      className={cn(inter.variable, notoSansArabic.variable, "font-sans")}
       lang={locale}
       dir={directionOf(locale)}
       data-theme="light"

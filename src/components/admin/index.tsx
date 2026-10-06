@@ -211,7 +211,7 @@ export function ReadOnlyField({
   return (
     <div className={styles.field}>
       <span className={styles.label}>{label}</span>
-      <span aria-readonly="true" className={styles.readOnlyBox}>
+      <span aria-readonly="true" className={`${styles.input} ${styles.readOnlyBox}`}>
         {value}
       </span>
     </div>

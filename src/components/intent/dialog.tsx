@@ -1,0 +1,154 @@
+"use client"
+
+import { XMarkIcon } from "@/components/intent/icons"
+import { Button as PrimitiveButton } from "react-aria-components/Button"
+import { Dialog as PrimitiveDialog } from "react-aria-components/Dialog"
+import { Heading, type HeadingProps } from "react-aria-components/Heading"
+import type { TextProps } from "react-aria-components/Text"
+import { cn } from "@/components/intent/cn"
+import { cx } from "@/components/intent/primitive"
+import { Button, type ButtonProps } from "./button"
+
+const Dialog = ({
+  role = "dialog",
+  className,
+  ...props
+}: React.ComponentProps<typeof PrimitiveDialog>) => {
+  return (
+    <PrimitiveDialog
+      data-slot="dialog"
+      role={role}
+      className={cn(
+        "peer/dialog group/dialog relative flex max-h-[calc(var(--visual-viewport-height)-var(--visual-viewport-vertical-padding))] flex-col overflow-hidden outline-hidden [--gutter:--spacing(6)] sm:[--gutter:--spacing(8)]",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+const DialogTrigger = ({ className, ...props }: ButtonProps) => (
+  <PrimitiveButton className={cx("cursor-pointer", className)} {...props} />
+)
+
+interface DialogHeaderProps extends Omit<React.ComponentProps<"div">, "title"> {
+  title?: string
+  description?: string
+}
+
+const DialogHeader = ({ className, ...props }: DialogHeaderProps) => {
+  return (
+    <div
+      data-slot="dialog-header"
+      className={cn(
+        "relative space-y-1 p-(--gutter) pb-[calc(var(--gutter)---spacing(3))]",
+        className
+      )}
+    >
+      {props.title && <DialogTitle>{props.title}</DialogTitle>}
+      {props.description && <DialogDescription>{props.description}</DialogDescription>}
+      {!props.title && typeof props.children === "string" ? (
+        <DialogTitle>{props.children}</DialogTitle>
+      ) : (
+        props.children
+      )}
+    </div>
+  )
+}
+
+interface DialogTitleProps extends HeadingProps {
+  ref?: React.Ref<HTMLHeadingElement>
+}
+const DialogTitle = ({ className, ref, ...props }: DialogTitleProps) => (
+  <Heading
+    slot="title"
+    ref={ref}
+    className={cn("text-balance font-semibold text-fg text-lg/6 sm:text-base/6", className)}
+    {...props}
+  />
+)
+
+interface DialogDescriptionProps extends TextProps {
+  ref?: React.Ref<HTMLDivElement>
+}
+const DialogDescription = ({ className, ref, ...props }: DialogDescriptionProps) => (
+  <p
+    data-slot="description"
+    className={cn(
+      "text-pretty text-base/6 text-muted-fg group-disabled:opacity-50 sm:text-sm/6",
+      className
+    )}
+    ref={ref}
+    {...props}
+  />
+)
+
+interface DialogBodyProps extends React.ComponentProps<"div"> {}
+const DialogBody = ({ className, ...props }: DialogBodyProps) => (
+  <div
+    data-slot="dialog-body"
+    className={cn(
+      "isolate flex min-h-0 flex-1 flex-col overflow-auto px-(--gutter) py-1",
+      "**:data-[slot=dialog-footer]:px-0 **:data-[slot=dialog-footer]:pt-0",
+      className
+    )}
+    {...props}
+  />
+)
+
+interface DialogFooterProps extends React.ComponentProps<"div"> {}
+const DialogFooter = ({ className, ...props }: DialogFooterProps) => {
+  return (
+    <div
+      data-slot="dialog-footer"
+      className={cn(
+        "isolate mt-auto flex flex-col-reverse justify-end gap-3 p-(--gutter) pt-[calc(var(--gutter)---spacing(2))] group-not-has-data-[slot=dialog-body]/dialog:pt-0 group-not-has-data-[slot=dialog-body]/popover:pt-0 sm:flex-row",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+const DialogClose = ({ intent = "plain", ...props }: ButtonProps) => {
+  return <Button slot="close" intent={intent} {...props} />
+}
+
+interface CloseButtonIndicatorProps extends Omit<ButtonProps, "children"> {
+  className?: string
+  isDismissable?: boolean | undefined
+}
+
+const DialogCloseIcon = ({ className, ...props }: CloseButtonIndicatorProps) => {
+  return props.isDismissable ? (
+    <PrimitiveButton
+      slot="close"
+      className={cx(
+        "close absolute end-1 top-1 z-50 grid size-8 place-content-center rounded-xl hover:bg-secondary focus:bg-secondary focus:outline-hidden focus-visible:ring-1 focus-visible:ring-primary sm:end-2 sm:top-2 sm:size-7 sm:rounded-md",
+        className
+      )}
+    >
+      <XMarkIcon className="size-4" />
+    </PrimitiveButton>
+  ) : null
+}
+
+export type {
+  CloseButtonIndicatorProps,
+  DialogBodyProps,
+  DialogDescriptionProps,
+  DialogFooterProps,
+  DialogHeaderProps,
+  DialogTitleProps,
+}
+export {
+  Dialog,
+  DialogBody,
+  DialogClose,
+  DialogCloseIcon,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+}
