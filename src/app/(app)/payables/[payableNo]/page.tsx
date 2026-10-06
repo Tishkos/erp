@@ -21,6 +21,7 @@ import { Attachments } from '@/components/admin/attachments';
 import { RecordHistory } from '@/components/admin/history';
 import { RelatedRecords } from '@/components/admin/related-records';
 import { AttachmentsButton, HistoryButton, NotesButton } from '@/components/admin/icon-dialog';
+import { RecordAttachmentsDoor } from '@/components/admin/record-attachments-door';
 import { ExportIcon, ExportMenu } from '@/components/print/export-menu';
 import * as papers from '@/server/services/payable-papers';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -778,6 +779,10 @@ export default async function PayablePage({
                   {money(toDecimalString(paymentTotals.remainingTxn, 4n))}
                 </bdi>
               </span>
+              {/* This section's own papers — the bank's letter, the SWIFT copy (2026-10-06, by direction). */}
+              <span className={s.sapTitleActions}>
+                <RecordAttachmentsDoor object="payable_payments" recordId={row.id} />
+              </span>
             </h2>
 
             {exchangeOpen ? (
@@ -1005,6 +1010,10 @@ export default async function PayablePage({
             <h2 className={s.sapTitle} id="payable-pd-title">
               <span>{cp('section_title')}</span>
               <span className={s.sapTitleMeta}>{t('rows', { count: pds.length })}</span>
+              {/* The customs papers of this import that belong to no one PD (2026-10-06, by direction). */}
+              <span className={s.sapTitleActions}>
+                <RecordAttachmentsDoor object="payable_customs" recordId={row.id} />
+              </span>
             </h2>
             <div className={s.sapTableWrap}>
               <table aria-labelledby="payable-pd-title" className={s.sapTable}>
@@ -1118,6 +1127,10 @@ export default async function PayablePage({
               <span>{sh('section_title')}</span>
               <span className={s.sapTitleMeta}>
                 {sh('x_of_y', { received: shipment.progress.received, total: shipment.progress.total })}
+              </span>
+              {/* The shipping papers of this import that belong to no one B/L or container (2026-10-06, by direction). */}
+              <span className={s.sapTitleActions}>
+                <RecordAttachmentsDoor object="payable_shipment" recordId={row.id} />
               </span>
             </h2>
             <div className={s.sapTableWrap}>
@@ -1283,6 +1296,10 @@ export default async function PayablePage({
                         ? lc('state_locked')
                         : lc('state_open'),
                 })}
+              </span>
+              {/* The invoices behind the charges — freight, clearance, insurance (2026-10-06, by direction). */}
+              <span className={s.sapTitleActions}>
+                <RecordAttachmentsDoor object="payable_landed_cost" recordId={row.id} />
               </span>
             </h2>
             <div className={s.sapTableWrap}>

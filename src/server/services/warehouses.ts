@@ -219,7 +219,8 @@ export async function setActive(
 export const SHIPMENT_STAGE_WAREHOUSES = [
   { stage: 'in_process', name: 'In Process' },
   { stage: 'on_board', name: 'On Board' },
-  { stage: 'on_port', name: 'On Port' },
+  // "At Port", by direction (2026-10-06: "the warehouse spelling is not correct"); the stage code stays `on_port`.
+  { stage: 'on_port', name: 'At Port' },
 ] as const;
 
 export type ShipmentStage = (typeof SHIPMENT_STAGE_WAREHOUSES)[number]['stage'];
@@ -251,7 +252,7 @@ export async function stageWarehouses(tx: Tx) {
  * Makes sure each stage has its warehouse, and says what it found.
  *
  * Idempotent on the stage rather than on the name or the code: a company that
- * renamed "On Port" to something of its own still has an On Port warehouse,
+ * renamed "At Port" to something of its own still has an At Port warehouse,
  * and running this again must not give it a second one. The database holds the
  * same rule — one warehouse per stage, by unique index — so this cannot drift
  * from it by being called twice.

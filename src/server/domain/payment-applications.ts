@@ -452,3 +452,42 @@ export function advanceOf(totalIqd: bigint, percent: string | null | undefined):
    */
   return rounded <= 0n ? null : rounded;
 }
+
+/**
+ * The advance in the import's own currency — what the bank is actually asked
+ * for (2026-10-06, by direction: "automatically 20% percentage payment
+ * application when applied").
+ *
+ * An import in dinars takes the dinar figure as it is. An import agreed in
+ * another currency takes the dinars back at the rate written on the invoice's
+ * own face (`agreedRate`, 0272) — the very rate its dinars were worked out at,
+ * so this is the supplier's figure again and nobody chooses a rate here. To
+ * the cent, half up: a bank is not asked for ten-thousandths.
+ *
+ * Null when the invoice does not say what the import is in — typed in dinars
+ * and joined to an import in dollars, or agreed in a third currency: then a
+ * rate WOULD have to be chosen, and that stays the accountant's, by hand.
+ */
+export function advanceInCurrency(
+  advanceIqd: bigint,
+  importCurrency: string,
+  agreedCurrency: string | null | undefined,
+  agreedRate: string | null | undefined,
+): bigint | null {
+  if (advanceIqd <= 0n) return null;
+  if (importCurrency === 'IQD') return advanceIqd;
+  if (agreedCurrency !== importCurrency) return null;
+  const text = (agreedRate ?? '').trim();
+  if (!/^\d+(\.\d+)?$/.test(text)) return null;
+  // The rate at eight places, as the rates table keeps it: "1310.5" → 131050000000.
+  const [whole = '0', fraction = ''] = text.split('.');
+  const rate = BigInt(whole) * 100000000n + BigInt((fraction + '00000000').slice(0, 8));
+  if (rate <= 0n) return null;
+  // dinars (4 places) × 10^8 / rate (8 places) = currency at 4 places; then to the cent.
+  const half = (numerator: bigint, denominator: bigint) => {
+    const quotient = numerator / denominator;
+    return (numerator % denominator) * 2n >= denominator ? quotient + 1n : quotient;
+  };
+  const cents = half(half(advanceIqd * 100000000n, rate), 100n);
+  return cents <= 0n ? null : cents * 100n;
+}

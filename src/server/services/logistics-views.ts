@@ -170,9 +170,14 @@ export async function chargeTotals(tx: Tx, types: readonly string[]) {
 
 /** Which records' files each register lists. */
 export const DOCUMENT_SCOPES = {
-  customs: ['customs_pd', 'asycuda_run', 'customs_declaration'],
-  shipment: ['bill_of_lading', 'shipment_container', 'payable'],
+  // `payable_customs` / `payable_shipment`: the import application's own customs and shipping
+  // papers, filed on its PD / ASYCUDA and Shipment sections (2026-10-06).
+  customs: ['customs_pd', 'asycuda_run', 'customs_declaration', 'payable_customs'],
+  shipment: ['bill_of_lading', 'shipment_container', 'payable', 'payable_shipment'],
 } as const;
+
+/** The object types whose id is the import's own. */
+const IMPORT_OWN = sql`('payable', 'payable_customs', 'payable_shipment')`;
 export type DocumentScope = keyof typeof DOCUMENT_SCOPES;
 
 export interface DocumentFilter extends RegisterPaging {
@@ -214,14 +219,14 @@ export async function documentsRegister(tx: Tx, scope: DocumentScope, filter: Do
       left join bill_of_lading bl on a.object_type = 'bill_of_lading' and bl.id::text = a.object_id
       left join shipment_container sc on a.object_type = 'shipment_container' and sc.id::text = a.object_id
       left join payable p on p.id = coalesce(pd.payable_id, cd.payable_id, bl.payable_id, sc.payable_id,
-                                             case when a.object_type = 'payable' then a.object_id::uuid end)
+                                             case when a.object_type in ${IMPORT_OWN} then a.object_id::uuid end)
       left join business_partner bp on bp.id = p.supplier_id
       left join app_user u on u.id = a.uploaded_by`;
   const parts = [
     sql`a.object_type in (${sql.join(types.map((type) => sql`${type}`), sql`, `)})`,
     sql`a.scan_status = 'clean' and a.superseded_by_id is null and a.disposed_at is null`,
     // An import's own files, not every payable's.
-    sql`(a.object_type <> 'payable' or p.payable_type_code = 'import')`,
+    sql`(a.object_type not in ${IMPORT_OWN} or p.payable_type_code = 'import')`,
     searchOf(
       [sql`a.file_name`, sql`a.object_type`, sql`pd.pd_no`, sql`ar.run_no`, sql`cd.declaration_no`, sql`bl.bl_no`, sql`sc.container_no`, sql`p.payable_no`, sql`bp.legal_name`, sql`u.display_name`],
       filter.search,
@@ -238,7 +243,7 @@ export async function documentsRegister(tx: Tx, scope: DocumentScope, filter: Do
       const result = await tx.execute(sql`
         select a.id, a.object_type as "objectType", a.object_id as "objectId", a.file_name as "fileName", a.content_type as "contentType",
                a.size_bytes as "sizeBytes", a.version, a.created_at as "createdAt", u.display_name as "uploadedBy",
-               coalesce(pd.pd_no, ar.run_no, cd.declaration_no, bl.bl_no, sc.container_no, case when a.object_type = 'payable' then p.payable_no end) as "recordNo",
+               coalesce(pd.pd_no, ar.run_no, cd.declaration_no, bl.bl_no, sc.container_no, case when a.object_type in ${IMPORT_OWN} then p.payable_no end) as "recordNo",
                pd.registration_year as "recordYear",
                p.payable_no as "payableNo", bp.legal_name as "supplierName"
         ${from}

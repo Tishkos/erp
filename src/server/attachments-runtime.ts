@@ -548,6 +548,10 @@ const automationRunParentAccess = async (tx: Tx, principal: Principal, objectId:
   return Boolean(row);
 };
 
+/** The import application's sections that file their own papers, each keyed by the import's id. */
+export const PAYABLE_SECTIONS = ['payable_payments', 'payable_customs', 'payable_shipment', 'payable_landed_cost'] as const;
+export type PayableSection = (typeof PAYABLE_SECTIONS)[number];
+
 let registered = false;
 
 /** Idempotent: every entry point may call it, and the first one wins. */
@@ -558,6 +562,12 @@ export function registerAttachmentRuntime(): void {
   attachments.registerScanner(signatureScanner);
   attachments.registerParentAccessCheck('journal_entry', journalParentAccess);
   attachments.registerParentAccessCheck('payable', payableParentAccess);
+  // The import application's sections keep their own papers (2026-10-06, by
+  // direction: "for each section they should have their own attachments —
+  // Payments, PD / ASYCUDA, Shipment & containers, Landed cost"). Each is the
+  // import's own id under a name of its own, so the four doors list four
+  // different sets; who may open them is who may open the import.
+  for (const section of PAYABLE_SECTIONS) attachments.registerParentAccessCheck(section, payableParentAccess);
   attachments.registerParentAccessCheck('payment_application', paymentApplicationParentAccess);
   attachments.registerParentAccessCheck('customs_pd', customsPdParentAccess);
   attachments.registerParentAccessCheck('shipment_container', containerParentAccess);

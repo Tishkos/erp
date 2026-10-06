@@ -1,7 +1,7 @@
 /**
  * Creates the three shipment-stage warehouses — Operations block 8.
  *
- *   In Process   On Board   On Port
+ *   In Process   On Board   At Port
  *
  * Block 8 tracks goods bought abroad from the purchase invoice to the shelf,
  * and each of the first three stages holds its stock in a warehouse of its

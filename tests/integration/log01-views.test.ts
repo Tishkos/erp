@@ -61,16 +61,22 @@ describe('documents · the files the records hold, by the record', () => {
     await upload('bill_of_lading', bl.blId, 'bl-original.txt');
     await upload('shipment_container', bl.containerIds[0]!, 'seal-photo.txt');
     await upload('payable', payableId, 'proforma.txt');
+    // The import's sections keep their own papers (2026-10-06): customs and shipping ones are listed with the import.
+    await upload('payable_customs', payableId, 'broker-letter.txt');
+    await upload('payable_shipment', payableId, 'packing-list.txt');
+    await upload('payable_payments', payableId, 'swift-copy.txt');
 
     const customsDocs = await withScope(scope(world.clerk), (tx) => views.documentsRegister(tx, 'customs', {}));
     expect(customsDocs.rows.map((r) => [r.objectType, r.fileName, r.recordNo, r.payableNo]).sort()).toEqual([
       ['customs_declaration', 'lodgement.txt', declared.declarationNo, payableNo],
       ['customs_pd', 'pd-8100.txt', '8100', payableNo],
+      ['payable_customs', 'broker-letter.txt', payableNo, payableNo],
     ]);
     const shipmentDocs = await withScope(scope(world.clerk), (tx) => views.documentsRegister(tx, 'shipment', {}));
     expect(shipmentDocs.rows.map((r) => [r.objectType, r.fileName, r.recordNo]).sort()).toEqual([
       ['bill_of_lading', 'bl-original.txt', bl.blNo],
       ['payable', 'proforma.txt', payableNo],
+      ['payable_shipment', 'packing-list.txt', payableNo],
       ['shipment_container', 'seal-photo.txt', BOX_A],
     ]);
     const onlyBls = await withScope(scope(world.clerk), (tx) => views.documentsRegister(tx, 'shipment', { objectType: 'bill_of_lading' }));

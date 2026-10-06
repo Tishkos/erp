@@ -22,7 +22,7 @@ What it is for: the ideas every Logistics screen shares — the chain, "in trans
 The same sentence is printed at the top of several Logistics screens under **Where this sits in the chain** (موقع هذه الشاشة في السلسلة).
 
 ### In transit is owned but not available — Logistics
-- Goods standing in a **transit warehouse** or in a **stage warehouse** (In Process, On Board, On Port) belong to the company and are counted in the value of stock, but they are **never on hand and never available to sell, issue or pick**. Their available quantity is always shown as 0.
+- Goods standing in a **transit warehouse** or in a **stage warehouse** (In Process, On Board, At Port) belong to the company and are counted in the value of stock, but they are **never on hand and never available to sell, issue or pick**. Their available quantity is always shown as 0.
 - An import's goods are booked into a transit warehouse by its posted purchase invoice. They leave it only in two ways: a **container receipt** (the goods move into a real warehouse and become available), or a **shortage claim** (a purchase return to the supplier straight out of transit).
 - So after 500 units are shipped and 300 received: In transit 200, Received 300, On hand 300 (until some are sold).
 - Goods of an ordinary (non-import) purchase invoice that was received into the In Process warehouse move stage by stage on the In-Transit Inventory screen; they become available only at the last stage, **In Bounded**, when a real warehouse is chosen.
@@ -699,7 +699,7 @@ None of its own. **Not available to you** means you lack access to the screen.
 Path: Logistics → In Transit → In-Transit Inventory   |   Arabic: اللوجستيات ← قيد النقل ← المخزون قيد النقل
 Address: /logistics/in-transit (the old address /inventory/in-transit leads here)
 Needs: `view` on `in_transit` to open the screen. The section Invoice Status Tracking shows only with `view` on `supplier_shipment`; its **Move to …** buttons need `execute` on `supplier_shipment`; the "Notify these users" list needs `configure` on `supplier_shipment`; the **Print / Export** menu needs `print` (PDF) or `export` (Excel/Word) on `supplier_shipment`.
-What it is for: goods the company owns that are not yet in any real warehouse. The top part is read-only and shows, import by import and item by item, what is in transit, what has been received and what is on hand. The bottom part, **Invoice Status Tracking**, is where goods of ordinary (non-import) purchase invoices are moved stage by stage: In Process → On Board → On Port → In Bounded.
+What it is for: goods the company owns that are not yet in any real warehouse. The top part is read-only and shows, import by import and item by item, what is in transit, what has been received and what is on hand. The bottom part, **Invoice Status Tracking**, is where goods of ordinary (non-import) purchase invoices are moved stage by stage: In Process → On Board → At Port → In Bounded.
 
 ### How to read the figures — In-Transit Inventory
 The page starts with **How to read the figures** (كيف تُقرأ الأرقام):
@@ -724,8 +724,8 @@ Example: 500 shipped and 300 received gives In transit 200, Received 300, On han
 
 ### How to move a non-import invoice's goods to the next stage — In-Transit Inventory
 The section **Invoice Status Tracking — invoices that are not imports** (تتبع حالة الفواتير — فواتير ليست استيرادًا) lists purchase invoices whose goods were received into the In Process warehouse. An invoice enters it by itself when it is posted; imports never appear here (they are followed container by container).
-1. Find the invoice. To narrow the list choose **Status** (الحالة): **All** (الكل), **In Process** (قيد التجهيز), **On Board** (على الباخرة), **On Port** (في الميناء), **In Bounded** (في المخزن الجمركي), and press **Search** (بحث).
-2. At the end of the row press the button for the next stage: **Move to On Board** (نقل إلى على الباخرة), then **Move to On Port** (نقل إلى في الميناء).
+1. Find the invoice. To narrow the list choose **Status** (الحالة): **All** (الكل), **In Process** (قيد التجهيز), **On Board** (على الباخرة), **At Port** (في الميناء), **In Bounded** (في المخزن الجمركي), and press **Search** (بحث).
+2. At the end of the row press the button for the next stage: **Move to On Board** (نقل إلى على الباخرة), then **Move to At Port** (نقل إلى في الميناء).
 3. For the last stage first choose, in the box beside the button, the real warehouse the goods are going into, then press **Move to In Bounded** (نقل إلى في المخزن الجمركي).
 4. Each press moves all of that invoice's goods from the warehouse of the present stage to the warehouse of the next one, at the cost they already carry, and the column **Where the goods are** (موقع البضاعة) changes. After In Bounded the row has no button: the goods are ordinary stock and can be sold.
 5. Stages are taken one at a time, forward only.
@@ -749,13 +749,13 @@ First table, by import and item (read-only):
 - **On hand** (في اليد) — what of that is still there.
 - **Containers (open / total)** (الحاويات (مفتوحة / الكل)) — containers carrying this item not yet received / all.
 - **Customs (PDs)** — the import's standing PDs with their statuses; **Declaration** (البيان الجمركي) — the status of its furthest-advanced customs declaration.
-Second table (read-only): **Warehouse** (المخزن), **Stage** (المرحلة — In Process, On Board, On Port, or In transit), **Branch** (الفرع), **Item**, **In transit (ledger)** (قيد النقل (الدفتر)), **Available** (المتاح — always 0), **Value (IQD)**.
+Second table (read-only): **Warehouse** (المخزن), **Stage** (المرحلة — In Process, On Board, At Port, or In transit), **Branch** (الفرع), **Item**, **In transit (ledger)** (قيد النقل (الدفتر)), **Available** (المتاح — always 0), **Value (IQD)**.
 Invoice Status Tracking: **Reference** (المرجع — the purchase invoice number), **Posting Date** (تاريخ الترحيل), **Supplier Code** (رمز المورّد), **Supplier Name** (اسم المورّد), **Amount** (المبلغ — in IQD), **Where the goods are** (موقع البضاعة — the warehouse), **Status** (الحالة). The warehouse box for In Bounded lists the active main warehouses and is required.
 
 ### After you save — In-Transit Inventory
 - The first two tables save nothing; they are read from the stock ledger each time.
 - **Move to …** is a stock transfer: the invoice's own goods are issued from the present stage's warehouse and received into the next one on the same step, keeping their cost, supplier and age. Nothing is revalued and no payable changes.
-- The four statuses in order: **In Process** (قيد التجهيز) → **On Board** (على الباخرة) → **On Port** (في الميناء) → **In Bounded** (في المخزن الجمركي). In the first three the goods are owned but not available; at In Bounded they are in the chosen real warehouse and available.
+- The four statuses in order: **In Process** (قيد التجهيز) → **On Board** (على الباخرة) → **At Port** (في الميناء) → **In Bounded** (في المخزن الجمركي). In the first three the goods are owned but not available; at In Bounded they are in the chosen real warehouse and available.
 - Each move is written in the audit log and notifies the chosen users.
 - An invoice that is reversed disappears from the list.
 

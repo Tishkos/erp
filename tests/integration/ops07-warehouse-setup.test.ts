@@ -176,7 +176,7 @@ describe('ops 7 · the warehouses block 8 needs', () => {
     const made = await ensure(manager);
 
     expect(made.map((entry) => entry.stage)).toEqual(['in_process', 'on_board', 'on_port']);
-    expect(made.map((entry) => entry.name)).toEqual(['In Process', 'On Board', 'On Port']);
+    expect(made.map((entry) => entry.name)).toEqual(['In Process', 'On Board', 'At Port']);
     expect(made.every((entry) => entry.created)).toBe(true);
     // Minted like any other warehouse's — Critical Rule 1 has no exception for
     // a warehouse the system asks for rather than a person.

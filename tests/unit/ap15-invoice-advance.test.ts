@@ -10,7 +10,7 @@
  * "no advance".
  */
 import { describe, expect, it } from 'vitest';
-import { advanceOf } from '@/server/domain/payment-applications';
+import { advanceInCurrency, advanceOf } from '@/server/domain/payment-applications';
 
 /** The money scale: 265,720.0000 as the books hold it. */
 const iqd = (text: string): bigint => {
@@ -93,5 +93,44 @@ describe('AP-15 · what 20 per cent of an invoice is', () => {
     // double cannot hold its fils; bigints can, which is the whole reason
     // money is scaled integers here.
     expect(advanceOf(iqd('9199874500'), '20')).toBe(iqd('1839974900'));
+  });
+});
+
+describe('AP-15 · the advance in the import\u2019s own currency (2026-10-06)', () => {
+  it('an import in dinars is asked for the dinars as they are', () => {
+    expect(advanceInCurrency(iqd('53144'), 'IQD', null, null)).toBe(iqd('53144'));
+    // Agreed in dollars, import in dinars: the import is paid in dinars.
+    expect(advanceInCurrency(iqd('53144'), 'IQD', 'USD', '1310.00000000')).toBe(iqd('53144'));
+  });
+
+  it('an import in dollars is asked for the supplier\u2019s own figure, back at the rate on the invoice', () => {
+    // USD 1,000 at 1,310 = IQD 1,310,000; 20% = IQD 262,000 = USD 200.
+    expect(advanceInCurrency(iqd('262000'), 'USD', 'USD', '1310.00000000')).toBe(iqd('200'));
+    // The Shenzhen invoice: USD 265,720 × 20% = USD 53,144 — through dinars and back, to the cent.
+    expect(advanceInCurrency(advanceOf(iqd('265720') * 1310n, '20')!, 'USD', 'USD', '1310')).toBe(iqd('53144'));
+    // A rate with decimals: USD 123.45 × 20% = 24.69.
+    const dinars = advanceOf(iqd('123.45') * 130950000000n / 100000000n, '20')!;
+    expect(advanceInCurrency(dinars, 'USD', 'USD', '1309.5')).toBe(iqd('24.69'));
+  });
+
+  it('is to the cent, half up', () => {
+    // IQD 1,000 at 1,310 per dollar = USD 0.763358… → 0.76.
+    expect(advanceInCurrency(iqd('1000'), 'USD', 'USD', '1310')).toBe(iqd('0.76'));
+    // IQD 6.55 at 1,310 = USD 0.005 exactly → 0.01.
+    expect(advanceInCurrency(iqd('6.55'), 'USD', 'USD', '1310')).toBe(iqd('0.01'));
+    // Less than half a cent is nothing to ask a bank for.
+    expect(advanceInCurrency(iqd('6'), 'USD', 'USD', '1310')).toBeNull();
+  });
+
+  it('chooses no rate: an invoice that does not say what the import is in is left to the accountant', () => {
+    // Typed in dinars against an import in dollars.
+    expect(advanceInCurrency(iqd('262000'), 'USD', null, null)).toBeNull();
+    // Agreed in a third currency.
+    expect(advanceInCurrency(iqd('262000'), 'USD', 'EUR', '1500')).toBeNull();
+    // Agreed in dollars but no rate written down.
+    expect(advanceInCurrency(iqd('262000'), 'USD', 'USD', null)).toBeNull();
+    expect(advanceInCurrency(iqd('262000'), 'USD', 'USD', '0')).toBeNull();
+    expect(advanceInCurrency(iqd('262000'), 'USD', 'USD', 'abc')).toBeNull();
+    expect(advanceInCurrency(0n, 'USD', 'USD', '1310')).toBeNull();
   });
 });

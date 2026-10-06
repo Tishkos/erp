@@ -473,7 +473,7 @@ export const CASES: readonly EvalCase[] = [
     ask: 'list our warehouses',
     expect: {
       tools: ['list_warehouses'],
-      says: ['WH-HQ|Head Office Main', 'In Process', 'On Board', 'On Port'],
+      says: ['WH-HQ|Head Office Main', 'In Process', 'On Board', 'At Port'],
       script: 'latin',
     },
     why: 'the main warehouse and the three stage warehouses an import passes through',

@@ -24,7 +24,7 @@ The system administrator may dry-run but not sign off.
    ```
    10 6 * * *  cd /opt/qs-erp-next && npx tsx scripts/ops/payables-sweep.ts >> /var/log/qs-erp/payables-sweep.log 2>&1
    ```
-3. **The shipment-stage warehouses** (In Process, On Board, On Port — transit
+3. **The shipment-stage warehouses** (In Process, On Board, At Port — transit
    warehouses where an import's goods wait while at sea, D23):
    `npx tsx scripts/ops/ensure-stage-warehouses.ts [--branch HQ]`. Idempotent;
    it reports them as *present* when they exist.

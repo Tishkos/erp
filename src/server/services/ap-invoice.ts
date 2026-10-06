@@ -41,6 +41,9 @@ import {
   paymentProposalItem,
   supplierCreditMemo,
   warehouse,
+  bankCashAccount,
+  paymentApplication,
+  paymentMethod,
   purchaseOrder,
   purchaseOrderLine,
   serviceReceipt,
@@ -61,7 +64,7 @@ import type { PostingLineRequest } from '../domain/posting';
 import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
-import { advanceOf } from '../domain/payment-applications';
+import { PaymentApplicationError, advanceInCurrency, advanceOf } from '../domain/payment-applications';
 import * as payableEvents from './payable-events';
 import * as applications from './payment-applications';
 import * as payables from './payables';
@@ -248,11 +251,20 @@ export interface CreateApInvoiceInput {
    * §15.3 — what the supplier is paid in front, as a percentage of this
    * invoice, by direction 2026-10-03.
    *
-   * A record of the agreement. The account it is paid from and the method are
-   * a later decision (0271), and `post` raises the payment application only
-   * once both are there.
+   * A record of the agreement. `post` raises the payment application once the
+   * two below are there too (0271 allows them to come later; since 2026-10-06
+   * the form asks for them with the percentage, so the ordinary invoice has
+   * all three and the application is raised without a second form).
    */
   readonly advancePercent?: string | null;
+  /**
+   * Where the advance leaves from and how it travels — a bank or cash account
+   * in the import's currency, and an active payment method. Checked here, at
+   * entry, where a wrong choice can still be corrected; a mismatch found at
+   * posting is said on the import's log instead and never holds the posting.
+   */
+  readonly advancePaidFromAccountId?: string | null;
+  readonly advancePaymentMethodCode?: string | null;
   /**
    * What the invoice was agreed in and the rate its dinars were worked out at
    * — the caller's own conversion, written down (0272). Both or neither.
@@ -613,6 +625,45 @@ export async function create(
     assertResultAccount('expense', await coa.loadAccount(tx, expenseAccountId));
   }
 
+  /*
+   * §15.3 — the account and the method the advance travels by, checked with
+   * the import's currency (D3: an import is paid from an account in its own
+   * currency) while the form is still in front of the accountant.
+   */
+  // No percentage, no advance: an account or a method left on the form then means nothing and is not kept.
+  const hasAdvance = Boolean((input.advancePercent ?? '').trim());
+  const advancePaidFromAccountId = hasAdvance ? input.advancePaidFromAccountId?.trim() || null : null;
+  const advancePaymentMethodCode = hasAdvance ? input.advancePaymentMethodCode?.trim() || null : null;
+  if (advancePaidFromAccountId) {
+    const [account] = await tx
+      .select({ code: bankCashAccount.code, currency: bankCashAccount.currency, active: bankCashAccount.active })
+      .from(bankCashAccount)
+      .where(eq(bankCashAccount.id, advancePaidFromAccountId))
+      .limit(1);
+    if (!account) throw new Error('No such bank or cash account to pay the advance from.');
+    if (!account.active) throw new Error(`${account.code} is not in use; choose an account that is.`);
+    if (input.isImport) {
+      const importCurrency = input.payableId
+        ? (await payables.load(tx, input.payableId)).currency
+        : input.importCurrency || input.currency || 'IQD';
+      if (account.currency !== importCurrency) {
+        throw new Error(
+          `${account.code} holds ${account.currency} and this import is in ${importCurrency}. ` +
+            `The advance is paid from an account in ${importCurrency}.`,
+        );
+      }
+    }
+  }
+  if (advancePaymentMethodCode) {
+    const [method] = await tx
+      .select({ name: paymentMethod.name, active: paymentMethod.active })
+      .from(paymentMethod)
+      .where(eq(paymentMethod.code, advancePaymentMethodCode))
+      .limit(1);
+    if (!method) throw new Error(`'${advancePaymentMethodCode}' is not a payment method.`);
+    if (!method.active) throw new Error(`${method.name} is not in use; choose a payment method that is.`);
+  }
+
   // §9.2 — a charged line must name a real, open import, and a charged line
   // is a cost: stock is never somebody else's landed cost.
   for (const line of input.lines) {
@@ -663,6 +714,8 @@ export async function create(
       dueDate,
       currency: input.currency ?? 'IQD',
       advancePercent: input.advancePercent ?? null,
+      advancePaidFromAccountId,
+      advancePaymentMethodCode,
       agreedCurrency: input.agreedCurrency ?? null,
       agreedRate: input.agreedCurrency ? (input.agreedRate ?? null) : null,
       note: input.note ?? null,
@@ -1903,6 +1956,8 @@ export async function post(
    * moves no money.
    */
   const advanceIqd = advanceOf(payableIqd, invoice.advancePercent);
+  // "20%", not "20.0000%": the column keeps four places, a sentence does not.
+  const advancePercent = (invoice.advancePercent ?? '').replace(/(\.\d*?[1-9])0+$|\.0+$/, '$1');
   if (advanceIqd !== null && !invoice.advanceApplicationId) {
     if (!invoice.payableId) {
       // A payment application belongs to an import application; an invoice
@@ -1918,14 +1973,17 @@ export async function post(
       });
     } else {
       const owner = await payables.load(tx, invoice.payableId);
-      if (owner.currency !== 'IQD') {
-        /*
-         * The invoice's total is held in dinars and the import is not. The
-         * rate that should turn one into the other on this day is the
-         * accountant's to choose — the books' own, the bank's, or the one the
-         * supplier's letter implies — and converting on a default here would
-         * put a figure nobody chose in front of a bank.
-         */
+      /*
+       * What the bank is asked for, in the import's own currency: the dinars
+       * back at the rate written on the invoice's face (`advanceInCurrency`),
+       * so an import agreed in dollars is asked for dollars — the supplier's
+       * own figure, no rate chosen here (2026-10-06, by direction:
+       * "automatically 20% … payment application"). Null when the invoice
+       * cannot say — typed in dinars against an import in dollars: THEN a rate
+       * would have to be chosen, and that stays the accountant's.
+       */
+      const advanceTxn = advanceInCurrency(advanceIqd, owner.currency, invoice.agreedCurrency, invoice.agreedRate);
+      if (advanceTxn === null) {
         await payableEvents.record(tx, {
           payableId: invoice.payableId,
           eventCode: 'ADVANCE_NOT_RAISED',
@@ -1933,9 +1991,9 @@ export async function post(
           sourceId: id,
           sourceNo: invoice.invoiceNo,
           summary:
-            `${invoice.invoiceNo} asks for ${invoice.advancePercent}% in front — ` +
-            `${say(toDecimalString(advanceIqd, 4n))} — but ${owner.payableNo} is in ${owner.currency}. ` +
-            'Raise the payment application by hand at the rate you mean to use.',
+            `${invoice.invoiceNo} asks for ${advancePercent}% in front — ` +
+            `${say(toDecimalString(advanceIqd, 4n))} — but ${owner.payableNo} is in ${owner.currency} and the invoice ` +
+            `was agreed in ${invoice.agreedCurrency ?? 'IQD'}. Raise the payment application by hand at the rate you mean to use.`,
           actorUserId: ctx.principal.userId,
         });
       } else if (!invoice.advancePaidFromAccountId || !invoice.advancePaymentMethodCode) {
@@ -1952,42 +2010,74 @@ export async function post(
           sourceId: id,
           sourceNo: invoice.invoiceNo,
           summary:
-            `${invoice.invoiceNo} agrees ${invoice.advancePercent}% in front — ` +
+            `${invoice.invoiceNo} agrees ${advancePercent}% in front — ` +
             `${say(toDecimalString(advanceIqd, 4n))} — and names no account to pay it from. ` +
             'Raise the payment application when the account is decided.',
           actorUserId: ctx.principal.userId,
         });
       } else {
-        const made = await applications.create(tx, ctx, {
-          payableId: invoice.payableId,
-          paymentMethodCode: invoice.advancePaymentMethodCode!,
-          bankCashAccountId: invoice.advancePaidFromAccountId!,
-          amountTxn: advanceIqd,
-          note:
-            `${invoice.advancePercent}% advance on ${invoice.invoiceNo}, ` +
-            `raised when it posted (${say(toDecimalString(payableIqd, 4n))} total).`,
-        });
-        // "not drafts": approved on the invoice's own approval, which a second
-        // person gave when they posted it.
-        await applications.approve(tx, ctx, made.id, { inheritedFrom: invoice.invoiceNo });
-        await tx
-          .update(apInvoice)
-          .set({ advanceApplicationId: made.id, updatedAt: new Date() })
-          .where(eq(apInvoice.id, id));
+        /*
+         * Raised in a savepoint of its own: the application's refusals (the
+         * account taken out of use since the invoice was typed, nothing left
+         * to ask for on the import) are the import's business, said on its
+         * log, and never hold the posting of the invoice.
+         */
+        const asked = `${owner.currency} ${toDecimalString(advanceTxn, 4n)}`;
+        let raised: { id: string; applicationNo: string } | null = null;
+        let refusal: string | null = null;
+        try {
+          raised = await tx.transaction(async (sp) => {
+            const inner = sp as unknown as typeof tx;
+            const made = await applications.create(inner, ctx, {
+              payableId: invoice.payableId!,
+              paymentMethodCode: invoice.advancePaymentMethodCode!,
+              bankCashAccountId: invoice.advancePaidFromAccountId!,
+              amountTxn: advanceTxn,
+              note:
+                `${advancePercent}% advance on ${invoice.invoiceNo}, ` +
+                `raised when it posted (${say(toDecimalString(payableIqd, 4n))} total).`,
+            });
+            // "not drafts": approved on the invoice's own approval, which a second
+            // person gave when they posted it.
+            await applications.approve(inner, ctx, made.id, { inheritedFrom: invoice.invoiceNo });
+            return { id: made.id, applicationNo: made.applicationNo };
+          });
+        } catch (error) {
+          if (!(error instanceof PaymentApplicationError) && !(error instanceof Error)) throw error;
+          refusal = error.message;
+        }
+        if (raised) {
+          await tx
+            .update(apInvoice)
+            .set({ advanceApplicationId: raised.id, updatedAt: new Date() })
+            .where(eq(apInvoice.id, id));
 
-        // On the import's own log, where somebody watching the payment lane
-        // will see it without being told to look.
-        await payableEvents.record(tx, {
-          payableId: invoice.payableId,
-          eventCode: 'ADVANCE_RAISED',
-          sourceType: PERMISSION_OBJECT,
-          sourceId: id,
-          sourceNo: invoice.invoiceNo,
-          summary:
-            `${made.applicationNo} raised for ${invoice.advancePercent}% of ${invoice.invoiceNo} — ` +
-            `${say(toDecimalString(advanceIqd, 4n))}, approved on the invoice's own approval.`,
-          actorUserId: ctx.principal.userId,
-        });
+          // On the import's own log, where somebody watching the payment lane
+          // will see it without being told to look.
+          await payableEvents.record(tx, {
+            payableId: invoice.payableId,
+            eventCode: 'ADVANCE_RAISED',
+            sourceType: PERMISSION_OBJECT,
+            sourceId: id,
+            sourceNo: invoice.invoiceNo,
+            summary:
+              `${raised.applicationNo} raised for ${advancePercent}% of ${invoice.invoiceNo} — ` +
+              `${asked} (${say(toDecimalString(advanceIqd, 4n))}), approved on the invoice's own approval.`,
+            actorUserId: ctx.principal.userId,
+          });
+        } else {
+          await payableEvents.record(tx, {
+            payableId: invoice.payableId,
+            eventCode: 'ADVANCE_NOT_RAISED',
+            sourceType: PERMISSION_OBJECT,
+            sourceId: id,
+            sourceNo: invoice.invoiceNo,
+            summary:
+              `${invoice.invoiceNo} asks for ${advancePercent}% in front — ${asked} — ` +
+              `and the payment application was refused: ${refusal} Raise it by hand.`,
+            actorUserId: ctx.principal.userId,
+          });
+        }
       }
     }
   }
@@ -2587,6 +2677,29 @@ export async function viewByNo(tx: Tx, invoiceNo: string) {
         .limit(1)
     : [];
 
+  /*
+   * §15.3 — where the advance leaves from, how it travels, and the payment
+   * application the posting raised for it (2026-10-06): the invoice says so on
+   * its face, so nobody opens the import to find out whether the bank was asked.
+   */
+  const [paidFrom] = invoice.advancePaidFromAccountId
+    ? await tx
+        .select({ code: bankCashAccount.code, name: bankCashAccount.name, accountType: bankCashAccount.accountType, currency: bankCashAccount.currency })
+        .from(bankCashAccount)
+        .where(eq(bankCashAccount.id, invoice.advancePaidFromAccountId))
+        .limit(1)
+    : [];
+  const [method] = invoice.advancePaymentMethodCode
+    ? await tx.select({ code: paymentMethod.code, name: paymentMethod.name }).from(paymentMethod).where(eq(paymentMethod.code, invoice.advancePaymentMethodCode)).limit(1)
+    : [];
+  const [application] = invoice.advanceApplicationId
+    ? await tx
+        .select({ applicationNo: paymentApplication.applicationNo, status: paymentApplication.status, currency: paymentApplication.currency, amountTxn: paymentApplication.amountTxn })
+        .from(paymentApplication)
+        .where(eq(paymentApplication.id, invoice.advanceApplicationId))
+        .limit(1)
+    : [];
+
   return {
     invoice,
     lines,
@@ -2596,6 +2709,7 @@ export async function viewByNo(tx: Tx, invoiceNo: string) {
     varianceApprovedBy: name(invoice.varianceApprovedBy),
     reversedBy: name(invoice.reversedBy),
     journalEntryNo: posted?.entryNo ?? null,
+    advance: { paidFrom: paidFrom ?? null, method: method ?? null, application: application ?? null },
   };
 }
 

@@ -150,8 +150,12 @@ export async function createApInvoice(formData: FormData): Promise<void> {
       // §24.3 — ticked Import and naming an open import: the invoice joins it.
       payableId: text(formData, 'is_import') === '1' ? text(formData, 'payable_id').trim() || null : null,
       // §15.3 — what the supplier is paid in front, as a percentage of this
-      // invoice. The account it comes from is chosen later (0271).
+      // invoice, and where it leaves from: with all three the payment
+      // application is raised and approved when the invoice posts
+      // (2026-10-06, by direction: "automatically 20% … payment application").
       advancePercent: text(formData, 'advance_percent').trim() || null,
+      advancePaidFromAccountId: text(formData, 'advance_paid_from').trim() || null,
+      advancePaymentMethodCode: text(formData, 'advance_payment_method').trim() || null,
       // Where the dinars came from (0272): an invoice agreed in dollars says
       // so on its own face, and at what rate, rather than presenting the
       // converted figures as though somebody typed them.

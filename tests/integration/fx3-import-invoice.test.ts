@@ -13,6 +13,12 @@
  *        difference — a loss when paid over, a gain when paid under; the
  *        invoice settled; nothing left unallocated.
  *   FX9  Invoice Status Tracking does not list an import, nor moves one.
+ *   FX10 the advance's payment application is raised and approved when the
+ *        invoice posts (2026-10-06, by direction: "automatically 20%
+ *        percentage payment application when applied"): in dinars, in the
+ *        import's dollars at the rate on the invoice's face, refused at entry
+ *        from an account in the wrong currency, and left to the accountant
+ *        with a line on the log when the invoice names no account.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
@@ -345,6 +351,107 @@ describe('FX8 · an import agreed in dollars closes on its exchange difference',
     expect(await differences(made.payableId)).toEqual([{ kind: 'loss', source_type: 'supplier_payment', amount_iqd: '6000.0000' }]);
     // Once is all there is.
     expect(await rejection(withScope(scope(world.manager), (tx) => applications.settleExchangeDifference(tx, world.manager, made.payableId, '2026-09-26')))).toMatch(/no exchange difference/);
+  });
+});
+
+describe('FX10 · the advance\u2019s payment application is raised when the invoice posts', () => {
+  const applicationOf = async (invoiceId: string) =>
+    (
+      await ownerPool.query(
+        `select a.application_no, a.status::text, a.currency, a.amount_txn, a.payment_method_code, a.bank_cash_account_id
+           from ap_invoice i join payment_application a on a.id = i.advance_application_id where i.id = $1`,
+        [invoiceId],
+      )
+    ).rows[0];
+  const logOf = async (payableId: string) =>
+    (await ownerPool.query(`select event_code, summary from payable_event where payable_id = $1 and event_code like 'ADVANCE_%' order by recorded_at`, [payableId])).rows;
+
+  it('an import in dinars: 20% of the invoice, approved, from the account the invoice names', async () => {
+    const { invoiceId, payableId } = await importInvoice('FX10-IQD', '10000', {
+      advancePercent: '20',
+      advancePaidFromAccountId: world.bankAccountId,
+      advancePaymentMethodCode: SWIFT,
+    });
+    await post(invoiceId);
+    // 100 × 10,000 = 1,000,000; a fifth is 200,000, asked for and approved on the invoice's own approval.
+    expect(await applicationOf(invoiceId)).toMatchObject({
+      status: 'approved',
+      currency: 'IQD',
+      amount_txn: '200000.0000',
+      payment_method_code: SWIFT,
+      bank_cash_account_id: world.bankAccountId,
+    });
+    const log = await logOf(payableId);
+    expect(log.map((row) => row.event_code)).toEqual(['ADVANCE_RAISED']);
+    expect(log[0].summary).toMatch(/raised for 20% of .* IQD 200000\.0000/);
+    // The import's cap counts it: the rest that can be asked for is 800,000.
+    const totals = await withScope(scope(world.clerk), (tx) => applications.totalsFor(tx, payableId));
+    expect(totals.fullyPaid).toBe(false);
+  });
+
+  it('an import agreed in dollars: the dollars back at the rate on the invoice\u2019s face, from a dollar account', async () => {
+    const { rows: asset } = await ownerPool.query(`select id from chart_of_account where code = 'A000001'`);
+    const { rows: gl } = await ownerPool.query(
+      `insert into chart_of_account (code, name, account_type, parent_id, is_group, is_active, approval_status, level, currency_restriction)
+       values ('A800004','Bank — USD advances','asset',$1,false,true,'approved',1,'IQD') returning id`,
+      [asset[0].id],
+    );
+    const usd = await withScope(scope(world.manager), (tx) =>
+      banks.create(tx, world.manager, 'bank', { name: 'USD advances', glAccountId: gl[0].id, currency: 'USD', bankName: 'Rafidain', accountNumber: 'USD-0002' }),
+    );
+    // 100 panels at USD 10 = USD 1,000, at 1,310 = IQD 1,310,000 (the rate the fixture holds).
+    const { invoiceId, payableId } = await importInvoice('FX10-USD', '13100', {
+      importCurrency: 'USD',
+      agreedCurrency: 'USD',
+      agreedRate: '1310.00000000',
+      advancePercent: '20',
+      advancePaidFromAccountId: usd.id,
+      advancePaymentMethodCode: SWIFT,
+      lines: [{ itemCode: PANEL, description: 'Solar Panel 550W', quantity: parseQuantity('100'), unitPriceIqd: iqd('13100'), unitPriceTxn: iqd('10'), uomCode: 'EA', isInventory: true, warehouseCode: WAREHOUSE }],
+    });
+    expect(await payableRow(payableId)).toMatchObject({ currency: 'USD', amount_txn: '1000.0000' });
+    await post(invoiceId);
+    // USD 200 — the supplier's own figure, not a conversion somebody had to choose.
+    expect(await applicationOf(invoiceId)).toMatchObject({ status: 'approved', currency: 'USD', amount_txn: '200.0000', bank_cash_account_id: usd.id });
+    const log = await logOf(payableId);
+    expect(log.map((row) => row.event_code)).toEqual(['ADVANCE_RAISED']);
+    expect(log[0].summary).toMatch(/USD 200\.0000/);
+  });
+
+  it('refuses, at entry, an account in another currency than the import\u2019s', async () => {
+    const refused = await rejection(
+      importInvoice('FX10-WRONG', '13100', {
+        importCurrency: 'USD',
+        agreedCurrency: 'USD',
+        agreedRate: '1310.00000000',
+        advancePercent: '20',
+        // The dinar account, for an import in dollars.
+        advancePaidFromAccountId: world.bankAccountId,
+        advancePaymentMethodCode: SWIFT,
+      }),
+    );
+    expect(String(refused)).toMatch(/holds IQD and this import is in USD/);
+  });
+
+  it('names no account: nothing is raised, the log says so, and the posting is not held', async () => {
+    const { invoiceId, payableId } = await importInvoice('FX10-NONE', '10000', { advancePercent: '20' });
+    await post(invoiceId);
+    expect(await invoice(invoiceId)).toMatchObject({ status: 'posted' });
+    expect(await applicationOf(invoiceId)).toBeUndefined();
+    const log = await logOf(payableId);
+    expect(log.map((row) => row.event_code)).toEqual(['ADVANCE_NOT_RAISED']);
+    expect(log[0].summary).toMatch(/names no account/);
+  });
+
+  it('an account or a method without a percentage is not kept: no advance, nothing to raise', async () => {
+    const { invoiceId, payableId } = await importInvoice('FX10-NOPCT', '10000', {
+      advancePaidFromAccountId: world.bankAccountId,
+      advancePaymentMethodCode: SWIFT,
+    });
+    const { rows } = await ownerPool.query(`select advance_percent, advance_paid_from_account_id, advance_payment_method_code from ap_invoice where id = $1`, [invoiceId]);
+    expect(rows[0]).toEqual({ advance_percent: null, advance_paid_from_account_id: null, advance_payment_method_code: null });
+    await post(invoiceId);
+    expect(await logOf(payableId)).toEqual([]);
   });
 });
 

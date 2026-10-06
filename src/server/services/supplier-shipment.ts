@@ -5,7 +5,7 @@
  *                with all invoice details. The items are booked to the In
  *                Process warehouse.
  *   On Board     the items are moved to the On Board warehouse.
- *   On Port      the items are moved to the On Port warehouse.
+ *   On Port      the items are moved to the At Port warehouse (named "At Port" since 2026-10-06; the stage code is still `on_port`).
  *   In Bounded   a warehouse must be selected, and the items are moved there.
  *   Notification Every status change notifies the selected system users.
  *

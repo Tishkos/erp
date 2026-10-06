@@ -5,6 +5,7 @@ import { DocumentWindow, type DocumentField } from '@/components/admin/document-
 import { DueDateField } from '@/components/admin/due-date-field';
 import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
 import { AdvanceField } from '@/components/admin/advance-field';
+import { AdvanceAccountSelect } from '@/components/admin/advance-account-select';
 import { InvoiceCurrency } from '@/components/admin/invoice-currency';
 import { PairedPicker } from '@/components/admin/paired-picker';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
@@ -21,6 +22,8 @@ import * as payables from '@/server/services/payables';
 import * as posting from '@/server/services/posting';
 import * as execution from '@/server/services/project-execution';
 import * as paymentTerms from '@/server/services/payment-terms';
+import * as paymentMethods from '@/server/services/payment-methods';
+import * as bankAccounts from '@/server/services/bank-cash-accounts';
 import * as warehouses from '@/server/services/warehouses';
 import { gapsFor } from '@domain/setup-gaps';
 import { createApInvoice, invoiceLineAvailability } from '../actions';
@@ -69,8 +72,18 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
   // date, and it used to be declared after them.
   const today = businessToday();
 
-  const { suppliers, allSuppliers, stockItems, allItems, houses, schedules, accounts, mapped, imports, assignment, moneys } =
+  const { suppliers, allSuppliers, stockItems, allItems, houses, schedules, accounts, mapped, imports, assignment, moneys, moneyAccounts, methods } =
     await withCurrentUser(async (tx) => ({
+      /*
+       * §15.3 — where the advance leaves from and how it travels, so the
+       * payment application is raised when the invoice posts without a second
+       * form (2026-10-06). Every account in use, in every currency: the select
+       * offers the ones in the invoice's currency as it is chosen.
+       */
+      moneyAccounts: [...(await bankAccounts.listOfKind(tx, 'bank')), ...(await bankAccounts.listOfKind(tx, 'cash'))]
+        .filter((account) => account.active)
+        .map((account) => ({ id: account.id, code: account.code, name: account.name, currency: account.currency })),
+      methods: await paymentMethods.listActive(tx),
       // REQ-PM-001 §8 — the project elements a purchase may be assigned to.
       assignment: await execution.assignmentPickers(tx),
       suppliers: await partners.listActiveInRole(tx, 'supplier'),
@@ -260,12 +273,58 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
       value: (
         <AdvanceField
           currencyField="currency"
+          defaultPercent="20"
+          importField="is_import"
           label={x('advance_percent')}
           ledgerCurrency="IQD"
           ledgerRates={Object.fromEntries(moneys.map((m) => [m.code, m.iqdPerUnit]))}
           locale={locale}
           name="advance_percent"
         />
+      ),
+    },
+    /*
+     * Where the advance leaves from and how it travels (2026-10-06, by
+     * direction: "automatically 20% percentage payment application when
+     * applied"). With the percentage, these are all a payment application
+     * needs, so it is raised and approved when the invoice posts rather than
+     * typed again on the import's page. The account follows the currency box:
+     * an import in dollars is paid from a dollar account (D3).
+     */
+    {
+      label: x('advance_paid_from'),
+      control: true,
+      value: (
+        <AdvanceAccountSelect
+          accounts={moneyAccounts}
+          currencyField="currency"
+          importField="is_import"
+          label={x('advance_paid_from')}
+          name="advance_paid_from"
+          noneLabel={x('advance_paid_from_none')}
+        />
+      ),
+    },
+    {
+      label: x('advance_payment_method'),
+      control: true,
+      value: (
+        <>
+          <select
+            aria-label={x('advance_payment_method')}
+            // A bank method first — an advance to a supplier abroad travels by transfer.
+            defaultValue={(methods.find((m) => m.kind === 'bank') ?? methods.find((m) => m.kind === 'transfer') ?? methods[0])?.code ?? ''}
+            name="advance_payment_method"
+          >
+            <option value="" />
+            {methods.map((m) => (
+              <option key={m.code} value={m.code}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+          <span className={s.sapEnteredNote}>{x('advance_hint')}</span>
+        </>
       ),
     },
     /*

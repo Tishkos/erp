@@ -28,6 +28,8 @@ const KIND: Readonly<Record<string, ProfileKind>> = {
   bill_of_lading: 'bl',
   shipment_container: 'container',
   payable: 'import',
+  payable_customs: 'import',
+  payable_shipment: 'import',
 };
 
 export async function DocumentRegister({ searchParams, scope }: { readonly searchParams: SearchParams; readonly scope: views.DocumentScope }) {

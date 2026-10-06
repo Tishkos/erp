@@ -410,7 +410,7 @@ async function main() {
       INSERT INTO warehouse (code, name, branch_code, warehouse_type, is_transit, shipment_stage) VALUES
         ('WH-INPROC', 'In Process', 'HQ', 'transit', true, 'in_process'),
         ('WH-BOARD', 'On Board', 'HQ', 'transit', true, 'on_board'),
-        ('WH-PORT', 'On Port', 'HQ', 'transit', true, 'on_port')
+        ('WH-PORT', 'At Port', 'HQ', 'transit', true, 'on_port')
       ON CONFLICT DO NOTHING
     `);
 

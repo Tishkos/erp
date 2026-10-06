@@ -38,9 +38,19 @@ export function AdvanceField({
   ledgerCurrency,
   ledgerRates,
   locale,
+  defaultPercent,
+  importField,
 }: {
   readonly label: string;
   readonly name: string;
+  /**
+   * The share an import is paid in front unless the accountant writes another
+   * (2026-10-06, by direction: "automatically 20% … payment application").
+   * It stands while the `importField` box is ticked and nothing has been typed
+   * here; untick Import and the box is empty again, type and it is yours.
+   */
+  readonly defaultPercent?: string;
+  readonly importField?: string;
   /**
    * The form field holding the currency the invoice is agreed in, so the
    * advance is said in that currency as well as in dinars (2026-10-03).
@@ -52,7 +62,9 @@ export function AdvanceField({
   readonly locale: string;
 }) {
   const box = useRef<HTMLInputElement>(null);
-  const [percent, setPercent] = useState('');
+  const [percent, setPercent] = useState(defaultPercent ?? '');
+  // Once the accountant has typed a share it is theirs: the default never comes back over it.
+  const typedRef = useRef(false);
   const [total, setTotal] = useState<bigint>(0n);
   const [agreed, setAgreed] = useState(ledgerCurrency);
 
@@ -86,10 +98,27 @@ export function AdvanceField({
       if (chosen) setAgreed(chosen);
     };
 
+    /*
+     * The default share follows the Import box: an import is paid 20% in
+     * front unless the accountant says otherwise; an expense or a local
+     * purchase starts with no advance at all.
+     */
+    const followImport = () => {
+      if (!defaultPercent || !importField || typedRef.current) return;
+      const tick = form.elements.namedItem(importField);
+      const ticked = tick instanceof HTMLInputElement ? tick.checked : true;
+      setPercent(ticked ? defaultPercent : '');
+    };
+
     readTotal();
+    followImport();
     form.addEventListener('input', readTotal);
-    return () => form.removeEventListener('input', readTotal);
-  }, [currencyField]);
+    form.addEventListener('input', followImport);
+    return () => {
+      form.removeEventListener('input', readTotal);
+      form.removeEventListener('input', followImport);
+    };
+  }, [currencyField, defaultPercent, importField]);
 
   /*
    * The share, by the same steps the server takes: the percentage scaled to
@@ -121,6 +150,7 @@ export function AdvanceField({
          * made somebody find out at the third refusal.
          */
         onChange={(event) => {
+          typedRef.current = true;
           const typed = event.target.value;
           const asked = Number(typed);
           setPercent(Number.isFinite(asked) && asked > 100 ? '100' : typed);

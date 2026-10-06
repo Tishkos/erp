@@ -993,7 +993,7 @@ test.describe('the Operations Build screens open', () => {
     // posts, which is what "automatically copied to this section" means.
     const stages = page.locator('select[name="status"]');
     await expect(stages).toBeVisible();
-    for (const stage of ['In Process', 'On Board', 'On Port', 'In Bounded']) {
+    for (const stage of ['In Process', 'On Board', 'At Port', 'In Bounded']) {
       await expect(stages.locator('option', { hasText: stage })).toHaveCount(1);
     }
   });

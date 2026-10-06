@@ -380,6 +380,36 @@ export default async function ApInvoicePage({
               </bdi>
             ),
           },
+          /*
+           * Where it leaves from and how, and the application the posting
+           * raised for it (2026-10-06): the account opens its own profile, the
+           * application its own page; before the posting, "when it posts".
+           */
+          {
+            label: x('advance_paid_from'),
+            value: found.document.advance.paidFrom ? (
+              <>
+                <ProfileLink
+                  code={found.document.advance.paidFrom.code}
+                  dir="auto"
+                  kind={found.document.advance.paidFrom.accountType === 'cash' ? 'cash_account' : 'bank_account'}
+                  name={found.document.advance.paidFrom.name}
+                />
+                {found.document.advance.method ? <> · {found.document.advance.method.name}</> : null}
+                {' · '}
+                {found.document.advance.application ? (
+                  <>
+                    <ProfileLink code={found.document.advance.application.applicationNo} kind="payment_application" />
+                    {` (${status.has(found.document.advance.application.status) ? status(found.document.advance.application.status) : found.document.advance.application.status})`}
+                  </>
+                ) : (
+                  x('advance_application_pending')
+                )}
+              </>
+            ) : (
+              x('advance_paid_from_none')
+            ),
+          },
         ]
       : []),
 
