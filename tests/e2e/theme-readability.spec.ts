@@ -245,37 +245,35 @@ async function raiseOneOfEach(browser: Browser) {
     );
     await page.getByRole('link', { name: 'Import tracking' }).click();
     await page.waitForURL(/\/payables\/IMP-/);
-    const importUrl = page.url().split('?')[0]!;
+    const payableNo = new URL(page.url()).pathname.split('/').pop()!;
+
+    // The payment application, the PD and the B/L each have a sheet of their
+    // own since 2026-10-06 (no window on the import's page any more); with
+    // `?import=` each sheet is already bound to this import.
 
     // A payment application for part of it.
-    await page.getByRole('button', { name: 'New payment application' }).click();
-    const pay = page.getByRole('dialog');
-    await pay.getByRole('textbox', { name: 'Amount' }).fill('500');
-    await pay.getByLabel('Method').selectOption({ label: 'Cheque' });
-    await pay.getByLabel('Paid from').selectOption({ index: 0 });
-    await pay.getByRole('button', { name: 'Create' }).click();
+    await page.goto(`/payables/payment-applications/new?import=${payableNo}`);
+    await page.locator('input[name="amount"]').fill('500');
+    await page.locator('select[name="payment_method"]').selectOption({ label: 'Cheque' });
+    await page.getByRole('button', { name: 'Create' }).click();
     await page.waitForURL(/\/payables\/payment-applications\/PAYAPP-/, { timeout: 60_000 });
 
     // A declaration registered on it.
-    await page.goto(importUrl);
+    await page.goto(`/payables/pd/new?import=${payableNo}`);
+    await page.locator('input[name="new_pd_no"]').fill(`6${run}`);
+    await page.locator('input[name="registration_date"]').fill('2026-09-02');
+    await page.locator('input[name="expiry_date"]').fill('2027-03-01');
     await page.getByRole('button', { name: 'Register PD' }).click();
-    const pd = page.getByRole('dialog');
-    await pd.getByRole('textbox', { name: 'PD no.' }).fill(`6${run}`);
-    await pd.getByLabel('Registered').fill('2026-09-02');
-    await pd.getByLabel('Expires').fill('2027-03-01');
-    await pd.getByRole('button', { name: 'Register PD' }).click();
-    await expect(page.getByRole('link', { name: `6${run}` }).first()).toBeVisible({ timeout: 30_000 });
+    await page.waitForURL((url) => url.pathname.startsWith('/payables/pd/') && !url.pathname.endsWith('/new'), { timeout: 60_000 });
 
     // A B/L with one container.
-    await page.goto(importUrl);
+    await page.goto(`/payables/shipments/new?import=${payableNo}`);
+    await page.locator('input[name="bl_no"]').fill(`BL-THEME-${run}`);
+    await page.locator('input[name="bl_date"]').fill('2026-09-20');
+    await page.locator('input[name="eta"]').fill('2026-10-20');
+    await page.locator('input[name="container_no_0"]').fill(containerNo('TEMU', `${digits}5`));
     await page.getByRole('button', { name: 'New B/L' }).click();
-    const bl = page.getByRole('dialog');
-    await bl.getByRole('textbox', { name: 'B/L no.' }).fill(`BL-THEME-${run}`);
-    await bl.getByLabel('B/L date').fill('2026-09-20');
-    await bl.getByLabel('ETA').fill('2026-10-20');
-    await bl.getByLabel('Container no. 1').fill(containerNo('TEMU', `${digits}5`));
-    await bl.getByRole('button', { name: 'New B/L' }).click();
-    await expect(page.getByRole('link', { name: `BL-THEME-${run}` }).first()).toBeVisible({ timeout: 30_000 });
+    await page.waitForURL((url) => url.pathname.startsWith('/payables/shipments/') && !url.pathname.endsWith('/new'), { timeout: 60_000 });
 
     // A loan, entered — on its own page since PR #42 (`/treasury/loans/new`).
     await page.goto('/treasury/loans/new');

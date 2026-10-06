@@ -120,7 +120,8 @@ test.describe('REQ-PAY-001 · doors, links, credit notes, credits and reconcilia
     await supplierLink.click();
     await page.waitForURL(/\/payables\/suppliers\/.*role=supplier/);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Statement' })).toBeVisible();
+    // Exact: the page also carries an "Account statement" back button to the same statement.
+    await expect(page.getByRole('link', { name: 'Statement', exact: true })).toBeVisible();
 
     // The same record on a phone, in Arabic: four doors, no sideways scroll.
     await page.context().addCookies([{ name: 'erp-locale', value: 'ar', domain: 'localhost', path: '/' }]);
