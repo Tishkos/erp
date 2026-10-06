@@ -152,7 +152,8 @@ describe('the screen catalogue covers the approved tree', () => {
     // + 2 (Exceptions, a document: the register and the record).
     // + 1 (the ERP Control Center, a report; its Related records page is a drill-down of the screens it reads, not a menu item).
     // + 1 (Automation, a settings screen; the rule and run pages behind it are not menu items).
-    expect(total).toBe(369);
+    // + 1 (Landed Costs became a document on 2026-10-06: the register and the import's landed-cost sheet behind it).
+    expect(total).toBe(370);
   });
 });
 

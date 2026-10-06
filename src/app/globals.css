@@ -377,6 +377,12 @@
 html {
   min-inline-size: 20rem;
   min-block-size: 100%;
+  /* The whole system at 90% (2026-10-06, by direction: "zoom out, make 90
+     percent for the whole screen system"). Everything is sized in rem, so
+     the root's size is the one dial: type, controls, spacing and the bar all
+     follow, the way a browser's 90% zoom would, without the trouble zoom
+     makes for viewport units. */
+  font-size: 90%;
   background: var(--surface-sunken);
   scroll-behavior: smooth;
 }
@@ -971,8 +977,10 @@ table.list a {
   block-size: 100%;
   align-items: stretch;
   /* Each name carries its own padding; the room between them is what gives
-     way so the names themselves keep their size (2026-10-04). */
-  gap: 0.1rem;
+     way so the names themselves keep their size (2026-10-04). A little more
+     of it since 2026-10-06 ("in the navbar make sure they have a little more
+     space") — the 90% root size made the room for it. */
+  gap: 0.3rem;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -990,8 +998,8 @@ table.list a {
   display: inline-flex;
   min-inline-size: 0;
   align-items: center;
-  gap: 0.22rem;
-  padding-inline: 0.45rem;
+  gap: 0.3rem;
+  padding-inline: 0.6rem;
   color: var(--text-soft);
   background: transparent;
   font-size: clamp(0.74rem, 0.82vw, 0.84rem);
@@ -1835,10 +1843,11 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
    their size; to make room for them beside the company's name the header gives
    up, in order: the user's name and role beside the avatar (they head the user
    menu), the "Active branch" caption (the icon and the branch stay, the
-   caption is their title), the chevrons after the module names, and only then
-   the company's name. When even that is not enough the names are icons (each
-   with its name as its title), the compact form the breakpoint above has
-   always drawn. */
+   caption is their title), the company's name, and only last the chevrons
+   after the module names — last since 2026-10-06, by direction ("make sure
+   the arrow icon appears"). When even that is not enough the names are icons
+   (each with its name as its title), the compact form the breakpoint above
+   has always drawn. */
 .erp-header__bar[data-squeeze~="user"] :is(.erp-user-trigger__identity, .erp-user-trigger__chevron) {
   display: none;
 }

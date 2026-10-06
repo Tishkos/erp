@@ -76,7 +76,7 @@ test.describe('IM2-1 · a short container, worked out and claimed', () => {
     payableNo = decodeURIComponent(page.url().split('/payables/')[1]!.split('?')[0]!.split('#')[0]!);
 
     // Its B/L with two containers, the ten spread five and five.
-    await page.getByRole('button', { name: 'New B/L' }).click();
+    await page.getByRole('link', { name: 'New B/L' }).click();
     const create = page.getByRole('dialog');
     await create.getByRole('textbox', { name: 'B/L no.' }).fill(`BL-SHORT-${RUN}`);
     await create.getByLabel('B/L date').fill('2026-09-20');

@@ -822,6 +822,10 @@ What it is for: a read-only register of every import that has a cost charged to 
 - **Locked — late charges waiting** (مقفل — مصاريف متأخرة بالانتظار) — a charge arrived after the lock; allocate it on the import's page.
 The column **Allocation** (التوزيع) says the same in one word: **Not allocated** (غير موزَّع), **Partly allocated** (موزَّع جزئيًا), **Allocated** (موزَّع).
 
+### How to open a record — Landed Costs
+1. Click the import's number in the **Import** column. The import's landed cost opens on a sheet of its own (address /logistics/landed-costs/<import number>; since 2026-10-06): header — **Import** (link), **Supplier** (link), **Branch**, **Amount (IQD)** (the charges), **State** (chip: Not locked / Locked / charges waiting), **Locks** (count), and the last lock's **Date** and **Journal**; the charges as the lines (Type, Source, Amount, State, Note); then the allocation preview, the final item cost, the locks, and the buttons **Add charge** (إضافة عبء), **Lock** / **Allocate late charges**, **Withdraw** — exactly as on the import application's Landed cost section, and they return to this sheet.
+2. The title bar carries the four icons: print (the Final Cost), attachments (the freight, clearance and port bills, kept under the import's landed cost), notes, history (every charge added or withdrawn and every lock).
+
 ### Fields — Landed Costs
 Columns (all read-only):
 - **Import application** (طلب الاستيراد) — with the supplier's reference; **Supplier**.

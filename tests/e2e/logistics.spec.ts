@@ -122,7 +122,7 @@ test.describe('REQ-LOG-001 · the Logistics module', () => {
     await page.waitForURL(/\/payables\/IMP-/);
     importNo = decodeURIComponent(page.url().split('/payables/')[1]!.split(/[?#]/)[0]!);
 
-    await page.getByRole('button', { name: 'New B/L' }).click();
+    await page.getByRole('link', { name: 'New B/L' }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('textbox', { name: 'B/L no.' }).fill(blNo);
     await dialog.getByLabel('B/L date').fill('2026-09-20');

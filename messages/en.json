@@ -4123,6 +4123,7 @@
       "col_final_unit": "Final cost / unit",
       "col_final_value": "Value in stock",
       "final_print": "Final cost (print)",
+      "open_sheet": "Open the landed cost sheet",
       "col_purchase_value": "Purchase (IQD)",
       "col_charges_total": "Charges (IQD)",
       "col_departed": "Departed (IQD)",

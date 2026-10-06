@@ -15,7 +15,6 @@ import {
   admin as s,
 } from '@/components/admin';
 import { Pagination } from '@/components/ui';
-import { NewRecordDialog } from '@/components/admin/dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -23,9 +22,7 @@ import { formatBusinessDate, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
-import * as banks from '@/server/services/banks';
 import * as customs from '@/server/services/customs-pd';
-import { registerPd } from './actions';
 import { pdChip } from './status';
 import { businessToday } from '@/server/domain/business-date';
 import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
@@ -68,14 +65,9 @@ export default async function PdListPage({ searchParams }: { searchParams: Searc
   const applied = typeof params.applied === 'string' ? params.applied : null;
   const today = businessToday();
 
-  const { result, warning, imports, bankRows, statuses } = await withCurrentUser(async (tx) => ({
+  const { result, warning } = await withCurrentUser(async (tx) => ({
     result: await customs.listForScreen(tx, { view, search: outcome.q, page: outcome.page }),
     warning: await customs.warningDays(tx),
-    imports: mayCreate ? await customs.importChoices(tx) : [],
-    // The banks we bank with, not every bank there is: a PD against a bank we
-    // hold no account at can never be paid (2026-10-03).
-    bankRows: mayCreate ? await banks.listWeBankWith(tx) : [],
-    statuses: mayCreate ? await customs.statuses(tx) : [],
   }));
   const shown = result.rows;
   const query = (p: number) =>
@@ -88,48 +80,9 @@ export default async function PdListPage({ searchParams }: { searchParams: Searc
       actions={
         <>
           {mayCreate ? (
-            <NewRecordDialog
-              buttonLabel={t('register')}
-              closeLabel={admin('close')}
-              openOnLoad={Boolean(outcome.error) && !applied}
-              title={t('register')}
-            >
-              <p className="muted">{t('register_note')}</p>
-              <Form action={registerPd}>
-                <Grid>
-                  <Select
-                    label={t('import')}
-                    name="payable_id"
-                    options={imports.map((row) => ({
-                      value: row.id,
-                      label: `${row.payableNo} · ${row.reference} · ${row.supplierName}`,
-                    }))}
-                    required
-                  />
-                  <Field hint={t('pd_no_hint')} label={t('pd_no')} name="new_pd_no" required />
-                  <Field defaultValue={today} label={t('registered')} name="registration_date" required type="date" />
-                  <Field hint={t('expiry_hint')} label={t('expires')} name="expiry_date" required type="date" />
-                  <Select
-                    emptyLabel="—"
-                    label={t('bank')}
-                    name="bank_code"
-                    options={bankRows.map((b) => ({ value: b.code, label: b.swiftBic ? `${b.name} · ${b.swiftBic}` : b.name }))}
-                  />
-                  <Select
-                    defaultValue="submitted"
-                    label={t('status')}
-                    name="status_code"
-                    options={statuses
-                      .filter((row) => row.active && !row.isTerminal)
-                      .map((row) => ({ value: row.code, label: row.name }))}
-                  />
-                </Grid>
-                <Field label={t('note')} name="note" wide />
-                <SubmitRow>
-                  <Submit label={t('register')} />
-                </SubmitRow>
-              </Form>
-            </NewRecordDialog>
+            <Link className="action" href="/payables/pd/new">
+              {t('register')}
+            </Link>
           ) : null}
           {mayImport ? (
             <Link className="action" href="/payables/pd/asycuda">

@@ -45,7 +45,7 @@ test.describe('IM2 · the B/L table, its doors, correction and cancel', () => {
     await page.getByRole('link', { name: 'Import tracking' }).click();
     await page.waitForURL(/\/payables\/IMP-/);
 
-    await page.getByRole('button', { name: 'New B/L' }).click();
+    await page.getByRole('link', { name: 'New B/L' }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('textbox', { name: 'B/L no.' }).fill(blNo);
     await dialog.getByLabel('B/L date').fill('2026-09-20');

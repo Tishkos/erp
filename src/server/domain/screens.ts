@@ -125,7 +125,8 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   freight_costs: 'list',
   shipment_documents: 'list',
   shipment_tracking: 'list',
-  landed_costs: 'list',
+  // A document since 2026-10-06: each import's landed cost is a sheet under the register.
+  landed_costs: 'document',
   cost_allocation: 'report',
   loans: 'document',
   purchasing_reports: 'report',

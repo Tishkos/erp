@@ -200,7 +200,7 @@ test.describe('Related records · the chain around an import', () => {
     expect(importNo).toMatch(/^IMP-/);
 
     blNo = `BL-CTL-${RUN}`;
-    await page.getByRole('button', { name: 'New B/L' }).click();
+    await page.getByRole('link', { name: 'New B/L' }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('textbox', { name: 'B/L no.' }).fill(blNo);
     await dialog.getByLabel('B/L date').fill('2026-09-20');

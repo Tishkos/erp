@@ -15,7 +15,6 @@ import {
   admin as s,
 } from '@/components/admin';
 import { Pagination } from '@/components/ui';
-import { NewRecordDialog } from '@/components/admin/dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -23,9 +22,7 @@ import { formatBusinessDate, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
-import * as customs from '@/server/services/customs-pd';
 import * as shipments from '@/server/services/shipments';
-import { createBlAction } from './actions';
 import { businessToday } from '@/server/domain/business-date';
 import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
 import { savedViewsFor } from '@/server/saved-views-gate';
@@ -58,10 +55,8 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Se
 
   // The person's saved views of this screen — and, on a bare arrival, their default one.
   const saved = await savedViewsFor('imports.shipments', searchParams);
-  const { result, imports, ports } = await withCurrentUser(async (tx) => ({
+  const { result } = await withCurrentUser(async (tx) => ({
     result: await shipments.listBlsForScreen(tx, { search: outcome.q, page: outcome.page }),
-    imports: mayCreate ? await customs.importChoices(tx) : [],
-    ports: mayCreate ? await shipments.ports(tx) : [],
   }));
   const shown = result.rows;
   const query = (p: number) => [outcome.q ? `q=${encodeURIComponent(outcome.q)}` : '', `page=${p}`].filter(Boolean).join('&');
@@ -72,47 +67,9 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Se
     <AdminPage
       actions={
         mayCreate ? (
-          <NewRecordDialog
-            buttonLabel={t('new_bl')}
-            closeLabel={admin('close')}
-            openOnLoad={Boolean(outcome.error)}
-            title={t('new_bl')}
-            wide
-          >
-            <p className="muted">{t('new_bl_note')}</p>
-            <Form action={createBlAction}>
-              <Grid>
-                <Select
-                  label={t('import')}
-                  name="payable_id"
-                  options={imports.map((row) => ({
-                    value: row.id,
-                    label: `${row.payableNo} · ${row.reference} · ${row.supplierName}`,
-                  }))}
-                  required
-                />
-                <Field label={t('bl_no')} name="bl_no" required />
-                <Field defaultValue={today} label={t('bl_date')} name="bl_date" required type="date" />
-                <Field hint={t('eta_hint')} label={t('eta')} name="eta" required type="date" />
-                <Field label={t('vessel')} name="vessel" />
-                <Field label={t('voyage')} name="voyage" />
-                <Field label={t('shipping_line')} name="shipping_line" />
-                <Field label={t('port_of_loading')} name="port_of_loading" />
-                <Select
-                  emptyLabel="—"
-                  label={t('port_of_discharge')}
-                  name="port_of_discharge"
-                  options={ports.map((p) => ({ value: p.code, label: p.name }))}
-                />
-                <Field hint={t('size_type_hint')} label={t('size_type')} name="size_type" />
-              </Grid>
-              <Field hint={t('containers_hint')} label={t('containers')} name="containers" type="textarea" wide />
-              <Checkbox defaultChecked label={t('spread_lines')} name="spread_lines" />
-              <SubmitRow>
-                <Submit label={t('new_bl')} />
-              </SubmitRow>
-            </Form>
-          </NewRecordDialog>
+          <Link className="action" href="/payables/shipments/new">
+            {t('new_bl')}
+          </Link>
         ) : null
       }
       back={{ href: '/', label: admin('dashboard_label') }}

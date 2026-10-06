@@ -4123,6 +4123,7 @@
       "col_final_unit": "الكلفة النهائية / وحدة",
       "col_final_value": "قيمة المخزون",
       "final_print": "التكلفة النهائية (طباعة)",
+      "open_sheet": "افتح صفحة الكلفة الواصلة",
       "col_purchase_value": "الشراء (د.ع)",
       "col_charges_total": "المصاريف (د.ع)",
       "col_departed": "ما خرج (د.ع)",

@@ -76,7 +76,8 @@ type UtilityPanel = 'notifications' | 'messages' | 'user';
  * beside the company's name (`fitNav`): the user's name beside the avatar,
  * the "Active branch" caption, the chevrons, and last the company's name.
  */
-const HEADER_SQUEEZE = ['user', 'branch', 'chevrons', 'name'] as const;
+// The chevrons go last — after the company's name — by direction 2026-10-06 ("make sure the arrow icon appears").
+const HEADER_SQUEEZE = ['user', 'branch', 'name', 'chevrons'] as const;
 type OpenPopover = ModuleKey | UtilityPanel | null;
 
 interface ModuleDefinition {

@@ -285,14 +285,14 @@ export async function addLandedCharge(form: FormData): Promise<void> {
       reason: text(form, 'reason') || null,
       note: text(form, 'note') || null,
     });
-  }, back(payableNo));
+  }, text(form, 'return_to') || back(payableNo));
 }
 
 export async function withdrawLandedCharge(form: FormData): Promise<void> {
   const payableNo = text(form, 'payable_no');
   await runAdminAndReturn(
     async (tx, ctx) => landed.cancelCharge(tx, ctx, text(form, 'charge_id'), text(form, 'reason')),
-    back(payableNo),
+    text(form, 'return_to') || back(payableNo),
   );
 }
 
@@ -317,7 +317,7 @@ export async function lockLandedCost(form: FormData): Promise<void> {
       manual,
       note: text(form, 'note') || null,
     });
-  }, back(payableNo));
+  }, text(form, 'return_to') || back(payableNo));
 }
 
 /** REQ-FIX-001 FX8 — book the exchange difference a confirmation left waiting. */

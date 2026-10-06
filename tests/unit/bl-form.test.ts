@@ -56,8 +56,9 @@ describe('the containers of a new B/L, in whichever way its form asked for them'
   it('every form that creates a B/L sends one of the two, and the action reads both', () => {
     const source = (path: string) => readFileSync(resolve(__dirname, '../../src/app/(app)/payables', path), 'utf8');
     expect(source('shipments/actions.ts')).toContain('...blContainers(formData)');
-    // The list's form pastes; the import's own page sends the table.
-    expect(source('shipments/page.tsx')).toMatch(/name="containers"/);
-    expect(source('[payableNo]/page.tsx')).toMatch(/<Form action=\{createBlAction\}>[\s\S]*?<ContainerRowsGrid/);
+    // One sheet since 2026-10-06 (`shipments/new`): opened from the import it
+    // sends the table; opened from the list it pastes. Both post to the one action.
+    expect(source('shipments/new/page.tsx')).toMatch(/name="containers"/);
+    expect(source('shipments/new/page.tsx')).toMatch(/<form action=\{createBlAction\}>[\s\S]*?<ContainerRowsGrid/);
   });
 });

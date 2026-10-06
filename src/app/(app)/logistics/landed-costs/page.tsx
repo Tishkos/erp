@@ -121,7 +121,7 @@ export default async function LandedCostsPage({ searchParams }: { searchParams: 
                 {shown.map((row) => (
                   <tr key={row.payableId}>
                     <td>
-                      <Link className={s.sapLink} href={`/payables/${encodeURIComponent(row.payableNo)}#landed-cost`}>
+                      <Link className={s.sapLink} href={`/logistics/landed-costs/${encodeURIComponent(row.payableNo)}`}>
                         <bdi dir="ltr">{row.payableNo}</bdi>
                       </Link>
                       {row.reference ? <div className="muted">{row.reference}</div> : null}

@@ -28,10 +28,10 @@ function amountOf(value: string): bigint | null {
   return parseDecimal(cleaned, 4n);
 }
 
-/** The list's "New payment application": pick the import, then plan from its page. */
+/** The sheet's first step: pick the import, then the sheet opens for it (2026-10-06 — never the import's page). */
 export async function startApplication(formData: FormData): Promise<void> {
   const payableNo = text(formData, 'payable_no');
-  redirect(`${payableRecord(payableNo)}?pay=1#payments`);
+  redirect(`${LIST}/new?import=${encodeURIComponent(payableNo)}`);
 }
 
 export async function createApplication(formData: FormData): Promise<void> {

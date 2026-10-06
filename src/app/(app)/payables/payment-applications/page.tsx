@@ -13,7 +13,6 @@ import {
   admin as s,
 } from '@/components/admin';
 import { Pagination } from '@/components/ui';
-import { NewRecordDialog } from '@/components/admin/dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -22,7 +21,6 @@ import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as applications from '@/server/services/payment-applications';
-import { startApplication } from './actions';
 import { STATUS_CHIP, statusKey } from './status';
 
 /**
@@ -66,9 +64,8 @@ export default async function PaymentApplicationsPage({ searchParams }: { search
   const viewParam = typeof params.view === 'string' ? params.view : '';
 
   const inView = Object.hasOwn(VIEWS, viewParam) ? VIEWS[viewParam] : undefined;
-  const { result, imports } = await withCurrentUser(async (tx) => ({
+  const { result } = await withCurrentUser(async (tx) => ({
     result: await applications.listForScreen(tx, { statuses: inView ?? null, search: outcome.q, page: outcome.page }),
-    imports: mayCreate ? await applications.payableImports(tx) : [],
   }));
   const shown = result.rows;
   const query = (p: number) =>
@@ -80,23 +77,9 @@ export default async function PaymentApplicationsPage({ searchParams }: { search
     <AdminPage
       actions={
         mayCreate ? (
-          <NewRecordDialog buttonLabel={t('new')} closeLabel={admin('close')} title={t('new')}>
-            <p className="muted">{t('new_note')}</p>
-            <Form action={startApplication}>
-              <Select
-                label={t('import')}
-                name="payable_no"
-                options={imports.map((row) => ({
-                  value: row.payableNo,
-                  label: `${row.payableNo} · ${row.reference} · ${row.supplierName}`,
-                }))}
-                required
-              />
-              <SubmitRow>
-                <Submit label={t('continue')} />
-              </SubmitRow>
-            </Form>
-          </NewRecordDialog>
+          <Link className="action" href="/payables/payment-applications/new">
+            {t('new')}
+          </Link>
         ) : null
       }
       back={{ href: '/', label: admin('dashboard_label') }}

@@ -50,6 +50,33 @@ export interface PayableRecordInput {
   };
 }
 
+export type PayableView = Awaited<ReturnType<typeof payables.view>>;
+
+/**
+ * The landed cost of one import — the charges, the locks, the state, what a
+ * lock would do, the final cost. Read for the import's page and for the
+ * landed-cost sheet alike (2026-10-06); null for a cancelled import.
+ */
+export async function landedFor(tx: Tx, view: PayableView, may: { readonly addCharge: boolean; readonly lock: boolean }) {
+  if (view.payable.cancelledAt) return null;
+  const charges = await landedService.chargesFor(tx, view.payable.id);
+  const locks = await landedService.locksFor(tx, view.payable.id);
+  const state = landedService.lockableState({
+    allPdsWrittenOff: view.facts.allPdsWrittenOff,
+    containersIn: view.facts.containerCount > 0 && view.facts.containersReceived === view.facts.containerCount,
+    unlocked: charges.filter((charge) => !charge.lockId && !charge.cancelledAt).length,
+    lastSequence: locks.length ? Math.max(...locks.map((l) => l.sequence)) : null,
+  });
+  const preview = state.unlocked > 0 ? await landedService.preview(tx, { payableId: view.payable.id }) : { models: [], total: '0' };
+  const lockForm = may.lock && state.ready && state.unlocked > 0;
+  const bases = lockForm ? (await landedService.bases(tx)).filter((basis) => basis.active) : [];
+  const types = may.addCharge || lockForm ? (await landedService.chargeTypes(tx)).filter((type) => type.code !== 'purchase') : [];
+  const finalCost = locks.length > 0 ? await finalCostService.finalCost(tx, view.payable.id) : [];
+  return { charges, locks, state, preview, bases, types, finalCost };
+}
+
+export type LandedBlock = Awaited<ReturnType<typeof landedFor>>;
+
 export async function loadPayableRecord(tx: Tx, input: PayableRecordInput) {
   const { may } = input;
   try {
@@ -84,33 +111,7 @@ export async function loadPayableRecord(tx: Tx, input: PayableRecordInput) {
     // IM2 — the B/L's table: each model of the import with what is left to ship of it.
     const blModels = blPorts ? await shipmentsService.modelsToShip(tx, view.payable.id) : [];
     // §20.2 — the landed cost: its charges, the locks, what a lock would do.
-    let landed = null;
-    if (isImport && may.viewLanded && !view.payable.cancelledAt) {
-      const charges = await landedService.chargesFor(tx, view.payable.id);
-      const locks = await landedService.locksFor(tx, view.payable.id);
-      // The stage facts the view already read, the charges and the locks just read: no second pass.
-      const state = landedService.lockableState({
-        allPdsWrittenOff: view.facts.allPdsWrittenOff,
-        containersIn: view.facts.containerCount > 0 && view.facts.containersReceived === view.facts.containerCount,
-        unlocked: charges.filter((charge) => !charge.lockId && !charge.cancelledAt).length,
-        lastSequence: locks.length ? Math.max(...locks.map((l) => l.sequence)) : null,
-      });
-      // G3 — the preview only while something is unlocked; the lists only for the forms that use them.
-      const preview = state.unlocked > 0 ? await landedService.preview(tx, { payableId: view.payable.id }) : { models: [], total: '0' };
-      const lockForm = may.lock && state.ready && state.unlocked > 0;
-      const bases = lockForm ? (await landedService.bases(tx)).filter((basis) => basis.active) : [];
-      const types = may.addCharge || lockForm ? (await landedService.chargeTypes(tx)).filter((type) => type.code !== 'purchase') : [];
-      /*
-       * What each model finally cost (2026-10-03). The preview above is the
-       * forecast and stops the moment the cost is locked; this is the figure
-       * the lock left behind — IMPROVEMENT-002: read by `services/final-cost`
-       * over the whole lineage of the received layers (A1–A3, A11), the same
-       * figures the Final Cost print carries. Nothing to read until there is
-       * a lock.
-       */
-      const finalCost = locks.length > 0 ? await finalCostService.finalCost(tx, view.payable.id) : [];
-      landed = { charges, locks, state, preview, bases, types, finalCost };
-    }
+    const landed = isImport && may.viewLanded ? await landedFor(tx, view, { addCharge: may.addCharge, lock: may.lock }) : null;
     // G3 — the attachments and the history, in this same transaction.
     const attachments = await readAttachments(tx, payables.PERMISSION_OBJECT, view.payable.id);
     const history = await readHistory(tx, payables.PERMISSION_OBJECT, view.payable.id);

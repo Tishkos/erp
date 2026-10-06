@@ -59,13 +59,10 @@ import {
   updateHold,
   updatePiLines,
 } from '../actions';
-import { createApplication } from '../payment-applications/actions';
-import { registerPd } from '../pd/actions';
 import { pdChip } from '../pd/status';
-import { claimShortageAction, createBlAction } from '../shipments/actions';
-import { ContainerRowsGrid } from '@/components/admin/container-rows-grid';
-import { SIZE_TYPES } from '@/server/domain/shipments';
-import { addLandedCharge, lockLandedCost, settleExchangeDifference, withdrawLandedCharge } from '../actions';
+import { claimShortageAction } from '../shipments/actions';
+import { settleExchangeDifference } from '../actions';
+import { LandedCostSection } from '../landed-cost-section';
 import { containerChip } from '../containers/status';
 import { STATUS_CHIP, statusKey } from '../payment-applications/status';
 import { businessDateOf, businessToday } from '@/server/domain/business-date';
@@ -130,18 +127,6 @@ export default async function PayablePage({
   // IM2-1 — a shortage is claimed with a goods return.
   const mayClaim = can(principal, 'create', 'goods_return');
   // IM2 — the B/L's containers table, its words in the reader's language.
-  const containerGridLabels = {
-    containerNo: sh('container_no'),
-    sizeType: sh('size_type'),
-    sealNo: sh('seal_no'),
-    remove: sh('remove_container'),
-    left: sh('grid_left'),
-    typed: sh('grid_typed'),
-    divided: sh('grid_divided'),
-    tooMany: sh('grid_too_many', { left: '{left}' }),
-    notANumber: sh('grid_not_a_number'),
-    checkDigit: sh('grid_check_digit', { digit: '{digit}' }),
-  };
 
   const laneFilter = typeof query.lane === 'string' && query.lane ? query.lane : null;
 
@@ -183,7 +168,6 @@ export default async function PayablePage({
     blModels,
     landed,
   } = found;
-  const openPay = query.pay === '1';
 
   const money = (amount: string, currency = row.currency) =>
     formatMoney(amount, currency, locale as Locale);
@@ -923,78 +907,10 @@ export default async function PayablePage({
             {pickers ? (
               <div className={s.sapBody}>
                 <SubmitRow>
-                  <NewRecordDialog
-                    buttonLabel={pa('new')}
-                    closeLabel={admin('close')}
-                    openOnLoad={openPay}
-                    title={pa('new_for', { payableNo: row.payableNo })}
-                  >
-                    <Form action={createApplication}>
-                      <Hidden name="payable_no" value={row.payableNo} />
-                      <Grid>
-                        {/*
-                          A part payment is the ordinary case, not a special
-                          one: 20% with the order, the rest against the bill
-                          of lading. The box has always taken any amount —
-                          what it was missing was saying so, and saying what
-                          is still owed (2026-10-03).
-                        */}
-                        <Field
-                          hint={pa('amount_part_hint', { remaining: money(toDecimalString(paymentTotals.remainingTxn, 4n)) })}
-                          label={pa('col_amount')}
-                          name="amount"
-                        />
-                        <Select
-                          label={pa('col_method')}
-                          name="payment_method"
-                          options={pickers.methods.map((method) => ({ value: method.code, label: method.name }))}
-                          required
-                        />
-                        <Select
-                          label={pa('col_account')}
-                          name="bank_cash_account_id"
-                          options={pickers.accounts.map((account) => ({
-                            value: account.id,
-                            label: `${account.code} · ${account.name}${account.bankName ? ` · ${account.bankName}` : ''} — ${pa('available_short')} ${money(account.availableIqd, 'IQD')}`,
-                          }))}
-                          required
-                        />
-                        {/* IMPROVEMENT-002 — the supplier's accounts are set up and
-                            verified on its profile; the one in this import's
-                            currency (the default first) is chosen for you. */}
-                        <Select
-                          defaultValue={
-                            (pickers.payees.find((payee) => payee.verified && payee.currency === row.currency) ??
-                              pickers.payees.find((payee) => payee.verified))?.id ?? ''
-                          }
-                          emptyLabel="—"
-                          hint={pa('payee_hint')}
-                          label={pa('payee')}
-                          name="payee_bank_account_id"
-                          options={pickers.payees.map((payee) => ({
-                            value: payee.id,
-                            label: `${payee.bankName} · ${payee.iban ?? payee.accountNumber}${payee.swift ? ` · ${payee.swift}` : ''} · ${payee.currency}${payee.verified ? '' : ` (${pa('unverified')})`}`,
-                          }))}
-                        />
-                        {pickers.loans.length > 0 ? (
-                          <Select
-                            emptyLabel="—"
-                            hint={pa('loan_hint')}
-                            label={pa('loan')}
-                            name="loan_id"
-                            options={pickers.loans.map((loan) => ({
-                              value: loan.id,
-                              label: `${loan.loanNo} · ${loan.bankName} · ${loan.accountCode} — ${money(loan.unallocatedTxn)}`,
-                            }))}
-                          />
-                        ) : null}
-                      </Grid>
-                      <Field id="payapp-note" label={pa('note')} name="note" wide />
-                      <SubmitRow>
-                        <Submit label={pa('create')} />
-                      </SubmitRow>
-                    </Form>
-                  </NewRecordDialog>
+                  {/* A sheet of its own since 2026-10-06, by direction; the record opens on its own page, not this one. */}
+                  <Link className="action" href={`/payables/payment-applications/new?import=${encodeURIComponent(row.payableNo)}`}>
+                    {pa('new')}
+                  </Link>
                 </SubmitRow>
               </div>
             ) : null}
@@ -1075,42 +991,10 @@ export default async function PayablePage({
             {pdPickers ? (
               <div className={s.sapBody}>
                 <SubmitRow>
-                  <NewRecordDialog
-                    buttonLabel={cp('register')}
-                    closeLabel={admin('close')}
-                    title={cp('register_for', { payableNo: row.payableNo })}
-                  >
-                    <Form action={registerPd}>
-                      <Hidden name="payable_no" value={row.payableNo} />
-                      <Hidden name="back" value={`/payables/${encodeURIComponent(row.payableNo)}`} />
-                      <Grid>
-                        <Field hint={cp('pd_no_hint')} label={cp('pd_no')} name="new_pd_no" required />
-                        <Field label={cp('registered')} name="registration_date" required type="date" />
-                        <Field hint={cp('expiry_hint')} label={cp('expires')} name="expiry_date" required type="date" />
-                        <Select
-                          emptyLabel="—"
-                          label={cp('bank')}
-                          name="bank_code"
-                          options={pdPickers.banks.map((b) => ({
-                            value: b.code,
-                            label: b.swiftBic ? `${b.name} · ${b.swiftBic}` : b.name,
-                          }))}
-                        />
-                        <Select
-                          defaultValue="submitted"
-                          label={cp('status')}
-                          name="status_code"
-                          options={pdPickers.statuses
-                            .filter((status) => status.active && !status.isTerminal)
-                            .map((status) => ({ value: status.code, label: locale !== 'en' && cp.has(`ps.${status.code}`) ? cp(`ps.${status.code}`) : status.name }))}
-                        />
-                      </Grid>
-                      <Field id="pd-register-note" label={cp('note')} name="note" wide />
-                      <SubmitRow>
-                        <Submit label={cp('register')} />
-                      </SubmitRow>
-                    </Form>
-                  </NewRecordDialog>
+                  {/* A sheet of its own since 2026-10-06, by direction; the record opens on its own page, not this one. */}
+                  <Link className="action" href={`/payables/pd/new?import=${encodeURIComponent(row.payableNo)}`}>
+                    {cp('register')}
+                  </Link>
                 </SubmitRow>
               </div>
             ) : null}
@@ -1224,46 +1108,10 @@ export default async function PayablePage({
             {blPorts ? (
               <div className={s.sapBody}>
                 <SubmitRow>
-                  <NewRecordDialog
-                    buttonLabel={sh('new_bl')}
-                    closeLabel={admin('close')}
-                    title={sh('new_bl_for', { payableNo: row.payableNo })}
-                    wide
-                  >
-                    <Form action={createBlAction}>
-                      <Hidden name="payable_no" value={row.payableNo} />
-                      <Hidden name="back" value={`/payables/${encodeURIComponent(row.payableNo)}`} />
-                      <Grid>
-                        <Field label={sh('bl_no')} name="bl_no" required />
-                        <Field label={sh('bl_date')} name="bl_date" required type="date" />
-                        <Field hint={sh('eta_hint')} label={sh('eta')} name="eta" required type="date" />
-                        <Field label={sh('vessel')} name="vessel" />
-                        <Field label={sh('voyage')} name="voyage" />
-                        <Field label={sh('shipping_line')} name="shipping_line" />
-                        <Field label={sh('port_of_loading')} name="port_of_loading" />
-                        <Select
-                          emptyLabel="—"
-                          label={sh('port_of_discharge')}
-                          name="port_of_discharge"
-                          options={blPorts.map((port) => ({ value: port.code, label: port.name }))}
-                        />
-                      </Grid>
-                      <p className={s.sapGridCaption}>{sh('containers_caption')}</p>
-                      <ContainerRowsGrid
-                        labels={containerGridLabels}
-                        models={blModels.map((model) => ({
-                          key: model.key,
-                          label: model.itemCode ?? model.description,
-                          unit: model.uomCode,
-                          left: model.left,
-                        }))}
-                        sizeTypes={SIZE_TYPES.map((type) => ({ code: type.code, label: `${type.code} (${type.iso})` }))}
-                      />
-                      <SubmitRow>
-                        <Submit label={sh('new_bl')} />
-                      </SubmitRow>
-                    </Form>
-                  </NewRecordDialog>
+                  {/* A sheet of its own since 2026-10-06, by direction; the record opens on its own page, not this one. */}
+                  <Link className="action" href={`/payables/shipments/new?import=${encodeURIComponent(row.payableNo)}`}>
+                    {sh('new_bl')}
+                  </Link>
                 </SubmitRow>
               </div>
             ) : null}
@@ -1272,396 +1120,26 @@ export default async function PayablePage({
       ) : null}
 
       {/* ── Landed cost (§20.2): the charges, what a lock would do, the
-          locks. Imports only. ── */}
+          locks. Imports only. The same component as the landed-cost sheet
+          (2026-10-06, by direction), with its windows returning here. ── */}
       {landed ? (
-        <section aria-labelledby="payable-landed-title" className={s.sapDoc} id="landed-cost">
-          <div className={s.sapWindow}>
-            <h2 className={s.sapTitle} id="payable-landed-title">
-              <span>{lc('section_title')}</span>
-              <span className={s.sapTitleMeta}>
-                {lc('meta', {
-                  total: money(
-                    toDecimalString(
-                      landed.charges
-                        .filter((row) => !row.cancelledAt && row.chargeTypeCode !== 'purchase')
-                        .reduce((sum, row) => sum + parseDecimal(row.amountIqd, MONEY_SCALE), 0n),
-                      MONEY_SCALE,
-                    ),
-                    'IQD',
-                  ),
-                  state:
-                    landed.state.unlocked > 0
-                      ? lc('state_pending', { count: landed.state.unlocked })
-                      : landed.state.locked
-                        ? lc('state_locked')
-                        : lc('state_open'),
-                })}
-              </span>
-              {/* The invoices behind the charges — freight, clearance, insurance (2026-10-06, by direction). */}
-              <span className={s.sapTitleActions}>
-                <RecordAttachmentsDoor object="payable_landed_cost" recordId={row.id} />
-              </span>
-            </h2>
-            <div className={s.sapTableWrap}>
-              <table aria-labelledby="payable-landed-title" className={s.sapTable}>
-                <thead>
-                  <tr>
-                    <th scope="col">{lc('col_type')}</th>
-                    <th scope="col">{lc('col_source')}</th>
-                    <th className={s.sapNum} scope="col">
-                      {lc('col_amount')}
-                    </th>
-                    <th scope="col">{lc('col_state')}</th>
-                    <th scope="col">{lc('col_note')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {landed.charges.length === 0 ? (
-                    <tr>
-                      <td className={s.sapEmptyRow} colSpan={5}>
-                        {lc('none')}
-                      </td>
-                    </tr>
-                  ) : null}
-                  {landed.charges.map((row) => (
-                    <tr key={row.id}>
-                      <td>
-                        {locale !== 'en' && lc.has(`type_name.${row.chargeTypeCode}`)
-                          ? lc(`type_name.${row.chargeTypeCode}`)
-                          : row.chargeTypeName}
-                      </td>
-                      <td>
-                        <bdi dir="ltr">{row.sourceNo ?? '—'}</bdi>
-                      </td>
-                      <td className={s.sapNum}>
-                        <bdi dir="ltr">{money(row.amountIqd, 'IQD')}</bdi>
-                        {row.currency !== 'IQD' ? (
-                          <div className="muted">
-                            <bdi dir="ltr">{money(row.amountTxn, row.currency)}</bdi>
-                          </div>
-                        ) : null}
-                      </td>
-                      <td>
-                        {row.cancelledAt ? (
-                          <span className="status status--cancelled" data-status="cancelled">
-                            {lc('withdrawn')}
-                          </span>
-                        ) : row.lockId ? (
-                          <span className="status status--posted" data-status="posted">
-                            {lc('locked_n', { sequence: row.lockSequence ?? 1 })}
-                          </span>
-                        ) : (
-                          <span className="status status--draft" data-status="draft">
-                            {lc('unlocked')}
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        <bdi dir="auto">{row.reason ?? row.note ?? row.cancelReason ?? '—'}</bdi>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {landed.state.unlocked > 0 && landed.preview.models.length > 0 ? (
-              <div className={s.sapTableWrap}>
-                <table aria-label={lc('preview_title')} className={s.sapTable}>
-                  <thead>
-                    <tr>
-                      <th scope="col">{lc('col_model')}</th>
-                      <th className={s.sapNum} scope="col">
-                        {lc('col_received')}
-                      </th>
-                      <th className={s.sapNum} scope="col">
-                        {lc('col_on_hand')}
-                      </th>
-                      <th className={s.sapNum} scope="col">
-                        {lc('col_value')}
-                      </th>
-                      <th className={s.sapNum} scope="col">
-                        {lc('col_allocated')}
-                      </th>
-                      <th className={s.sapNum} scope="col">
-                        {lc('col_unit_now')}
-                      </th>
-                      <th className={s.sapNum} scope="col">
-                        {lc('col_unit_after')}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {landed.preview.models.map((model) => (
-                      <tr key={model.itemCode}>
-                        <td>
-                          <bdi dir="ltr">{model.itemCode}</bdi>
-                        </td>
-                        <td className={s.sapNum}>
-                          <bdi dir="ltr">{formatQuantity(model.receivedQty, locale as Locale)}</bdi>
-                        </td>
-                        <td className={s.sapNum}>
-                          <bdi dir="ltr">{formatQuantity(model.onHandQty, locale as Locale)}</bdi>
-                        </td>
-                        <td className={s.sapNum}>
-                          <bdi dir="ltr">{money(model.valueIqd, 'IQD')}</bdi>
-                        </td>
-                        <td className={s.sapNum}>
-                          <bdi dir="ltr">{model.allocatedIqd ? money(model.allocatedIqd, 'IQD') : '—'}</bdi>
-                        </td>
-                        <td className={s.sapNum}>
-                          <bdi dir="ltr">{money(model.unitCostIqd, 'IQD')}</bdi>
-                        </td>
-                        <td className={s.sapNum}>
-                          <bdi dir="ltr">{model.unitCostAfterIqd ? money(model.unitCostAfterIqd, 'IQD') : '—'}</bdi>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
-
-            {/*
-              What each model finally cost, once the cost is locked — the
-              figure the warehouse holds and the Warehouses Report multiplies
-              out (2026-10-03). The preview above answers "what will this do";
-              this answers "what did it come to".
-            */}
-            {landed.finalCost.length > 0 ? (
-              <div className={s.sapTableWrap}>
-                <table aria-label={lc('final_title')} className={s.sapTable}>
-                  <caption className={s.sapTitleMeta}>{lc('final_title')}</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">{lc('col_model')}</th>
-                      <th className={s.sapNum} scope="col">
-                        {lc('col_received')}
-                      </th>
-                      <th className={s.sapNum} scope="col">
-                        {lc('col_on_hand')}
-                      </th>
-                      <th className={s.sapNum} scope="col">
-                        {lc('col_invoiced_unit')}
-                      </th>
-                      <th className={s.sapNum} scope="col">
-                        {lc('col_charges_unit')}
-                      </th>
-                      <th className={s.sapNum} scope="col">
-                        {lc('col_final_unit')}
-                      </th>
-                      <th className={s.sapNum} scope="col">
-                        {lc('col_final_value')}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {landed.finalCost.map((model) => (
-                      <tr key={model.itemCode}>
-                        <td>
-                          <bdi dir="ltr">{model.itemCode}</bdi>
-                        </td>
-                        <td className={s.sapNum}>{model.receivedQty}</td>
-                        <td className={s.sapNum}>{model.onHandQty}</td>
-                        <td className={s.sapNum}>{money(model.invoicedUnitIqd, 'IQD')}</td>
-                        <td className={s.sapNum}>{money(model.chargesUnitIqd, 'IQD')}</td>
-                        <td className={s.sapNum}>
-                          <strong>{money(model.finalUnitIqd, 'IQD')}</strong>
-                        </td>
-                        <td className={s.sapNum}>{money(model.finalValueIqd, 'IQD')}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {/* IMPROVEMENT-002 — the Final Cost prints: the chain per layer,
-                    the locks' charges and where the departed part went. */}
-                <div className={s.sapFootActions}>
-                  <ExportMenu exportKey="landed_cost_final" id={row.payableNo} label={lc('final_print')} />
-                </div>
-              </div>
-            ) : null}
-
-            {landed.locks.length > 0 ? (
-              <div className={s.sapTableWrap}>
-                <table aria-label={lc('locks_title')} className={s.sapTable}>
-                  <thead>
-                    <tr>
-                      <th scope="col">{lc('col_lock')}</th>
-                      <th scope="col">{lc('col_date')}</th>
-                      <th scope="col">{lc('col_basis')}</th>
-                      <th className={s.sapNum} scope="col">
-                        {lc('col_total')}
-                      </th>
-                      <th className={s.sapNum} scope="col">
-                        {lc('col_stock')}
-                      </th>
-                      <th className={s.sapNum} scope="col">
-                        {lc('col_cogs')}
-                      </th>
-                      <th scope="col">{lc('col_journal')}</th>
-                      <th scope="col">{lc('col_by')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {landed.locks.map((row) => (
-                      <tr key={row.id}>
-                        <td>
-                          {row.sequence === 1 ? lc('lock_first') : `${lc('lock_adjustment')} ${row.sequence}`}
-                        </td>
-                        <td>
-                          <bdi dir="ltr">{day(row.lockDate)}</bdi>
-                        </td>
-                        <td>
-                          {locale !== 'en' && lc.has(`basis_name.${row.basisCode}`) ? lc(`basis_name.${row.basisCode}`) : row.basisName}
-                        </td>
-                        <td className={s.sapNum}>
-                          <bdi dir="ltr">{money(row.totalIqd, 'IQD')}</bdi>
-                        </td>
-                        <td className={s.sapNum}>
-                          <bdi dir="ltr">{money(row.inventoryIqd, 'IQD')}</bdi>
-                        </td>
-                        <td className={s.sapNum}>
-                          <bdi dir="ltr">{money(row.cogsIqd, 'IQD')}</bdi>
-                        </td>
-                        <td>
-                          <bdi dir="ltr">{row.entryNo}</bdi>
-                        </td>
-                        <td>
-                          <bdi dir="auto">{row.lockedBy ?? '—'}</bdi>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
-
-            {!landed.state.ready && landed.state.unlocked > 0 ? (
-              <p className={s.sapNote}>{lc('not_lockable')}</p>
-            ) : null}
-
-            {mayAddCharge || (mayLock && landed.state.ready && landed.state.unlocked > 0) ? (
-              <div className={s.sapBody}>
-                <SubmitRow>
-                  {mayAddCharge ? (
-                    <NewRecordDialog
-                      buttonLabel={lc('add')}
-                      closeLabel={admin('close')}
-                      title={lc('add_title', { payableNo: row.payableNo })}
-                    >
-                      <p className="muted">{lc('add_note')}</p>
-                      <Form action={addLandedCharge}>
-                        <Hidden name="payable_no" value={row.payableNo} />
-                        <Grid>
-                          <Select
-                            label={lc('charge_type')}
-                            name="charge_type"
-                            options={landed.types.map((type) => ({
-                              value: type.code,
-                              label: locale !== 'en' && lc.has(`type_name.${type.code}`) ? lc(`type_name.${type.code}`) : type.name,
-                            }))}
-                            required
-                          />
-                          <Field id="landed-journal" label={lc('journal_entry_no')} name="journal_entry_no" required />
-                          <Field id="landed-amount" label={lc('amount')} name="amount" required />
-                          <Field hint={lc('reason_hint')} id="landed-reason" label={lc('reason')} name="reason" />
-                        </Grid>
-                        <Field id="landed-note" label={lc('note')} name="note" wide />
-                        <SubmitRow>
-                          <Submit label={lc('add')} />
-                        </SubmitRow>
-                      </Form>
-                    </NewRecordDialog>
-                  ) : null}
-                  {mayLock && landed.state.ready && landed.state.unlocked > 0 ? (
-                    <NewRecordDialog
-                      buttonLabel={landed.state.locked ? lc('lock_again') : lc('lock')}
-                      closeLabel={admin('close')}
-                      title={lc('lock_title', { payableNo: row.payableNo })}
-                    >
-                      <p className="muted">{lc('lock_note', { total: money(landed.preview.total, 'IQD') })}</p>
-                      <Form action={lockLandedCost}>
-                        <Hidden name="payable_no" value={row.payableNo} />
-                        <Hidden name="line_count" value={String(landed.preview.models.length)} />
-                        <Grid>
-                          <Select
-                            defaultValue={landed.bases.find((basis) => basis.isDefault)?.code}
-                            label={lc('basis')}
-                            name="basis"
-                            options={landed.bases.map((basis) => ({
-                              value: basis.code,
-                              label:
-                                locale !== 'en' && lc.has(`basis_name.${basis.code}`) ? lc(`basis_name.${basis.code}`) : basis.name,
-                            }))}
-                          />
-                          <Field defaultValue={businessToday()} id="landed-lock-date" label={lc('lock_date')} name="lock_date" type="date" />
-                        </Grid>
-                        {landed.preview.models.length > 0 ? (
-                          <div className={s.sapTableWrap}>
-                            <table className={s.sapTable}>
-                              <thead>
-                                <tr>
-                                  <th scope="col">{lc('col_model')}</th>
-                                  <th scope="col">{lc('col_allocated')}</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {landed.preview.models.map((model, index) => (
-                                  <tr key={model.itemCode}>
-                                    <td>
-                                      <Hidden name={`model_${index}`} value={model.itemCode} />
-                                      <bdi dir="ltr">{model.itemCode}</bdi>
-                                    </td>
-                                    <td>
-                                      <input
-                                        aria-label={`${lc('col_allocated')} ${model.itemCode}`}
-                                        className={s.input}
-                                        inputMode="decimal"
-                                        name={`amount_${index}`}
-                                      />
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        ) : null}
-                        <p className="muted">{lc('manual_hint')}</p>
-                        <Field id="landed-lock-note" label={lc('note')} name="note" wide />
-                        <SubmitRow>
-                          <Submit label={landed.state.locked ? lc('lock_again') : lc('lock')} />
-                        </SubmitRow>
-                      </Form>
-                    </NewRecordDialog>
-                  ) : null}
-                  {mayWithdraw && landed.charges.some((row) => !row.lockId && !row.cancelledAt && row.sourceType === 'journal_entry') ? (
-                    <NewRecordDialog buttonLabel={lc('withdraw')} closeLabel={admin('close')} title={lc('withdraw')}>
-                      <p className="muted">{lc('withdraw_note')}</p>
-                      <Form action={withdrawLandedCharge}>
-                        <Hidden name="payable_no" value={row.payableNo} />
-                        <Select
-                          label={lc('withdraw_charge')}
-                          name="charge_id"
-                          options={landed.charges
-                            .filter((charge) => !charge.lockId && !charge.cancelledAt && charge.sourceType === 'journal_entry')
-                            .map((charge) => ({
-                              value: charge.id,
-                              label: `${charge.sourceNo ?? ''} · ${charge.chargeTypeName} · ${money(charge.amountIqd, 'IQD')}`,
-                            }))}
-                          required
-                        />
-                        <Field id="landed-withdraw-reason" label={lc('withdraw_reason')} name="reason" required wide />
-                        <SubmitRow>
-                          <Submit label={lc('withdraw')} />
-                        </SubmitRow>
-                      </Form>
-                    </NewRecordDialog>
-                  ) : null}
-                </SubmitRow>
-              </div>
-            ) : null}
-          </div>
-        </section>
+        <LandedCostSection
+          landed={landed}
+          locale={locale}
+          may={{ addCharge: mayAddCharge, lock: mayLock, withdraw: mayWithdraw }}
+          returnTo={`/payables/${encodeURIComponent(row.payableNo)}#landed-cost`}
+          row={{ id: row.id, payableNo: row.payableNo }}
+          titleActions={
+            <>
+              {visibleRoute('/logistics/landed-costs') ? (
+                <Link className={s.sapLink} href={`/logistics/landed-costs/${encodeURIComponent(row.payableNo)}`}>
+                  {lc('open_sheet')}
+                </Link>
+              ) : null}
+              <RecordAttachmentsDoor object="payable_landed_cost" recordId={row.id} />
+            </>
+          }
+        />
       ) : null}
       </div>
 

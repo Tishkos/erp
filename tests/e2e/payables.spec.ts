@@ -220,7 +220,7 @@ test.describe('A22 · payables in a browser', () => {
     // §15.3 — the application for the 30% deposit (of 50,000), by cheque from
     // the seeded account. Any part of what is owed; no instalment, no
     // "Funded by" — the account says where the money leaves from.
-    await page.getByRole('button', { name: 'New payment application' }).click();
+    await page.getByRole('link', { name: 'New payment application' }).click();
     const create = page.getByRole('dialog');
     await expect(create.getByLabel('Instalment')).toHaveCount(0);
     await expect(create.getByLabel('Funded by')).toHaveCount(0);
@@ -285,7 +285,7 @@ test.describe('A22 · payables in a browser', () => {
     await page.waitForURL(/\/payables\/IMP-/);
 
     // §16.1 — the PD, as the ASYCUDA screen shows it.
-    await page.getByRole('button', { name: 'Register PD' }).click();
+    await page.getByRole('link', { name: 'Register PD' }).click();
     const register = page.getByRole('dialog');
     await register.getByRole('textbox', { name: 'PD no.' }).fill(pdNo);
     await register.getByLabel('Registered').fill('2026-09-02');
@@ -360,7 +360,7 @@ test.describe('A22 · payables in a browser', () => {
 
     // §17.1 — the B/L from the import page, its containers pasted in.
     await expect(page.getByRole('heading', { name: /Shipment/ })).toBeVisible();
-    await page.getByRole('button', { name: 'New B/L' }).click();
+    await page.getByRole('link', { name: 'New B/L' }).click();
     const create = page.getByRole('dialog');
     await create.getByRole('textbox', { name: 'B/L no.' }).fill(blNo);
     await create.getByLabel('B/L date').fill('2026-09-20');
@@ -496,7 +496,7 @@ test.describe('A22 · payables in a browser', () => {
     await page.waitForURL(/\/payables\/IMP-/);
     const importUrl = page.url().split('?')[0]!;
 
-    await page.getByRole('button', { name: 'New B/L' }).click();
+    await page.getByRole('link', { name: 'New B/L' }).click();
     const bl = page.getByRole('dialog');
     await bl.getByRole('textbox', { name: 'B/L no.' }).fill(`BL-LC-${RUN}`);
     await bl.getByLabel('B/L date').fill('2026-09-20');
@@ -511,7 +511,7 @@ test.describe('A22 · payables in a browser', () => {
 
     // The PD, validated, then totally written off.
     await page.goto(importUrl);
-    await page.getByRole('button', { name: 'Register PD' }).click();
+    await page.getByRole('link', { name: 'Register PD' }).click();
     const register = page.getByRole('dialog');
     await register.getByRole('textbox', { name: 'PD no.' }).fill(pdNo);
     await register.getByLabel('Registered').fill('2026-09-02');

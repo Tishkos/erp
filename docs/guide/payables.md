@@ -138,19 +138,19 @@ For an import agreed in a foreign currency and fully paid in it, a note may appe
 
 ### How to register a PD from the import — Import Applications
 Needs: `create` on `customs_pd`; the import must be open.
-1. In **PD / ASYCUDA** press **Register PD** (تسجيل تصريح).
+1. In **PD / ASYCUDA** press **Register PD** (تسجيل تصريح). A page of its own opens (since 2026-10-06), with the import already chosen; the PD list's **Register PD** opens the same page with the import to choose.
 2. Fill: **PD no.** (رقم التصريح) — required, the ASYCUDA number as customs issued it; **Registered** (تاريخ التسجيل) — required; **Expires** (ينتهي في) — required, as ASYCUDA shows it; **Bank** (البنك) — optional; **Status** (الحالة) — opens on Submitted (مقدَّم); **Note** (ملاحظة).
-3. Press **Register PD**. The PD appears in the section's table: PD no., Bank, Registered, Expires, Days left (الأيام المتبقية), Status, Note. Click the PD number to open it on its own page (Logistics).
+3. Press **Register PD**. The PD opens on its own page — you are not sent back to the import. On the import it then appears in the section's table: PD no., Bank, Registered, Expires, Days left (الأيام المتبقية), Status, Note. Click the PD number to open it on its own page (Logistics).
 
 ### How to record a bill of lading from the import — Import Applications
 Needs: `create` on `bill_of_lading`; the import must be open.
-1. In **Shipment & containers** press **New B/L** (بوليصة شحن جديدة).
+1. In **Shipment & containers** press **New B/L** (بوليصة شحن جديدة). A page of its own opens (since 2026-10-06), with the import already chosen and the containers as a table; the Shipments list's **New B/L** opens the same page with the import to choose and the containers as a pasted list.
 2. Fill: **B/L no.** (رقم البوليصة) — required; **B/L date** (تاريخ البوليصة) — required; **ETA** (الوصول المتوقع) — required; **Vessel** (السفينة); **Voyage** (الرحلة); **Shipping line** (خط الشحن); **Port of loading** (ميناء التحميل); **Port of discharge** (ميناء التفريغ).
 3. In the containers table add one row per container: **Container no.** (رقم الحاوية) — four letters and seven digits, the last digit is checked; **Size / type** (الحجم / النوع); **Seal no.** (رقم الختم); and for each model how many that container carries — leave a model's column empty to divide what is left of it equally. Never more than was ordered.
-4. Press **New B/L**. The B/L and its containers appear in the section (B/L no., B/L date, Vessel, Port of discharge, ETA, Received "X of Y"; and per container: Container no., B/L no., ETA, Status, Warehouse). Containers are received on their own pages (Logistics).
+4. Press **New B/L**. The B/L opens on its own page — you are not sent back to the import. On the import, the B/L and its containers appear in the section (B/L no., B/L date, Vessel, Port of discharge, ETA, Received "X of Y"; and per container: Container no., B/L no., ETA, Status, Warehouse). Containers are received on their own pages (Logistics).
 
 ### Landed cost — charges, the lock, and the final cost — Import Applications
-The **Landed cost** (الكلفة الواصلة) section collects every cost that belongs to the import besides the goods (freight, customs, port and forwarding, bank commission, loan cost, other) and, when locked, spreads it over the stock the containers brought in. Its title shows the total of charges and the state: "not locked" (غير مقفلة), "N charge(s) waiting for a lock", or "locked" (مقفلة).
+The **Landed cost** (الكلفة الواصلة) section — also a sheet of its own since 2026-10-06, under Logistics → Landed Costs → Landed Costs (click the import), with print, attachments, notes and history in its title bar; the section and the sheet show the same thing, and the buttons on each return to the page they were pressed on — collects every cost that belongs to the import besides the goods (freight, customs, port and forwarding, bank commission, loan cost, other) and, when locked, spreads it over the stock the containers brought in. Its title shows the total of charges and the state: "not locked" (غير مقفلة), "N charge(s) waiting for a lock", or "locked" (مقفلة).
 - The charges table: **Type** (النوع), **Source** (المصدر) — the document or journal number, **Amount (IQD)** (المبلغ (د.ع)), **State** (الحالة) — Not locked (غير مقفل), Locked · n (مقفل), Withdrawn (مسحوب), **Note** (ملاحظة).
 - A charge arrives by itself when an expense is entered with "Belongs to import" naming this import and posted, and with a loan's commission. A cost that was booked by a manual journal is added by hand (below).
 - While charges wait for a lock, an **Allocation preview** shows per model: Received (المستلم), On hand (المتوفر), Value (IQD), Allocated (IQD), Unit cost now, Unit cost after.
@@ -636,8 +636,8 @@ What it is for: A payment application is the company's request to its bank or ca
 ### How to create a payment application — Payment Applications
 Needs: `create` on `payment_application`.
 1. Press **New payment application** (طلب دفع جديد).
-2. Choose the **Import application** (معاملة الاستيراد) and press **Continue** (متابعة). The import's page opens with the payment dialog.
-3. Fill the dialog and press **Create** — see "How to pay — the deposit / advance and payment applications — Import Applications" for the fields (Amount, Method, Paid from, Supplier bank account, Loan, Note).
+2. Choose the **Import application** (معاملة الاستيراد) and press **Continue** (متابعة). The application's own page opens (since 2026-10-06) with the import named at the top; from the import application's Payments section, **New payment application** opens the same page with the import already named.
+3. Fill the page and press **Create** — the application opens on its own record, never the import — see "How to pay — the deposit / advance and payment applications — Import Applications" for the fields (Amount, Method, Paid from, Supplier bank account, Loan, Note).
 4. The new application opens on its own page in status Draft.
 
 ### How to open a record and what it shows — Payment Applications

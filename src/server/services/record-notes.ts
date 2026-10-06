@@ -157,6 +157,8 @@ const TARGETS = new Map<string, NoteTarget>([
   ['goods_return', target('goods_return', 'edit_draft', inTable('goods_return', 'id', 'branch_code'))],
   ['purchase_order', target('purchase_order', 'edit_draft', inTable('purchase_order', 'id', 'branch_code'))],
   ['goods_receipt', target('goods_receipt', 'edit_draft', inTable('goods_receipt', 'id', 'branch_code'))],
+  // The import's landed-cost sheet (2026-10-06): notes under the import's id, the landed-cost grant.
+  ['payable_landed_cost', target('landed_cost', 'create', inTable('payable', 'id', 'branch_code'))],
   ['service_receipt', target('service_receipt', 'edit_draft', inTable('service_receipt', 'id', 'branch_code'))],
   ['recurring_contract', target('recurring_contract', 'edit_draft', inTable('recurring_contract', 'id', 'branch_code'))],
   ['payment_application', target('payment_application', 'edit_draft', inTable('payment_application', 'id', 'branch_code'))],
