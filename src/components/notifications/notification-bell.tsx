@@ -15,10 +15,10 @@ import { adopt, markAllRead, markRead, markUnread, mount, setCategory, setOpen, 
  * It now carries the unread count, lists what is waiting (or everything) with
  * a category filter, opens a notification through `/notifications/open/<id>`
  * — which works out where it leads *now*, for this reader, and says so when
- * they can no longer go there — and marks read, unread and all read. Nothing
- * here draws anything of its own: the count is the header's `coa-count-badge`,
- * the list the notifications list's classes, the buttons the filter and compact
- * buttons the chart of accounts uses.
+ * they can no longer go there — and marks read, unread and all read. The count
+ * is a small badge on the bell (`erp-icon-button__badge`, Intent UI
+ * 2026-10-06); the list and the buttons keep their classes, which the shell's
+ * stylesheet draws in Intent UI's look inside the popover.
  */
 
 export interface BellSeedProps {
@@ -55,17 +55,19 @@ export function useBellLabel(seed: BellSeedProps, base: string): string {
   return snap.unread > 0 ? t('bell_label_count', { count: snap.unread }) : base;
 }
 
-/** The button's face: the bell, or — when something is waiting — the count in its place. */
+/** The button's face: the bell, and — when something is waiting — the count as a small badge on it. */
 export function BellGlyph({ seed }: { readonly seed: BellSeedProps }) {
   const snap = useBellFeed(seed);
-  if (snap.unread > 0) {
-    return (
-      <span aria-hidden="true" className="coa-count-badge" data-bell-badge={snap.unread}>
-        {badgeText(snap.unread)}
-      </span>
-    );
-  }
-  return <Bell aria-hidden="true" />;
+  return (
+    <>
+      <Bell aria-hidden="true" />
+      {snap.unread > 0 ? (
+        <span aria-hidden="true" className="coa-count-badge erp-icon-button__badge" data-bell-badge={snap.unread}>
+          {badgeText(snap.unread)}
+        </span>
+      ) : null}
+    </>
+  );
 }
 
 /** The mobile drawer's row for notifications: the count beside the label. */

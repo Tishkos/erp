@@ -13,9 +13,9 @@ import { mount, useChat } from './chat-store';
  * The header's messages button was an empty drawer. It now carries the unread
  * count, the drawer lists the conversations that want reading, and the same
  * poll that fills them (`chat-store`) keeps the person present for the people
- * they talk to. None of this draws anything of its own: the count is the
- * header's `coa-count-badge`, the list the notifications list's classes, the
- * link the popover's link.
+ * they talk to. The count is a small badge on the envelope
+ * (`erp-icon-button__badge`, Intent UI 2026-10-06), the list the notifications
+ * list's classes, the link the popover's link.
  *
  * A person without chat (`enabled` false) gets the button as it was.
  */
@@ -27,18 +27,20 @@ export function useChatLabel(enabled: boolean, base: string): string {
   return enabled && snap.badge > 0 ? `${base}: ${t('unread_count', { count: snap.badge })}` : base;
 }
 
-/** The button's face: the envelope, or — when there is something to read — the count in its place. */
+/** The button's face: the envelope, and — when there is something to read — the count as a small badge on it. */
 export function ChatGlyph({ enabled }: { readonly enabled: boolean }) {
   const snap = useChat();
   useEffect(() => (enabled ? mount('header') : undefined), [enabled]);
-  if (enabled && snap.badge > 0) {
-    return (
-      <span aria-hidden="true" className="coa-count-badge" data-chat-badge={snap.badge}>
-        {badgeText(snap.badge)}
-      </span>
-    );
-  }
-  return <Mail aria-hidden="true" />;
+  return (
+    <>
+      <Mail aria-hidden="true" />
+      {enabled && snap.badge > 0 ? (
+        <span aria-hidden="true" className="coa-count-badge erp-icon-button__badge" data-chat-badge={snap.badge}>
+          {badgeText(snap.badge)}
+        </span>
+      ) : null}
+    </>
+  );
 }
 
 /** The mobile drawer's row for messages: the count beside the label. */

@@ -842,24 +842,83 @@ table.list a {
   }
 }
 
-/* ERP application shell -------------------------------------------------- */
+/* ERP application shell — Intent UI (2026-10-06) -------------------------
+   By direction: "the current system looks extremely old — update the UI
+   completely … most modern, friendly". The shell keeps its layout, its
+   behaviour and its measuring (erp-shell.tsx › fitNav, HEADER_SQUEEZE); its
+   look is Intent UI's navbar: a clean surface bar with a hairline under it,
+   quiet rounded module buttons, menus and popovers as Intent menus (overlay
+   surface, rounded-xl, a border and shadow-lg), sheets for the drawers.
+   Every colour is a --ui-* token, so all palettes and accents follow; every
+   corner follows the person's Corner style through --radius-lg. */
 
 .erp-shell {
+  --erp-radius: var(--radius-lg, 0.5rem);
+  --erp-radius-pop: calc(var(--radius-lg, 0.5rem) * 1.4);
+  --erp-shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 5%);
+  --erp-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 10%), 0 4px 6px -4px rgb(0 0 0 / 10%);
+  --erp-shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 10%), 0 8px 10px -6px rgb(0 0 0 / 10%);
+  --erp-scrim: rgb(0 0 0 / 25%);
+  --erp-pop-line: color-mix(in oklab, var(--ui-muted-fg) 24%, transparent);
+  /* The module and utility names at rest: the bar's ink, a step quieter. */
+  --erp-nav-ink: color-mix(in oklab, var(--ui-navbar-fg) 80%, var(--ui-navbar));
+
   display: flex;
   min-block-size: 100vh;
   flex-direction: column;
+  font-family: inherit;
 }
+
+/* The seven dark palettes (appearance.ts; the same list as intent-theme.css). */
+html:has(.erp-root:is([data-palette='midnight'], [data-palette='carbon'], [data-palette='ocean'], [data-palette='obsidian_plum'], [data-palette='evergreen'], [data-palette='espresso'], [data-palette='lunar_slate'])) .erp-shell {
+  --erp-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 40%), 0 4px 6px -4px rgb(0 0 0 / 35%);
+  --erp-shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 45%), 0 8px 10px -6px rgb(0 0 0 / 40%);
+  --erp-scrim: rgb(0 0 0 / 50%);
+  --erp-pop-line: var(--ui-border);
+}
+
+/* Shadow style "None" is the person's choice: the menus keep their border. */
+.erp-root[data-shadow="none"] .erp-shell {
+  --erp-shadow-xs: none;
+  --erp-shadow-lg: none;
+  --erp-shadow-xl: none;
+}
+
+/* The workspace the pages sit on. */
+.erp-main {
+  background: var(--w-canvas, var(--ui-bg));
+}
+
+@keyframes erp-pop-in {
+  from { opacity: 0; transform: translateY(-0.25rem) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes erp-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes erp-sheet-in {
+  from { opacity: 0.4; transform: translateX(calc(100% + 1rem)); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes erp-sheet-in-rtl {
+  from { opacity: 0.4; transform: translateX(calc(-100% - 1rem)); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ── The bar ─────────────────────────────────────────────────────────────── */
 
 .erp-header {
   position: sticky;
   inset-block-start: 0;
   z-index: 50;
-  block-size: 4.4rem;
-  color: var(--text);
-  background: var(--header-surface);
-  border-block-end: 1px solid var(--border);
-  box-shadow: var(--header-shadow);
-  backdrop-filter: blur(18px);
+  block-size: 3.4rem;
+  color: var(--ui-navbar-fg);
+  background: var(--ui-navbar);
+  border-block-end: 1px solid var(--ui-border);
 }
 
 .erp-header__bar {
@@ -867,6 +926,7 @@ table.list a {
   /* Identity and utilities take what they need; the navigation gets the rest
      and may not spill over either of them. */
   grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: 0.6rem;
   block-size: 100%;
   align-items: stretch;
   padding-inline: clamp(0.55rem, 1.25vw, 1.25rem);
@@ -875,65 +935,25 @@ table.list a {
 .erp-header__identity {
   display: flex;
   min-inline-size: 0;
-  align-items: stretch;
+  align-items: center;
   justify-self: start;
-}
-
-.erp-icon-button,
-.erp-locale-toggle,
-.erp-mobile-trigger {
-  position: relative;
-  display: inline-grid;
-  inline-size: 2.5rem;
-  block-size: 2.5rem;
-  place-items: center;
-  align-self: center;
-  flex: 0 0 auto;
-  border: 1px solid transparent;
-  border-radius: 50%;
-  color: var(--text-soft);
-  background: transparent;
-  cursor: pointer;
-  transition: color 150ms ease, border-color 150ms ease, background 150ms ease;
-}
-
-.erp-icon-button svg,
-.erp-locale-toggle svg,
-.erp-mobile-trigger svg {
-  inline-size: 1.22rem;
-  block-size: 1.22rem;
-  stroke-width: 1.9;
-}
-
-.erp-icon-button:hover,
-.erp-locale-toggle:hover,
-.erp-mobile-trigger:hover,
-.erp-icon-button[aria-expanded="true"],
-.erp-locale-toggle[aria-expanded="true"] {
-  border-color: var(--accent-border);
-  color: var(--accent);
-  background: var(--accent-soft);
 }
 
 .erp-brand {
   display: flex;
   min-inline-size: 0;
   align-items: center;
-  gap: 0.7rem;
-  margin-inline-end: 0.65rem;
-  padding-inline-end: 1rem;
-  border-inline-end: 1px solid var(--border);
-  color: var(--text);
+  gap: 0.6rem;
+  padding-block: 0.2rem;
+  padding-inline: 0.15rem 0.45rem;
+  border-radius: var(--erp-radius);
+  color: var(--ui-fg);
   text-decoration: none;
 }
 
 .erp-brand__logo {
-  /* Smaller by direction (2026-10-02). The mark here is the Q on its own, and
-     a monogram carries at a size the full logo could not.
-     Square and `contain`, because the mark is: a slot narrower than it was
-     tall, filled with `cover`, shaved both sides of the Q (reported
-     2026-10-05). Nothing here may crop it — the file carries its own clear
-     space, so the Q is the size it was. */
+  /* Smaller by direction (2026-10-02). The mark here is the Q on its own;
+     square and `contain`, because the mark is (reported 2026-10-05). */
   inline-size: 2.4rem;
   block-size: 2.4rem;
   flex: 0 0 auto;
@@ -943,37 +963,33 @@ table.list a {
 .erp-brand__wordmark {
   display: grid;
   min-inline-size: 0;
-  line-height: 1.12;
+  line-height: 1.2;
 }
 
 .erp-brand__wordmark strong {
-  color: var(--brand-wordmark);
-  font-size: 0.75rem;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
-.erp-brand__wordmark small {
-  color: var(--text-muted);
-  font-size: 0.6rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.erp-brand__product {
-  display: none;
-  padding-inline-start: 0.9rem;
-  border-inline-start: 1px solid var(--border);
-  color: var(--brand-product);
-  font-size: 1.02rem;
-  font-weight: 800;
+  color: var(--ui-fg);
+  font-size: 0.82rem;
+  font-weight: 600;
   letter-spacing: -0.01em;
   white-space: nowrap;
 }
 
-.erp-mobile-trigger {
+.erp-brand__wordmark small {
+  color: var(--ui-muted-fg);
+  font-size: 0.62rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+html[lang="ar"] .erp-brand__wordmark strong {
+  letter-spacing: 0;
+}
+
+.erp-brand__product {
   display: none;
 }
+
+/* ── The modules ─────────────────────────────────────────────────────────── */
 
 /* No overflow clipping here: the module popovers are positioned inside it.
    It fills its column so the shell can measure the room it really has and
@@ -988,10 +1004,8 @@ table.list a {
   block-size: 100%;
   align-items: stretch;
   /* Each name carries its own padding; the room between them is what gives
-     way so the names themselves keep their size (2026-10-04). A little more
-     of it since 2026-10-06 ("in the navbar make sure they have a little more
-     space") — the 90% root size made the room for it. */
-  gap: 0.1rem;
+     way so the names themselves keep their size (2026-10-04). */
+  gap: 0.05rem;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1001,63 +1015,63 @@ table.list a {
   position: relative;
   display: flex;
   flex: 0 0 auto;
-  align-items: stretch;
+  align-items: center;
 }
 
 .erp-nav__trigger {
   position: relative;
   display: inline-flex;
   min-inline-size: 0;
+  min-block-size: 2.15rem;
   align-items: center;
-  gap: 0.1rem;
-  padding-inline: 0.35rem;
-  color: var(--text-soft);
+  /* Measured: with these the twelve names keep their chevrons at 1280px. */
+  gap: 0.08rem;
+  padding-inline: 0.4rem;
+  border: 0;
+  border-radius: var(--erp-radius);
+  color: var(--erp-nav-ink);
   background: transparent;
-  /* Sized in rem first so the 90% root applies; the vw middle keeps it from
-     growing on a wide screen. On a 1366px laptop this is what lets thirteen
-     names keep their chevrons (2026-10-06; measured on the server at 1280,
-     1366 and 1440px — the chevrons fit at all three). */
-  font-size: clamp(0.68rem, 0.74vw, 0.82rem);
-  font-weight: 700;
+  /* The names are never drawn smaller to fit (by direction, 2026-10-04). */
+  font-size: 0.79rem;
+  font-weight: 500;
+  line-height: 1.25;
   white-space: nowrap;
   cursor: pointer;
-}
-
-.erp-nav__trigger::after {
-  position: absolute;
-  inset-inline: 0.45rem;
-  inset-block-end: 0;
-  block-size: 0.18rem;
-  border-radius: 999px 999px 0 0;
-  background: var(--accent);
-  content: "";
-  opacity: 0;
-  transform: scaleX(0.5);
-  transition: opacity 150ms ease, transform 150ms ease;
+  transition: background-color 150ms ease, color 150ms ease;
 }
 
 .erp-nav__trigger:hover,
-.erp-nav__trigger[aria-expanded="true"],
-.erp-nav__trigger[data-active="true"] {
-  color: var(--accent);
+.erp-nav__trigger[aria-expanded="true"] {
+  color: var(--ui-secondary-fg);
+  background: var(--ui-secondary);
 }
 
-.erp-nav__trigger[data-active="true"]::after,
-.erp-nav__trigger[aria-expanded="true"]::after {
-  opacity: 1;
-  transform: scaleX(1);
+/* The module you are in: Intent's selected tint. */
+.erp-nav__trigger[data-active="true"] {
+  color: var(--ui-primary-subtle-fg);
+  background: var(--ui-primary-subtle);
+}
+
+.erp-nav__trigger[data-active="true"]:hover,
+.erp-nav__trigger[data-active="true"][aria-expanded="true"] {
+  background: color-mix(in oklab, var(--ui-primary) 22%, transparent);
 }
 
 .erp-nav__icon {
   display: none;
-  inline-size: 0.95rem;
-  block-size: 0.95rem;
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+  flex: 0 0 auto;
+  stroke-width: 1.8;
 }
 
 .erp-nav__chevron,
 .erp-user-trigger__chevron {
   inline-size: 0.6rem;
   block-size: 0.6rem;
+  flex: 0 0 auto;
+  opacity: 0.6;
+  stroke-width: 2.4;
   transition: transform 150ms ease;
 }
 
@@ -1065,27 +1079,104 @@ table.list a {
   transform: rotate(180deg);
 }
 
+/* ── The utilities ───────────────────────────────────────────────────────── */
+
 .erp-header__utilities {
   display: flex;
   align-items: center;
-  gap: 0.15rem;
+  gap: 0.1rem;
   justify-self: end;
-  padding-inline-start: 0.7rem;
-  border-inline-start: 1px solid var(--border);
 }
 
+.erp-icon-button,
+.erp-locale-toggle,
+.erp-mobile-trigger {
+  position: relative;
+  display: inline-grid;
+  inline-size: 2.1rem;
+  block-size: 2.1rem;
+  place-items: center;
+  align-self: center;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--erp-radius);
+  color: var(--ui-muted-fg);
+  background: transparent;
+  cursor: pointer;
+  transition: color 150ms ease, background-color 150ms ease;
+}
+
+.erp-icon-button svg,
+.erp-locale-toggle svg,
+.erp-mobile-trigger svg {
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+  stroke-width: 1.8;
+}
+
+.erp-icon-button:hover,
+.erp-locale-toggle:hover,
+.erp-mobile-trigger:hover,
+.erp-icon-button[aria-expanded="true"],
+.erp-mobile-trigger[aria-expanded="true"] {
+  color: var(--ui-fg);
+  background: var(--ui-secondary);
+}
+
+/* The language button carries two characters beside its icon. */
+.erp-locale-toggle {
+  display: inline-flex;
+  inline-size: auto;
+  min-inline-size: 2.1rem;
+  gap: 0.25rem;
+  padding-inline: 0.4rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+/* A count waiting on the bell or the messages: a small badge on the icon. */
+.erp-icon-button .erp-icon-button__badge {
+  position: absolute;
+  inset-block-start: 0.12rem;
+  inset-inline-end: 0.08rem;
+  display: inline-grid;
+  min-inline-size: 1.05rem;
+  min-block-size: 1.05rem;
+  place-items: center;
+  padding-inline: 0.22rem;
+  border-radius: 999px;
+  color: var(--ui-primary-fg);
+  background: var(--ui-primary);
+  box-shadow: 0 0 0 2px var(--ui-navbar);
+  font-size: 0.6rem;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The branch: a fact, or — with more than one — a quiet select. */
 .erp-branch {
   display: flex;
+  min-block-size: 2.1rem;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.4rem;
   margin-inline-end: 0.15rem;
-  padding-inline: 0.25rem;
+  padding-inline: 0.45rem;
+  border-radius: var(--erp-radius);
+  color: var(--ui-fg);
+  transition: background-color 150ms ease;
+}
+
+.erp-branch:has(.erp-branch__select):hover {
+  background: var(--ui-secondary);
 }
 
 .erp-branch__icon {
-  inline-size: 0.9rem;
-  block-size: 0.9rem;
-  color: var(--accent);
+  inline-size: 1rem;
+  block-size: 1rem;
+  flex: 0 0 auto;
+  color: var(--ui-muted-fg);
 }
 
 .erp-branch__content,
@@ -1097,172 +1188,243 @@ table.list a {
 }
 
 .erp-branch__label {
-  color: var(--text-muted);
-  font-size: 0.58rem;
-  font-weight: 650;
+  color: var(--ui-muted-fg);
+  font-size: 0.6rem;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .erp-branch__value {
   overflow: hidden;
   max-inline-size: 5.5rem;
-  color: var(--text-soft);
-  font-size: 0.7rem;
+  color: var(--ui-fg);
+  font-size: 0.76rem;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.erp-locale-toggle {
+.erp-branch__form {
+  position: relative;
   display: inline-flex;
-  inline-size: auto;
-  min-inline-size: 2.8rem;
-  gap: 0.2rem;
-  padding-inline: 0.5rem;
-  border-radius: 999px;
-  color: var(--accent);
-  font-size: 0.74rem;
-  font-weight: 800;
+  align-items: center;
+  margin: 0;
 }
 
-.erp-theme-toggle {
-  position: relative;
-  display: inline-grid;
-  inline-size: 3.4rem;
-  block-size: 2rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  place-items: center;
+.erp-branch__select {
+  max-inline-size: 7rem;
+  margin: 0;
+  padding: 0;
+  padding-inline-end: 1rem;
+  border: 0;
+  border-radius: calc(var(--erp-radius) * 0.6);
+  color: var(--ui-fg);
+  background: transparent;
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.3;
+  appearance: none;
+  cursor: pointer;
+}
+
+.erp-branch__select option {
+  color: var(--ui-overlay-fg);
+  background: var(--ui-overlay);
+}
+
+.erp-branch__chevron {
+  position: absolute;
+  inset-inline-end: 0;
+  inline-size: 0.8rem;
+  block-size: 0.8rem;
+  color: var(--ui-muted-fg);
+  pointer-events: none;
+}
+
+/* The search: one icon when room is short (by direction, 2026-10-04 — the
+   shortcut is in its title); when the bar has room to spare it is drawn as
+   Intent's search field with its keyboard hint, and it is the first thing the
+   bar gives back (HEADER_SQUEEZE). */
+.erp-search-trigger {
+  display: inline-flex;
+  min-inline-size: 2.1rem;
+  block-size: 2.1rem;
+  align-items: center;
+  justify-content: center;
   align-self: center;
   flex: 0 0 auto;
-  gap: 0.12rem;
-  padding: 0.18rem;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--text-muted);
-  background: var(--surface-muted);
+  gap: 0.5rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--erp-radius);
+  color: var(--ui-muted-fg);
+  background: transparent;
+  font-size: 0.8rem;
   cursor: pointer;
-  transition: border-color 150ms ease, background 150ms ease;
+  transition: border-color 150ms ease, color 150ms ease, background-color 150ms ease;
 }
 
-.erp-theme-toggle:hover {
-  border-color: var(--accent-border);
-  background: var(--accent-soft);
+.erp-search-trigger:hover {
+  color: var(--ui-fg);
+  background: var(--ui-secondary);
 }
 
-.erp-theme-toggle > :is(.erp-theme-toggle__sun, .erp-theme-toggle__moon) {
-  inline-size: 1.38rem;
-  block-size: 1.38rem;
-  padding: 0.18rem;
+.erp-search-trigger > svg {
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+  flex: 0 0 auto;
+  stroke-width: 1.8;
 }
 
-.erp-theme-toggle__sun,
-.erp-theme-toggle__moon {
-  border-radius: 50%;
-  color: var(--text-muted);
-  opacity: 0.55;
-  stroke-width: 2;
-  transition: color 150ms ease, background 150ms ease, box-shadow 150ms ease,
-    opacity 150ms ease, transform 150ms ease;
+/* Search is one icon, Ctrl K in its title (by direction, 2026-10-04): the
+   field's words and keyboard hint stay hidden however wide the bar is. */
+.erp-search-trigger__label,
+.erp-search-trigger__kbd {
+  display: none;
 }
 
-:root[data-theme="light"] .erp-theme-toggle__sun,
-:root[data-theme="dark"] .erp-theme-toggle__moon {
-  color: var(--accent);
-  background: var(--surface-raised);
-  box-shadow: 0 1px 4px rgb(15 28 62 / 18%);
-  opacity: 1;
-  transform: scale(1.04);
-}
-
-:root[data-theme="dark"] .erp-theme-toggle__moon {
-  box-shadow: 0 1px 6px rgb(0 0 0 / 38%);
-}
-
+/* The person: an avatar, their name and role, a chevron. */
 .erp-user-trigger {
   display: flex;
-  min-inline-size: 8.6rem;
-  block-size: 100%;
+  min-inline-size: 0;
   align-items: center;
-  gap: 0.55rem;
-  margin-inline-start: 0.25rem;
-  padding-inline: 0.35rem 0;
-  color: var(--text);
+  align-self: center;
+  gap: 0.5rem;
+  margin-inline-start: 0.2rem;
+  padding: 0.2rem;
+  padding-inline-end: 0.45rem;
+  border: 0;
+  border-radius: var(--erp-radius);
+  color: var(--ui-fg);
   background: transparent;
   text-align: start;
   cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.erp-user-trigger:hover,
+.erp-user-trigger[aria-expanded="true"] {
+  background: var(--ui-secondary);
 }
 
 .erp-user-trigger__avatar,
 .erp-user-panel__avatar {
   display: grid;
-  inline-size: 2.25rem;
-  block-size: 2.25rem;
+  inline-size: 1.85rem;
+  block-size: 1.85rem;
   place-items: center;
   flex: 0 0 auto;
-  border: 2px solid var(--surface);
+  overflow: hidden;
+  border-radius: 999px;
+  color: var(--ui-primary-subtle-fg);
+  background: var(--ui-primary-subtle);
+  outline: 1px solid color-mix(in oklab, var(--ui-fg) 12%, transparent);
+  outline-offset: -1px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.erp-user-trigger__avatar img,
+.erp-user-panel__avatar img {
+  inline-size: 100%;
+  block-size: 100%;
   border-radius: 50%;
-  color: #ffffff;
-  background: linear-gradient(145deg, #162352, var(--accent));
-  box-shadow: 0 0 0 1px var(--border);
-  font-size: 0.74rem;
-  font-weight: 800;
+  object-fit: cover;
 }
 
 .erp-user-trigger__name {
   overflow: hidden;
-  max-inline-size: 6.5rem;
-  color: var(--text);
-  font-size: 0.76rem;
+  max-inline-size: 7rem;
+  color: var(--ui-fg);
+  font-size: 0.78rem;
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* A Latin name in an Arabic bar keeps its beginning and loses its end. */
+  unicode-bidi: plaintext;
 }
 
 .erp-user-trigger__role {
   overflow: hidden;
-  max-inline-size: 6.5rem;
-  color: var(--text-muted);
-  font-size: 0.61rem;
+  max-inline-size: 7rem;
+  color: var(--ui-muted-fg);
+  font-size: 0.64rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.erp-popover-scrim {
-  position: fixed;
-  inset: 4.4rem 0 0;
-  z-index: 51;
-  background: rgb(12 25 61 / 8%);
-  backdrop-filter: blur(1px);
+.erp-user-trigger__chevron {
+  color: var(--ui-muted-fg);
+  opacity: 1;
 }
 
-:root[data-theme="dark"] .erp-popover-scrim {
-  background: rgb(2 7 16 / 34%);
+.erp-mobile-trigger {
+  display: none;
+}
+
+/* Visible focus on everything in the bar. */
+:is(
+  .erp-brand,
+  .erp-nav__trigger,
+  .erp-icon-button,
+  .erp-locale-toggle,
+  .erp-mobile-trigger,
+  .erp-search-trigger,
+  .erp-user-trigger,
+  .erp-branch__select,
+  .erp-search__close,
+  .erp-mobile-action,
+  .erp-mobile-module__summary,
+  .erp-preference__option,
+  .erp-advanced-appearance > summary
+):focus-visible {
+  outline: 2px solid var(--ui-ring);
+  outline-offset: 2px;
+}
+
+/* ── Popovers and menus ──────────────────────────────────────────────────── */
+
+/* What catches a press outside an open popover. It starts under the bar, so a
+   press on another module still reaches that module's button. Intent's
+   popovers do not dim the page. */
+.erp-popover-scrim {
+  position: absolute;
+  inset-block-start: 100%;
+  inset-inline: 0;
+  z-index: 51;
+  block-size: 100vh;
+  background: transparent;
 }
 
 .erp-module-popover,
 .erp-utility-popover {
   position: absolute;
-  inset-block-start: calc(100% - 0.1rem);
+  inset-block-start: calc(100% + 0.3rem);
   z-index: 52;
-  border: 1px solid var(--border);
-  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-  background: var(--surface-overlay);
-  box-shadow: var(--shadow-menu);
-  backdrop-filter: blur(18px);
+  border: 1px solid var(--erp-pop-line);
+  border-radius: var(--erp-radius-pop);
+  color: var(--ui-overlay-fg);
+  background: var(--ui-overlay);
+  box-shadow: var(--erp-shadow-lg);
+  animation: erp-pop-in 140ms ease-out;
 }
 
+/* The module menu sits under its button, just below the bar. */
 .erp-module-popover {
+  inset-block-start: calc(100% + 0.2rem);
   inset-inline-start: 0;
   inline-size: max-content;
   max-inline-size: min(46rem, 92vw);
   max-block-size: min(38rem, calc(100vh - 6rem));
   overflow: auto;
-  padding: 1.1rem;
+  padding: 0.4rem;
+  transform-origin: top;
 }
 
 /* A popover near the end of a long navbar opens leftwards so it does not run
-   off the edge. The second half of that rule matters as much as the first:
-   when the phase gate leaves only three modules, every item is among the
-   last three, and right-aligning them all pushed the widest popover off the
-   left of the screen instead. An item is only near the end if it is not also
-   near the beginning. */
+   off the edge — only when the item is not also near the beginning (a gate
+   that leaves three modules would otherwise push it off the other side). */
 .erp-nav__item:nth-last-child(-n + 3):not(:nth-child(-n + 3)) .erp-module-popover {
   inset-inline-start: auto;
   inset-inline-end: 0;
@@ -1270,8 +1432,8 @@ table.list a {
 
 .erp-module-contents {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11.5rem, 1fr));
-  gap: 1.2rem;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.25rem 0.6rem;
   min-inline-size: 13rem;
 }
 
@@ -1280,23 +1442,19 @@ table.list a {
 }
 
 .erp-module-section__title {
-  margin: 0 0 0.45rem;
-  padding-inline: 0.55rem;
-  color: var(--text-muted);
-  font-size: 0.71rem;
-  font-weight: 800;
-  letter-spacing: 0.045em;
-  text-transform: uppercase;
-}
-
-html[lang="ar"] .erp-module-section__title {
+  margin: 0;
+  padding: 0.45rem 0.65rem 0.3rem;
+  color: var(--ui-muted-fg);
+  font-size: 0.72rem;
+  font-weight: 500;
   letter-spacing: 0;
+  line-height: 1.3;
   text-transform: none;
 }
 
 .erp-module-section__list {
   display: grid;
-  gap: 0.12rem;
+  gap: 0.05rem;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1304,89 +1462,184 @@ html[lang="ar"] .erp-module-section__title {
 
 .erp-menu-item {
   display: grid;
-  min-block-size: 2.3rem;
+  min-block-size: 2.15rem;
   align-content: center;
-  padding: 0.38rem 0.55rem;
-  border-radius: var(--radius-sm);
-  color: var(--text-soft);
+  padding: 0.35rem 0.65rem;
+  border-radius: calc(var(--erp-radius) - 0.1rem);
+  color: var(--ui-fg);
   text-decoration: none;
+  transition: background-color 120ms ease, color 120ms ease;
 }
 
-.erp-menu-item--link:hover,
+.erp-menu-item--link:hover {
+  color: var(--ui-accent-fg);
+  background: var(--ui-accent);
+}
+
+.erp-menu-item--link:focus-visible {
+  outline: 2px solid var(--ui-ring);
+  outline-offset: -2px;
+}
+
+/* The screen you are on: Intent's selected tint and a quiet dot. */
 .erp-menu-item--link[aria-current="page"] {
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.erp-menu-item--link[aria-current="page"] {
-  font-weight: 750;
-}
-
-.erp-menu-item--pending {
-  opacity: 0.65;
-}
-
-/* A page that opens, but over sample data. It reads normally — dimming a link
-   the reader can follow only makes the tree look broken — and carries its
-   delivering phase at the inline end instead. */
-.erp-menu-item--preview {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.5rem;
+  color: var(--ui-primary-subtle-fg);
+  background: var(--ui-primary-subtle);
+  font-weight: 500;
+}
+
+.erp-menu-item--link[aria-current="page"]::after {
+  inline-size: 0.4rem;
+  block-size: 0.4rem;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+}
+
+/* A screen that is planned but not built says so; it must not look pressable. */
+.erp-menu-item--pending {
+  color: var(--ui-muted-fg);
+  opacity: 0.75;
+  cursor: default;
+}
+
+/* A page that opens, but over sample data. It reads normally — dimming a link
+   the reader can follow only makes the tree look broken. */
+.erp-menu-item--preview {
+  color: var(--ui-muted-fg);
 }
 
 .erp-menu-item__label {
   overflow: hidden;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
+  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.erp-menu-item__phase {
-  color: var(--text-muted);
-  font-size: 0.61rem;
-}
-
+/* The bell, the messages and the person's menu. */
 .erp-utility-popover {
-  inset-inline-end: 1rem;
-  inline-size: min(23rem, calc(100vw - 2rem));
-  max-block-size: min(38rem, calc(100vh - 6rem));
+  inset-inline-end: 0.75rem;
+  inline-size: min(24rem, calc(100vw - 1.5rem));
+  max-block-size: min(38rem, calc(100vh - 5rem));
   overflow: auto;
-  padding: 1rem;
+  padding: 0.4rem;
+  transform-origin: top;
 }
 
-.erp-utility-popover__heading,
-.erp-appearance-drawer__heading {
+.erp-utility-popover__heading {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  margin-block-end: 0.8rem;
+  gap: 0.5rem;
+  margin: 0 0 0.4rem;
+  padding: 0.4rem 0.55rem 0.6rem;
+  border-block-end: 1px solid var(--ui-border);
 }
 
-.erp-utility-popover__heading svg,
-.erp-appearance-drawer__heading > svg {
-  inline-size: 1.1rem;
-  color: var(--accent);
+.erp-utility-popover__heading svg {
+  inline-size: 1rem;
+  block-size: 1rem;
+  flex: 0 0 auto;
+  color: var(--ui-muted-fg);
 }
 
-.erp-utility-popover__heading h2,
-.erp-appearance-drawer__heading h2 {
+.erp-utility-popover__heading h2 {
   margin: 0;
-  font-size: 1rem;
+  color: var(--ui-fg);
+  font-size: 0.92rem;
+  font-weight: 600;
 }
 
-.erp-utility-popover__link {
-  display: block;
-  padding: 0.75rem;
-  border-radius: var(--radius-sm);
-  color: var(--text-soft);
-  background: var(--surface-sunken);
-  text-decoration: none;
+/* The bell's filter row: Unread / All as a segmented pair, the category, and
+   "Mark all as read" at the end. (Specific enough to win over the chart of
+   accounts' button rules, which come later in this file.) */
+.erp-utility-popover .actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 0 0.4rem;
+  padding-inline: 0.15rem;
+}
+
+.erp-utility-popover .actions .coa-button {
+  min-block-size: 1.95rem;
+  gap: 0.35rem;
+  padding-inline: 0.65rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--erp-radius);
+  color: var(--ui-fg);
+  background: transparent;
+  box-shadow: none;
+  font-size: 0.76rem;
+  font-weight: 500;
+  transform: none;
+}
+
+.erp-utility-popover .actions .coa-button:hover:not(:disabled) {
+  border-color: var(--ui-border);
+  color: var(--ui-secondary-fg);
+  background: var(--ui-secondary);
+}
+
+.erp-utility-popover .actions .coa-button.coa-button--active,
+.erp-utility-popover .actions .coa-button.coa-button--active:hover {
+  position: relative;
+  z-index: 1;
+  border-color: color-mix(in oklab, var(--ui-primary) 40%, transparent);
+  color: var(--ui-primary-subtle-fg);
+  background: var(--ui-primary-subtle);
+}
+
+.erp-utility-popover .actions .coa-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.erp-utility-popover .actions .coa-button--secondary {
+  margin-inline-start: auto;
+}
+
+/* Unread | All: one segmented control. */
+.erp-utility-popover .actions .coa-button--filter:has(+ .coa-button--filter) {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.erp-utility-popover .actions .coa-button--filter + .coa-button--filter {
+  margin-inline-start: calc(-0.35rem - 1px);
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+}
+
+.erp-notifications {
+  inline-size: min(26rem, calc(100vw - 1.5rem));
+}
+
+.erp-utility-popover .actions select {
+  min-block-size: 1.95rem;
+  max-inline-size: 9.5rem;
+  padding-block: 0;
+  padding-inline: 0.55rem 0.4rem;
+  border: 1px solid var(--ui-input);
+  border-radius: var(--erp-radius);
+  color: var(--ui-fg);
+  background: var(--ui-overlay);
+  font-size: 0.76rem;
+}
+
+.erp-utility-popover .actions select:focus-visible,
+.erp-utility-popover .actions .coa-button:focus-visible {
+  outline: 2px solid var(--ui-ring);
+  outline-offset: 1px;
 }
 
 .erp-notifications__list {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.1rem;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1395,99 +1648,272 @@ html[lang="ar"] .erp-module-section__title {
 }
 
 .erp-notifications__list li {
-  padding: 0.5rem 0.625rem;
-  background: var(--surface-sunken);
-  border-radius: var(--radius-sm);
-  font-size: 0.8125rem;
+  position: relative;
+  padding: 0.55rem 0.6rem;
+  padding-inline-start: 1.45rem;
+  border-radius: var(--erp-radius);
+  color: var(--ui-fg);
+  background: transparent;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  transition: background-color 120ms ease;
+}
+
+.erp-notifications__list li:hover {
+  background: var(--ui-muted);
+}
+
+.erp-notifications__list li strong {
+  font-weight: 500;
+}
+
+.erp-notifications__list li a {
+  display: block;
+  border-radius: calc(var(--erp-radius) * 0.6);
+  color: inherit;
+  text-decoration: none;
+}
+
+.erp-notifications__list li a:hover strong {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.erp-notifications__list li a:focus-visible {
+  outline: 2px solid var(--ui-ring);
+  outline-offset: 2px;
 }
 
 .erp-notifications__list li p {
-  margin: 0.25rem 0;
+  margin: 0.15rem 0 0.3rem;
+  color: var(--ui-muted-fg);
+  font-size: 0.78rem;
 }
 
 .erp-notifications__list li time {
-  color: var(--text-muted);
-  font-size: 0.75rem;
+  color: var(--ui-muted-fg);
+  font-size: 0.72rem;
 }
 
-.erp-notifications__unread {
-  border-inline-start: 3px solid var(--accent);
+/* Unread: a dot at the start and a stronger title. */
+.erp-notifications__unread::before {
+  position: absolute;
+  inset-block-start: 0.95rem;
+  inset-inline-start: 0.6rem;
+  inline-size: 0.45rem;
+  block-size: 0.45rem;
+  border-radius: 999px;
+  background: var(--ui-primary);
+  content: "";
+}
+
+.erp-notifications__list li.erp-notifications__unread strong {
+  font-weight: 600;
+}
+
+.erp-notifications__list .coa-compact-button {
+  min-block-size: 1.5rem;
+  padding-inline: 0.45rem;
+  border: 0;
+  border-radius: calc(var(--erp-radius) * 0.8);
+  color: var(--ui-muted-fg);
+  background: transparent;
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.erp-notifications__list .coa-compact-button:hover {
+  color: var(--ui-fg);
+  background: var(--ui-secondary);
+}
+
+.erp-notifications__list .coa-compact-button:focus-visible {
+  outline: 2px solid var(--ui-ring);
+  outline-offset: 1px;
+}
+
+.erp-notifications__list .coa-count-badge {
+  display: inline-grid;
+  min-inline-size: 1.15rem;
+  min-block-size: 1.15rem;
+  place-items: center;
+  padding-inline: 0.3rem;
+  border-radius: 999px;
+  color: var(--ui-primary-fg);
+  background: var(--ui-primary);
+  font-size: 0.62rem;
+  font-weight: 600;
+  vertical-align: 0.05em;
+}
+
+/* "See all" / "Open chat": the popover's footer. */
+.erp-utility-popover__link {
+  display: block;
+  margin: 0.4rem -0.4rem -0.4rem;
+  padding: 0.65rem 0.75rem;
+  border-block-start: 1px solid var(--ui-border);
+  color: var(--ui-primary-subtle-fg);
+  background: transparent;
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-align: center;
+  text-decoration: none;
+  transition: background-color 120ms ease;
+}
+
+.erp-utility-popover__link:hover {
+  background: var(--ui-muted);
+}
+
+.erp-utility-popover__link:focus-visible {
+  outline: 2px solid var(--ui-ring);
+  outline-offset: -2px;
 }
 
 .erp-utility-popover__empty {
   margin: 0;
-  padding: 1.3rem 0.7rem;
-  color: var(--text-muted);
-  background: var(--surface-sunken);
-  border-radius: var(--radius-sm);
+  padding: 1.5rem 0.75rem;
+  border-radius: var(--erp-radius);
+  color: var(--ui-muted-fg);
+  background: transparent;
+  font-size: 0.82rem;
   text-align: center;
 }
 
+/* The person's menu: who they are, then the actions, then sign out. */
 .erp-user-panel {
   display: grid;
-  gap: 0.8rem;
+  inline-size: min(17.5rem, calc(100vw - 1.5rem));
+  gap: 0;
+  padding: 0.35rem;
 }
 
 .erp-user-panel__profile {
   display: flex;
   min-inline-size: 0;
   align-items: center;
-  gap: 0.8rem;
+  gap: 0.7rem;
+  padding: 0.55rem 0.55rem 0.7rem;
 }
 
-.erp-user-panel__identity small,
-.erp-user-panel__identity span {
-  color: var(--text-muted);
-  font-size: 0.72rem;
+.erp-user-panel__avatar {
+  inline-size: 2.4rem;
+  block-size: 2.4rem;
+  font-size: 0.8rem;
+}
+
+.erp-user-panel__identity {
+  gap: 0.08rem;
+  line-height: 1.3;
 }
 
 .erp-user-panel__identity strong {
-  color: var(--text);
-}
-
-.erp-user-panel__actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem;
-  padding-block-start: 0.75rem;
-  border-block-start: 1px solid var(--border);
-}
-
-.erp-user-panel__action {
-  display: inline-flex;
-  min-inline-size: 0;
-  min-block-size: 2.4rem;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  padding-inline: 0.55rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-soft);
-  background: var(--surface);
-  font-size: 0.72rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: color 150ms ease, border-color 150ms ease, background 150ms ease;
-}
-
-.erp-user-panel__action:hover {
-  border-color: var(--accent-border);
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.erp-user-panel__action svg {
-  inline-size: 0.95rem;
-  block-size: 0.95rem;
-  flex: 0 0 auto;
-}
-
-.erp-user-panel__action span {
   overflow: hidden;
+  color: var(--ui-fg);
+  font-size: 0.875rem;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.erp-user-panel__identity span,
+.erp-user-panel__identity small {
+  overflow: hidden;
+  color: var(--ui-muted-fg);
+  font-size: 0.74rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.erp-user-panel__identity small {
+  font-size: 0.68rem;
+}
+
+.erp-user-panel__menu {
+  display: grid;
+  gap: 0.05rem;
+  padding-block: 0.3rem;
+  border-block-start: 1px solid var(--ui-border);
+}
+
+.erp-user-panel__item {
+  display: flex;
+  inline-size: 100%;
+  min-block-size: 2.15rem;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.6rem;
+  border: 0;
+  border-radius: calc(var(--erp-radius) - 0.1rem);
+  color: var(--ui-fg);
+  background: transparent;
+  font-size: 0.85rem;
+  font-weight: 400;
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.erp-user-panel__item svg {
+  inline-size: 1rem;
+  block-size: 1rem;
+  flex: 0 0 auto;
+  color: var(--ui-muted-fg);
+}
+
+/* "Language … Arabic": the value at the inline end, as a menu shows it. */
+.erp-user-panel__item > span {
+  display: flex;
+  min-inline-size: 0;
+  flex: 1 1 auto;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.erp-user-panel__item small {
+  color: var(--ui-muted-fg);
+  font-size: 0.74rem;
+  font-weight: 400;
+}
+
+.erp-user-panel__item:hover {
+  color: var(--ui-accent-fg);
+  background: var(--ui-accent);
+}
+
+.erp-user-panel__item:hover svg {
+  color: var(--ui-accent-fg);
+}
+
+.erp-user-panel__item:focus-visible {
+  outline: 2px solid var(--ui-ring);
+  outline-offset: -2px;
+}
+
+.erp-user-panel__form {
+  display: block;
+  margin: 0;
+  padding-block-start: 0.3rem;
+  border-block-start: 1px solid var(--ui-border);
+}
+
+.erp-user-panel__item--danger,
+.erp-user-panel__item--danger svg {
+  color: var(--ui-danger-subtle-fg);
+}
+
+.erp-user-panel__item--danger:hover,
+.erp-user-panel__item--danger:hover svg {
+  color: var(--ui-danger-subtle-fg);
+}
+
+.erp-user-panel__item--danger:hover {
+  background: var(--ui-danger-subtle);
+}
+
+/* ── Sheets: the mobile drawer and Appearance ─────────────────────────────── */
 
 .erp-mobile-layer,
 .erp-appearance-layer {
@@ -1500,57 +1926,49 @@ html[lang="ar"] .erp-module-section__title {
 .erp-appearance-layer__scrim {
   position: absolute;
   inset: 0;
-  background: rgb(9 19 48 / 38%);
-  backdrop-filter: blur(3px);
+  background: var(--erp-scrim);
+  backdrop-filter: blur(1px);
+  animation: erp-fade-in 200ms ease-out;
 }
 
+/* Intent's floating sheet: a card at the inline end with a margin round it. */
 .erp-mobile-drawer,
 .erp-appearance-drawer {
   position: absolute;
-  inset-block: 0;
-  inset-inline-end: 0;
+  inset-block: 0.5rem;
+  inset-inline-end: 0.5rem;
   display: flex;
-  inline-size: min(24rem, 91vw);
+  inline-size: min(22rem, calc(100vw - 3rem));
   flex-direction: column;
-  border-inline-start: 1px solid var(--border);
-  background: var(--surface-raised);
-  box-shadow: var(--shadow-menu);
-  animation: erp-slide-in 180ms ease-out;
-}
-
-@keyframes erp-slide-in {
-  from { transform: translateX(12%); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+  overflow: hidden;
+  border: 1px solid var(--erp-pop-line);
+  border-radius: var(--erp-radius-pop);
+  color: var(--ui-overlay-fg);
+  background: var(--ui-overlay);
+  box-shadow: var(--erp-shadow-xl);
+  animation: erp-sheet-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
-  animation-name: erp-slide-in-rtl;
-}
-
-@keyframes erp-slide-in-rtl {
-  from { transform: translateX(-12%); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+  animation-name: erp-sheet-in-rtl;
 }
 
 .erp-mobile-drawer__header,
 .erp-appearance-drawer__header {
   display: flex;
-  min-block-size: 4.5rem;
+  min-block-size: 3.75rem;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.8rem 1rem;
-  border-block-end: 1px solid var(--border);
+  padding-block: 0.6rem;
+  padding-inline: 1rem 0.65rem;
+  border-block-end: 1px solid var(--ui-border);
 }
 
 .erp-mobile-drawer__logo {
-  /* Square, because the mark is. This slot was 8.2rem wide and cropped a
-     horizontal band out of the old logo — that band was the Q, with the name
-     below it left outside the frame. The header now carries the Q on its own,
-     so a wide slot would crop the monogram itself and show a slice through
-     the middle of it. */
-  inline-size: 3.1rem;
-  block-size: 3.1rem;
+  /* Square, because the mark is: a wide slot would crop the monogram. */
+  inline-size: 2.6rem;
+  block-size: 2.6rem;
   object-fit: contain;
 }
 
@@ -1558,155 +1976,390 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.8rem 1rem;
-  border-block-end: 1px solid var(--border);
-  background: var(--surface-sunken);
+  gap: 0.75rem;
+  margin: 0.75rem 0.75rem 0.25rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--erp-radius-pop);
+  background: var(--ui-muted);
 }
 
 .erp-mobile-drawer__context .erp-branch {
   display: flex;
+  margin: 0;
+  padding-inline: 0;
+}
+
+.erp-mobile-drawer__context .erp-branch:has(.erp-branch__select):hover {
+  background: transparent;
 }
 
 .erp-mobile-user {
   display: grid;
   min-inline-size: 0;
-  color: var(--text-soft);
-  font-size: 0.74rem;
+  color: var(--ui-fg);
+  font-size: 0.8rem;
+  line-height: 1.3;
   text-align: end;
+}
+
+.erp-mobile-user strong {
+  font-weight: 600;
 }
 
 .erp-mobile-user span {
   overflow: hidden;
-  max-inline-size: 9rem;
-  color: var(--text-muted);
+  max-inline-size: 10rem;
+  color: var(--ui-muted-fg);
+  font-size: 0.72rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .erp-mobile-nav {
+  display: grid;
+  align-content: start;
+  gap: 0.1rem;
   min-block-size: 0;
-  padding: 0.8rem;
   flex: 1;
   overflow-y: auto;
+  padding: 0.5rem;
 }
 
 .erp-mobile-module {
-  border-block-end: 1px solid var(--border);
+  border: 0;
 }
 
 .erp-mobile-module__summary {
   display: grid;
-  min-block-size: 3rem;
+  min-block-size: 2.6rem;
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 0.7rem;
-  padding-inline: 0.45rem;
-  color: var(--text-soft);
-  font-size: 0.85rem;
-  font-weight: 780;
+  padding-inline: 0.65rem;
+  border-radius: var(--erp-radius);
+  color: var(--ui-fg);
+  font-size: 0.9rem;
+  font-weight: 500;
   cursor: pointer;
   list-style: none;
+  transition: background-color 120ms ease;
 }
 
 .erp-mobile-module__summary::-webkit-details-marker {
   display: none;
 }
 
+.erp-mobile-module__summary:hover {
+  background: var(--ui-secondary);
+}
+
 .erp-mobile-module__summary svg {
-  inline-size: 1rem;
-  block-size: 1rem;
+  inline-size: 1.05rem;
+  block-size: 1.05rem;
+  color: var(--ui-muted-fg);
 }
 
 .erp-mobile-module__summary svg:last-child {
+  inline-size: 0.9rem;
+  block-size: 0.9rem;
   transition: transform 150ms ease;
 }
 
-.erp-mobile-module[open] .erp-mobile-module__summary {
-  color: var(--accent);
+.erp-mobile-module[open] > .erp-mobile-module__summary svg:first-child {
+  color: var(--ui-primary-subtle-fg);
 }
 
-.erp-mobile-module[open] .erp-mobile-module__summary svg:last-child {
+.erp-mobile-module[open] > .erp-mobile-module__summary svg:last-child {
   transform: rotate(180deg);
 }
 
+/* The open module's screens hang from a guide line, as Intent's sidebar draws a tree. */
 .erp-mobile-module .erp-module-contents {
   display: block;
   min-inline-size: 0;
-  padding: 0 0.3rem 0.8rem;
+  margin-block: 0.15rem 0.5rem;
+  margin-inline-start: 1.15rem;
+  padding-inline-start: 0.6rem;
+  border-inline-start: 1px solid var(--ui-border);
 }
 
 .erp-mobile-module .erp-module-section + .erp-module-section {
-  margin-block-start: 0.7rem;
+  margin-block-start: 0.4rem;
+}
+
+.erp-mobile-module .erp-module-section__title {
+  padding-inline: 0.6rem;
 }
 
 .erp-mobile-drawer__actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.6rem;
-  padding: 0.8rem 1rem;
-  border-block-start: 1px solid var(--border);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-block-start: 1px solid var(--ui-border);
 }
 
 .erp-mobile-action {
   display: inline-flex;
-  min-block-size: 2.7rem;
+  min-inline-size: 0;
+  min-block-size: 2.45rem;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-soft);
-  background: var(--surface);
-  font-size: 0.8rem;
-  font-weight: 700;
+  padding-inline: 0.65rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--erp-radius);
+  color: var(--ui-fg);
+  background: transparent;
+  font-size: 0.82rem;
+  font-weight: 500;
   cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.erp-mobile-action:hover {
+  background: var(--ui-secondary);
 }
 
 .erp-mobile-action svg {
   inline-size: 1rem;
+  block-size: 1rem;
+  flex: 0 0 auto;
+  color: var(--ui-muted-fg);
 }
 
-.erp-mobile-theme-action__icons {
+.erp-mobile-action .coa-count-badge {
   display: inline-grid;
-  grid-template-columns: repeat(2, auto);
-  align-items: center;
-  gap: 0.08rem;
-  padding: 0.12rem;
-  border: 1px solid var(--border);
+  min-inline-size: 1.15rem;
+  min-block-size: 1.15rem;
+  place-items: center;
+  padding-inline: 0.3rem;
   border-radius: 999px;
-  background: var(--surface-muted);
+  color: var(--ui-primary-fg);
+  background: var(--ui-primary);
+  font-size: 0.62rem;
+  font-weight: 600;
 }
 
-.erp-mobile-theme-action__icons > :is(.erp-theme-toggle__sun, .erp-theme-toggle__moon) {
-  inline-size: 1.15rem;
-  block-size: 1.15rem;
-  padding: 0.13rem;
-}
-
-.erp-mobile-drawer__actions > :last-child {
-  grid-column: 1 / -1;
-}
-
+/* Appearance: presets as cards, the layout settings as segmented choices. */
 .erp-appearance-drawer {
-  inline-size: min(25rem, 94vw);
+  inline-size: min(46rem, calc(100vw - 1rem));
 }
 
 .erp-appearance-drawer__heading {
+  display: flex;
+  min-inline-size: 0;
+  align-items: center;
+  gap: 0.7rem;
   margin: 0;
 }
 
+.erp-appearance-drawer__heading > svg {
+  inline-size: 2.1rem;
+  block-size: 2.1rem;
+  flex: 0 0 auto;
+  padding: 0.5rem;
+  border-radius: var(--erp-radius);
+  color: var(--ui-primary-subtle-fg);
+  background: var(--ui-primary-subtle);
+}
+
 .erp-appearance-drawer__heading small {
-  color: var(--text-muted);
-  font-size: 0.68rem;
+  display: block;
+  color: var(--ui-muted-fg);
+  font-size: 0.7rem;
+}
+
+.erp-appearance-drawer__heading h2 {
+  margin: 0;
+  color: var(--ui-fg);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.3;
 }
 
 .erp-appearance-drawer__body {
   display: grid;
-  gap: 1.25rem;
+  align-content: start;
+  gap: 1.5rem;
   min-block-size: 0;
-  padding: 1rem;
+  flex: 1;
+  padding: 1.1rem;
   overflow-y: auto;
+}
+
+.erp-appearance-section {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.erp-appearance-section__heading h3 {
+  margin: 0;
+  color: var(--ui-fg);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.erp-appearance-section__heading p {
+  margin: 0.2rem 0 0;
+  color: var(--ui-muted-fg);
+  font-size: 0.76rem;
+}
+
+.erp-appearance-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.erp-appearance-card {
+  display: grid;
+  min-inline-size: 0;
+  gap: 0.3rem;
+  padding: 0.75rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--erp-radius-pop);
+  color: var(--ui-fg);
+  background: var(--ui-overlay);
+  box-shadow: var(--erp-shadow-xs);
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.erp-appearance-card:hover {
+  border-color: color-mix(in oklab, var(--ui-muted-fg) 45%, transparent);
+}
+
+/* Selected: Intent's ring-2 in the primary colour. */
+.erp-appearance-card[aria-checked="true"],
+.erp-appearance-card[aria-checked="true"]:hover {
+  border-color: var(--ui-primary);
+  box-shadow: 0 0 0 1px var(--ui-primary), var(--erp-shadow-xs);
+}
+
+.erp-appearance-card:focus-visible {
+  outline: 2px solid var(--ui-ring);
+  outline-offset: 3px;
+}
+
+.erp-appearance-card__heading {
+  display: flex;
+  min-block-size: 1.15rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+}
+
+.erp-appearance-card__heading strong {
+  font-weight: 600;
+}
+
+.erp-appearance-card__heading svg {
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+  flex: 0 0 auto;
+  padding: 0.18rem;
+  border-radius: 999px;
+  color: var(--ui-primary-fg);
+  background: var(--ui-primary);
+  stroke-width: 3;
+}
+
+.erp-appearance-card__description {
+  min-block-size: 1.1rem;
+  color: var(--ui-muted-fg);
+  font-size: 0.72rem;
+}
+
+/* The miniature each card carries. Its corners, density and shadows are the
+   preset's own (the data-* attributes on it), its colours the palette's. */
+.erp-appearance-preview {
+  display: grid;
+  min-inline-size: 0;
+  gap: 0.32rem;
+  margin-block-start: 0.3rem;
+  padding: 0.45rem;
+  overflow: hidden;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius, 0.7rem);
+  background: var(--w-canvas, var(--ui-muted));
+}
+
+.erp-appearance-preview__bar {
+  display: flex;
+  gap: 0.2rem;
+  padding: 0.2rem 0.3rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-sm, 0.25rem);
+  background: var(--ui-navbar);
+}
+
+.erp-appearance-preview__bar span {
+  inline-size: 0.28rem;
+  block-size: 0.28rem;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--ui-muted-fg) 55%, transparent);
+}
+
+.erp-appearance-preview__bar span:first-child {
+  background: var(--ui-primary);
+}
+
+.erp-appearance-preview section[class*="_panel_"] {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.erp-appearance-preview__title,
+.erp-appearance-preview__lines span {
+  display: block;
+  block-size: 0.23rem;
+  border-radius: 999px;
+  background: var(--ui-input);
+}
+
+.erp-appearance-preview__title {
+  inline-size: 48%;
+  background: var(--ui-primary);
+}
+
+.erp-appearance-preview__lines {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.erp-appearance-preview__lines span:last-child {
+  inline-size: 72%;
+}
+
+.erp-appearance-preview__table {
+  inline-size: 100%;
+  border-collapse: collapse;
+}
+
+.erp-appearance-preview__table td {
+  block-size: 0.3rem;
+  border-block-end: 1px solid var(--ui-border);
+}
+
+.erp-appearance-preview__table td:first-child {
+  inline-size: 66%;
+}
+
+.erp-appearance-preview .button {
+  justify-self: start;
+  min-block-size: 1.35rem;
+  padding-inline: 0.42rem;
+  font-size: 0.56rem;
+}
+
+.erp-appearance-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
 }
 
 .erp-preference {
@@ -1717,117 +2370,416 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
 }
 
 .erp-preference__legend {
-  margin-block-end: 0.55rem;
-  color: var(--text-soft);
-  font-size: 0.77rem;
-  font-weight: 800;
+  margin-block-end: 0.45rem;
+  padding: 0;
+  color: var(--ui-fg);
+  font-size: 0.8rem;
+  font-weight: 500;
 }
 
 .erp-preference__options {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem;
-}
-
-.erp-preference__options--accent {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem;
 }
 
 .erp-preference__option {
   display: flex;
-  min-block-size: 2.65rem;
+  min-inline-size: 0;
+  min-block-size: 2.2rem;
   align-items: center;
   justify-content: center;
-  gap: 0.42rem;
-  padding: 0.5rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-soft);
-  background: var(--surface);
-  font-size: 0.74rem;
-  font-weight: 750;
+  gap: 0.4rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--erp-radius);
+  color: var(--ui-fg);
+  background: transparent;
+  font-size: 0.78rem;
+  font-weight: 500;
   cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
-.erp-preference__option:hover,
-.erp-preference__option[data-selected="true"] {
-  border-color: var(--accent-border);
-  color: var(--accent);
-  background: var(--accent-soft);
+.erp-preference__option:hover {
+  background: var(--ui-secondary);
+}
+
+.erp-preference__option[data-selected="true"],
+.erp-preference__option[data-selected="true"]:hover {
+  border-color: color-mix(in oklab, var(--ui-primary) 45%, transparent);
+  color: var(--ui-primary-subtle-fg);
+  background: var(--ui-primary-subtle);
+}
+
+.erp-preference__option > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .erp-preference__option > svg {
+  inline-size: 0.9rem;
+  block-size: 0.9rem;
+  flex: 0 0 auto;
+  stroke-width: 2.4;
+}
+
+/* Advanced settings: a disclosure with its own chevron. */
+.erp-advanced-appearance {
+  border-block-start: 1px solid var(--ui-border);
+}
+
+.erp-advanced-appearance > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-block-start: 0.4rem;
+  padding: 0.55rem 0.35rem;
+  border-radius: var(--erp-radius);
+  color: var(--ui-fg);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  list-style: none;
+}
+
+.erp-advanced-appearance > summary::-webkit-details-marker {
+  display: none;
+}
+
+.erp-advanced-appearance > summary::after {
+  inline-size: 0.45rem;
+  block-size: 0.45rem;
+  margin-block-start: -0.2rem;
+  margin-inline-end: 0.2rem;
+  border-block-end: 1.5px solid var(--ui-muted-fg);
+  border-inline-end: 1.5px solid var(--ui-muted-fg);
+  content: "";
+  transform: rotate(45deg);
+  transition: transform 150ms ease;
+}
+
+.erp-advanced-appearance[open] > summary::after {
+  margin-block-start: 0.2rem;
+  transform: rotate(-135deg);
+}
+
+.erp-advanced-appearance > summary:hover {
+  background: var(--ui-muted);
+}
+
+.erp-advanced-appearance > .erp-appearance-settings-grid {
+  padding-block: 0.6rem 0.75rem;
+}
+
+.erp-appearance-save-state {
+  min-block-size: 1rem;
+  margin: 0;
+  color: var(--ui-muted-fg);
+  font-size: 0.72rem;
+}
+
+/* ── The search palette (Ctrl/⌘ K): Intent's command menu ────────────────── */
+
+.erp-search {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: start center;
+  padding: 10vh 1rem 1rem;
+}
+
+.erp-search__scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--erp-scrim);
+  backdrop-filter: blur(1px);
+  animation: erp-fade-in 160ms ease-out;
+}
+
+.erp-search__panel {
+  position: relative;
+  inline-size: min(40rem, calc(100vw - 2rem));
+  overflow: hidden;
+  border: 1px solid var(--erp-pop-line);
+  border-radius: var(--erp-radius-pop);
+  color: var(--ui-overlay-fg);
+  background: var(--ui-overlay);
+  box-shadow: var(--erp-shadow-xl);
+  animation: erp-pop-in 160ms ease-out;
+}
+
+.erp-search__bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-block: 0.45rem;
+  padding-inline: 0.95rem 0.6rem;
+  border-block-end: 1px solid var(--ui-border);
+  background: transparent;
+}
+
+.erp-search__bar > svg {
+  inline-size: 1.15rem;
+  block-size: 1.15rem;
+  flex: 0 0 auto;
+  color: var(--ui-muted-fg);
+}
+
+.erp-search__bar input {
+  flex: 1;
+  min-inline-size: 0;
+  block-size: 2.4rem;
+  padding: 0;
+  border: 0;
+  color: var(--ui-fg);
+  background: transparent;
+  box-shadow: none;
+  font-size: 0.95rem;
+  outline: none;
+  appearance: none;
+}
+
+.erp-search__bar input::placeholder {
+  color: var(--ui-muted-fg);
+}
+
+.erp-search__bar input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.erp-search__close {
+  display: grid;
+  inline-size: 1.9rem;
+  block-size: 1.9rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: var(--erp-radius);
+  color: var(--ui-muted-fg);
+  background: transparent;
+  cursor: pointer;
+}
+
+.erp-search__close:hover {
+  color: var(--ui-fg);
+  background: var(--ui-secondary);
+}
+
+.erp-search__close svg {
+  inline-size: 1rem;
+  block-size: 1rem;
+}
+
+.erp-search__results {
+  max-block-size: min(28rem, 55vh);
+  overflow: auto;
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+}
+
+/* A group's heading: what kind of thing the rows below it are. */
+.erp-search__group {
+  padding: 0.65rem 0.65rem 0.3rem;
+  color: var(--ui-muted-fg);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.erp-search__group:first-child {
+  padding-block-start: 0.35rem;
+}
+
+.erp-search__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: calc(var(--erp-radius) - 0.1rem);
+  color: var(--ui-fg);
+  cursor: pointer;
+}
+
+.erp-search__item--active {
+  color: var(--ui-accent-fg);
+  background: var(--ui-accent);
+}
+
+.erp-search__item > svg {
   inline-size: 0.95rem;
   block-size: 0.95rem;
+  flex: 0 0 auto;
+  color: var(--ui-muted-fg);
+  opacity: 0;
 }
 
-.erp-preference__swatch {
-  inline-size: 0.72rem;
-  block-size: 0.72rem;
+.erp-search__item--active > svg {
+  color: currentColor;
+  opacity: 1;
+}
+
+.erp-search__text {
+  display: grid;
+  min-inline-size: 0;
+  gap: 0.05rem;
+}
+
+.erp-search__text strong {
+  overflow: hidden;
+  color: inherit;
+  font-size: 0.86rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+}
+
+.erp-search__text small {
+  color: var(--ui-muted-fg);
+  font-size: 0.74rem;
+}
+
+.erp-search__empty {
+  margin: 0;
+  padding: 1.25rem 1rem;
+  color: var(--ui-muted-fg);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.erp-search__hint {
+  margin: 0;
+  padding: 0.55rem 1rem;
+  border-block-start: 1px solid var(--ui-border);
+  color: var(--ui-muted-fg);
+  background: var(--ui-muted);
+  font-size: 0.72rem;
+}
+
+/* ── The footer ──────────────────────────────────────────────────────────── */
+
+/*
+ * The shell's last row — a sibling of <main>, not part of it. Because main
+ * carries `flex: 1`, a short page pushes this to the bottom of the viewport
+ * and a long one leaves it directly under the content.
+ */
+.erp-footer {
+  margin-block-start: 2.5rem;
+  padding-inline: clamp(1rem, 3vw, 2.8rem);
+  border-block-start: 1px solid var(--ui-border);
+  color: var(--ui-muted-fg);
+  background: var(--ui-navbar);
+  font-size: 0.75rem;
+}
+
+.erp-footer__inner {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 1rem;
+  inline-size: min(100%, var(--content-max));
+  margin-inline: auto;
+  padding-block: 0.8rem;
+}
+
+.erp-footer__copy {
+  color: var(--ui-muted-fg);
+}
+
+.erp-footer__version {
+  padding: 0.12rem 0.5rem;
+  border: 1px solid var(--ui-border);
+  border-radius: calc(var(--erp-radius) * 0.8);
+  color: var(--ui-muted-fg);
+  font-size: 0.7rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.erp-footer__health {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 0.45rem;
+  color: var(--ui-success-subtle-fg);
+  font-weight: 500;
+}
+
+.erp-footer__dot {
+  position: relative;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
   border-radius: 50%;
-  background: var(--accent);
+  background: currentColor;
 }
 
-.erp-preference__option[data-value="blue"] .erp-preference__swatch { background: #1646e8; }
-.erp-preference__option[data-value="indigo"] .erp-preference__swatch { background: #5b35d5; }
-.erp-preference__option[data-value="teal"] .erp-preference__swatch { background: #087f77; }
-.erp-preference__option[data-value="orange"] .erp-preference__swatch { background: #d85b0d; }
+.erp-footer__dot::after {
+  position: absolute;
+  inset: -0.3rem;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+  opacity: 0.35;
+  animation: erp-footer-pulse 1.8s ease-out infinite;
+}
 
-@media (max-width: 108rem) {
-  .erp-branch {
-    display: none;
+.erp-footer__health--down {
+  color: var(--ui-danger-subtle-fg);
+}
+
+@keyframes erp-footer-pulse {
+  0% { transform: scale(0.6); opacity: 0.45; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .erp-footer__dot::after {
+    animation: none;
+  }
+}
+
+@media (max-width: 40rem) {
+  .erp-footer__inner {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 0.4rem;
   }
 
-  /* Until the shell has measured the bar (data-squeeze), these guess. */
+  .erp-footer__health {
+    justify-self: center;
+  }
+}
+
+/* ── Fitting the bar ─────────────────────────────────────────────────────── */
+
+/* Until the shell has measured the bar (data-squeeze / data-fit), these guess. */
+@media (max-width: 108rem) {
   html[lang="ar"] .erp-header__bar:not([data-squeeze]) :is(.erp-brand__wordmark, .erp-user-trigger__identity, .erp-user-trigger__chevron) {
     display: none;
   }
 
   html[lang="ar"] .erp-header__bar:not([data-squeeze]) .erp-user-trigger {
-    min-inline-size: 2.65rem;
+    padding-inline-end: 0.2rem;
   }
 }
 
 @media (max-width: 87rem) {
+  .erp-header__bar:not([data-squeeze]) :is(.erp-user-trigger__identity, .erp-user-trigger__chevron, .erp-brand__wordmark) {
+    display: none;
+  }
+
   .erp-header__bar:not([data-squeeze]) .erp-user-trigger {
-    min-inline-size: 2.65rem;
-  }
-
-  .erp-header__bar:not([data-squeeze]) :is(.erp-user-trigger__identity, .erp-user-trigger__chevron) {
-    display: none;
-  }
-}
-
-/* Language leaves the header only when it is genuinely narrow; the user menu
-   carries it too. Appearance is no longer in the header at all (by direction,
-   2026-10-04: "we have it in the profile drop down") — the user menu and the
-   mobile drawer open it, which they already did when it was hidden here. */
-@media (max-width: 60rem) {
-  .erp-header__utilities > .erp-locale-toggle {
-    display: none;
-  }
-}
-
-
-/* The name goes and takes its room with it: the brand is the Q mark alone.
-   (It used to keep 11.5rem — the width of the full logo it once was — so the
-   name left an empty gap the module bar could not use.) */
-@media (max-width: 87rem) {
-  .erp-header__bar:not([data-squeeze]) .erp-brand__wordmark {
-    display: none;
-  }
-
-  /* Until the shell has measured the bar (data-fit), this breakpoint guesses. */
-
-  .erp-nav:not([data-fit]) .erp-nav__list {
-    gap: 0.12rem;
+    padding-inline-end: 0.2rem;
   }
 
   .erp-nav:not([data-fit]) .erp-nav__trigger {
-    inline-size: 2.7rem;
+    inline-size: 2.35rem;
     justify-content: center;
     gap: 0;
-    padding-inline: 0.5rem;
+    padding-inline: 0;
   }
 
   .erp-nav:not([data-fit]) .erp-nav__label {
@@ -1844,9 +2796,6 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
 
   .erp-nav:not([data-fit]) .erp-nav__icon {
     display: block;
-    inline-size: 1.15rem;
-    block-size: 1.15rem;
-    stroke-width: 1.9;
   }
 
   .erp-nav:not([data-fit]) .erp-nav__chevron {
@@ -1855,42 +2804,41 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
 }
 
 /* The bar as measured (erp-shell.tsx, HEADER_SQUEEZE). The module names keep
-   their size; to make room for them beside the company's name the header gives
-   up, in order: the user's name and role beside the avatar (they head the user
-   menu), the "Active branch" caption (the icon and the branch stay, the
-   caption is their title), the company's name, and only last the chevrons
-   after the module names — last since 2026-10-06, by direction ("make sure
-   the arrow icon appears"). When even that is not enough the names are icons
-   (each with its name as its title), the compact form the breakpoint above
-   has always drawn. */
+   their size; to make room for them the header gives up, in order: the search
+   field's words (the icon stays), the user's name and role beside the avatar
+   (they head the user menu), the "Active branch" caption, the company's name,
+   and only last the chevrons after the module names (by direction,
+   2026-10-06: "make sure the arrow icon appears"). When even that is not
+   enough the names are icons, each with its name as its title. */
 .erp-header__bar[data-squeeze~="user"] :is(.erp-user-trigger__identity, .erp-user-trigger__chevron) {
   display: none;
 }
 
 .erp-header__bar[data-squeeze~="user"] .erp-user-trigger {
-  min-inline-size: 2.65rem;
+  padding-inline-end: 0.2rem;
 }
 
 .erp-header__bar[data-squeeze~="branch"] .erp-branch__label {
   display: none;
 }
 
+.erp-header__bar[data-squeeze~="name"] .erp-brand__wordmark {
+  display: none;
+}
+
+.erp-header__bar[data-squeeze~="name"] .erp-brand {
+  padding-inline: 0.15rem;
+}
+
 .erp-header__bar[data-squeeze~="chevrons"] .erp-nav__chevron {
   display: none;
 }
 
-.erp-header__bar[data-squeeze~="name"] .erp-brand__wordmark {
-  display: none;
-}
-.erp-nav[data-fit="icons"] .erp-nav__list {
-  gap: 0.12rem;
-}
-
 .erp-nav[data-fit="icons"] .erp-nav__trigger {
-  inline-size: 2.7rem;
+  inline-size: 2.35rem;
   justify-content: center;
   gap: 0;
-  padding-inline: 0.5rem;
+  padding-inline: 0;
 }
 
 .erp-nav[data-fit="icons"] .erp-nav__label {
@@ -1907,23 +2855,26 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
 
 .erp-nav[data-fit="icons"] .erp-nav__icon {
   display: block;
-  inline-size: 1.15rem;
-  block-size: 1.15rem;
-  stroke-width: 1.9;
 }
 
 .erp-nav[data-fit="icons"] .erp-nav__chevron {
   display: none;
 }
 
-@media (max-width: 76rem) {
-  .erp-header {
-    block-size: 4rem;
+/* Language leaves the header only when it is genuinely narrow; the user menu
+   carries it too. Appearance is not in the header at all (by direction,
+   2026-10-04): the user menu and the mobile drawer open it. */
+@media (max-width: 60rem) {
+  .erp-header__utilities > .erp-locale-toggle {
+    display: none;
   }
+}
 
+@media (max-width: 76rem) {
   .erp-header__bar {
     display: flex;
     align-items: center;
+    column-gap: 0.25rem;
   }
 
   .erp-header__identity {
@@ -1940,48 +2891,63 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
     margin-inline-start: auto;
   }
 
-  .erp-header__utilities {
-    margin-inline-start: 0;
-    border-inline-start: 0;
-  }
-
-  .erp-brand {
-    min-inline-size: 0;
-    margin-inline-end: 0;
-    border-inline-end: 0;
-  }
-
-  .erp-brand__product {
-    display: none;
-  }
-
-  .erp-popover-scrim {
-    inset-block-start: 4rem;
-  }
-
   .erp-utility-popover {
-    inset-block-start: 100%;
+    inset-inline-end: 0.5rem;
   }
 }
 
 @media (max-width: 35rem) {
   .erp-header__bar {
-    padding-inline: 0.45rem;
+    padding-inline: 0.5rem;
   }
 
   .erp-header__utilities > .erp-icon-button,
   .erp-header__utilities > .erp-branch,
-  .erp-header__utilities > .erp-theme-toggle,
   .erp-user-trigger {
     display: none;
   }
 
   .erp-brand {
-    padding-inline-end: 0;
+    padding-inline-end: 0.15rem;
   }
 
-  .erp-preference__options--accent {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .erp-utility-popover,
+  .erp-user-panel {
+    inset-inline: 0.5rem;
+    inline-size: auto;
+  }
+}
+
+@media (max-width: 36rem) {
+  .erp-appearance-cards,
+  .erp-appearance-settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .erp-mobile-drawer {
+    inline-size: calc(100vw - 2.5rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .erp-module-popover,
+  .erp-utility-popover,
+  .erp-mobile-drawer,
+  .erp-appearance-drawer,
+  .erp-search__panel {
+    animation: none;
+  }
+}
+
+/* Forced colours paint over the tints: what is chosen keeps an outline. */
+@media (forced-colors: active) {
+  .erp-nav__trigger[data-active="true"],
+  .erp-menu-item--link[aria-current="page"],
+  .erp-search__item--active,
+  .erp-preference__option[data-selected="true"],
+  .erp-appearance-card[aria-checked="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
   }
 }
 
@@ -3289,353 +4255,6 @@ html[dir="rtl"] .coa-directional-icon {
   }
 }
 
-.erp-user-panel__form {
-  display: contents;
-}
-
-.erp-user-panel__action--sign-out {
-  grid-column: 1 / -1;
-  inline-size: 100%;
-}
-
-.erp-user-panel__action--sign-out:hover {
-  border-color: var(--danger, #b42318);
-  color: var(--danger, #b42318);
-  background: var(--danger-soft, rgba(180, 35, 24, 0.08));
-}
-
-/* User menu — a real account menu: identity, then actions, then sign out. */
-.erp-user-panel__identity {
-  display: grid;
-  gap: 0.1rem;
-  min-inline-size: 0;
-}
-
-.erp-user-panel__identity strong {
-  font-size: 0.92rem;
-}
-
-.erp-user-panel__identity span,
-.erp-user-panel__identity small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.erp-user-panel__menu {
-  display: grid;
-  gap: 0.15rem;
-  padding-block-start: 0.6rem;
-  border-block-start: 1px solid var(--border);
-}
-
-.erp-user-panel__item {
-  display: flex;
-  inline-size: 100%;
-  align-items: center;
-  gap: 0.7rem;
-  padding: 0.55rem 0.65rem;
-  border: 0;
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  background: transparent;
-  font-size: 0.82rem;
-  font-weight: 600;
-  text-align: start;
-  text-decoration: none;
-  cursor: pointer;
-  transition: background var(--motion), color var(--motion);
-}
-
-.erp-user-panel__item svg {
-  inline-size: 1rem;
-  block-size: 1rem;
-  flex: 0 0 auto;
-  color: var(--text-muted);
-}
-
-.erp-user-panel__item > span {
-  display: grid;
-  min-inline-size: 0;
-}
-
-.erp-user-panel__item small {
-  color: var(--text-muted);
-  font-size: 0.68rem;
-  font-weight: 500;
-}
-
-.erp-user-panel__item:hover,
-.erp-user-panel__item:focus-visible {
-  color: var(--accent);
-  background: var(--accent-soft);
-  outline: none;
-}
-
-.erp-user-panel__item:hover svg {
-  color: var(--accent);
-}
-
-.erp-user-panel__item--danger {
-  margin-block-start: 0.3rem;
-  border-block-start: 1px solid var(--border);
-  border-radius: 0;
-  padding-block-start: 0.8rem;
-}
-
-.erp-user-panel__item--danger:hover {
-  color: var(--status-rejected);
-  background: color-mix(in srgb, var(--status-rejected) 8%, var(--surface));
-}
-
-.erp-user-panel__item--danger:hover svg {
-  color: var(--status-rejected);
-}
-
-.erp-user-trigger__avatar img,
-.erp-user-panel__avatar img {
-  inline-size: 100%;
-  block-size: 100%;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-/* Footer ------------------------------------------------------------------ */
-
-/* Full-bleed: the bar runs the whole viewport, whatever the content width. */
-/*
- * The shell's last row — a sibling of <main>, not part of it. Because main
- * carries `flex: 1`, a short page pushes this to the bottom of the viewport
- * and a long one leaves it directly under the content: either way it ends
- * the page, with nothing after it.
- */
-.erp-footer {
-  margin-block-start: 2.5rem;
-  padding-inline: clamp(1rem, 3vw, 2.8rem);
-  border-block-start: 1px solid var(--border);
-  background: var(--surface-raised);
-  color: var(--text-muted);
-  font-size: 0.78rem;
-}
-
-.erp-footer__inner {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 1rem;
-  inline-size: min(100%, var(--content-max));
-  margin-inline: auto;
-  padding-block: 1.35rem;
-}
-
-.erp-footer__version {
-  color: var(--text-soft);
-  font-weight: 600;
-}
-
-.erp-footer__health {
-  display: inline-flex;
-  align-items: center;
-  justify-self: end;
-  gap: 0.45rem;
-  color: #159b5b;
-  font-weight: 600;
-}
-
-.erp-footer__dot {
-  position: relative;
-  inline-size: 0.55rem;
-  block-size: 0.55rem;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.erp-footer__dot::after {
-  position: absolute;
-  inset: -0.3rem;
-  content: "";
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.35;
-  animation: erp-footer-pulse 1.8s ease-out infinite;
-}
-
-.erp-footer__health--down {
-  color: var(--status-rejected);
-}
-
-@keyframes erp-footer-pulse {
-  0% { transform: scale(0.6); opacity: 0.45; }
-  100% { transform: scale(1.8); opacity: 0; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .erp-footer__dot::after { animation: none; }
-}
-
-@media (max-width: 40rem) {
-  .erp-footer__inner {
-    grid-template-columns: 1fr;
-    justify-items: center;
-    gap: 0.3rem;
-  }
-
-  .erp-footer__health {
-    justify-self: center;
-  }
-}
-
-/* Global search (Ctrl/⌘ K) ------------------------------------------------ */
-
-/* One icon, as it already was on all but the widest screens (by direction,
-   2026-10-04); the shortcut is in its title. */
-.erp-search-trigger {
-  display: inline-flex;
-  align-items: center;
-  block-size: 2.3rem;
-  margin-inline-end: 0.2rem;
-  padding-inline: 0.55rem;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  color: var(--text-muted);
-  background: transparent;
-  cursor: pointer;
-  transition: border-color var(--motion), color var(--motion), background var(--motion);
-}
-
-.erp-search-trigger:hover {
-  border-color: var(--accent-border);
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.erp-search-trigger svg {
-  inline-size: 0.95rem;
-  block-size: 0.95rem;
-}
-
-.erp-search {
-  position: fixed;
-  inset: 0;
-  z-index: 90;
-  display: grid;
-  place-items: start center;
-  padding-block-start: 9vh;
-}
-
-.erp-search__scrim {
-  position: absolute;
-  inset: 0;
-  background: rgb(10 17 36 / 45%);
-  backdrop-filter: blur(2px);
-}
-
-.erp-search__panel {
-  position: relative;
-  inline-size: min(38rem, calc(100vw - 2rem));
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface-raised);
-  box-shadow: 0 30px 80px -30px rgb(10 17 36 / 55%);
-}
-
-.erp-search__bar {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.8rem 1rem;
-  border-block-end: 1px solid var(--border);
-}
-
-.erp-search__bar > svg {
-  inline-size: 1.1rem;
-  block-size: 1.1rem;
-  color: var(--text-muted);
-}
-
-.erp-search__bar input {
-  flex: 1;
-  min-inline-size: 0;
-  border: 0;
-  color: var(--text);
-  background: transparent;
-  font-size: 1rem;
-  outline: none;
-}
-
-.erp-search__close {
-  display: grid;
-  inline-size: 1.9rem;
-  block-size: 1.9rem;
-  place-items: center;
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  color: var(--text-muted);
-  background: var(--surface);
-  cursor: pointer;
-}
-
-.erp-search__close svg {
-  inline-size: 0.9rem;
-  block-size: 0.9rem;
-}
-
-.erp-search__results {
-  max-block-size: 50vh;
-  overflow: auto;
-  margin: 0;
-  padding: 0.4rem;
-  list-style: none;
-}
-
-.erp-search__item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.8rem;
-  padding: 0.6rem 0.75rem;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.erp-search__item--active {
-  background: var(--accent-soft);
-}
-
-.erp-search__item svg {
-  inline-size: 0.95rem;
-  block-size: 0.95rem;
-  color: var(--accent);
-}
-
-.erp-search__text {
-  display: grid;
-  min-inline-size: 0;
-}
-
-.erp-search__text strong {
-  color: var(--text);
-  font-size: 0.88rem;
-}
-
-.erp-search__text small {
-  color: var(--text-muted);
-  font-size: 0.72rem;
-}
-
-.erp-search__empty,
-.erp-search__hint {
-  margin: 0;
-  padding: 0.8rem 1rem;
-  color: var(--text-muted);
-  font-size: 0.76rem;
-}
-
-.erp-search__hint {
-  border-block-start: 1px solid var(--border);
-}
-
 /* The "New account" control above the Chart of Accounts workspace. The
    workspace draws its own toolbar, so this sits above it rather than inside. */
 .new-account-bar {
@@ -3701,380 +4320,6 @@ html[dir="rtl"] .coa-directional-icon {
   filter: invert(1);
 }
 
-/* ── The shell, in the same window as the screens ─────────────────────────
-   The navigation and the footer are drawn from the
-   palette the company chose, so the chrome and the pages inside it are one
-   application rather than two.
-
-   These selectors are unscoped on purpose: `.erp-shell` is rendered by the
-   authenticated layout and by nothing else, so sign-in — which lives outside
-   that route group — is untouched. That is the boundary the request asked
-   for, and it is structural rather than a class somebody has to remember.
-
-   The --w-* tokens are defined on <html> by the admin stylesheet, with the
-   company's choice selecting between them. */
-
-.erp-header {
-  border-block-end: 1px solid var(--w-line-strong, var(--border));
-  background: linear-gradient(
-    180deg,
-    var(--w-title-a, var(--surface)),
-    var(--w-title-b, var(--surface))
-  );
-  box-shadow: inset 0 -2px 0 var(--w-title-line, transparent);
-}
-
-.erp-brand,
-.erp-brand strong,
-.erp-header__identity {
-  color: var(--w-label, var(--text));
-}
-
-/* The module bar. A chosen module is the tab you are standing on, so it takes
-   the same amber the tab strip inside the page takes. */
-.erp-nav > button,
-.erp-icon-button {
-  border: 1px solid transparent;
-  border-radius: 0.12rem;
-  color: var(--w-label, var(--text));
-}
-
-.erp-icon-button:hover,
-.erp-nav > button:hover,
-.erp-icon-button[aria-expanded="true"] {
-  border-color: var(--w-line-strong, var(--border));
-  background: var(--w-selected, var(--accent-soft));
-  color: var(--w-label, var(--text));
-}
-
-/* The popover a module opens, and the drawers beside it. */
-.erp-module-popover,
-.erp-mobile-drawer,
-.erp-appearance-drawer {
-  border: 1px solid var(--w-line-strong, var(--border));
-  border-radius: 0.2rem;
-  background: var(--w-bg, var(--surface-raised));
-  color: var(--w-text, var(--text));
-}
-
-.erp-module-section > h3,
-.erp-appearance-drawer h2,
-.erp-appearance-drawer h3 {
-  color: var(--w-label, var(--text-muted));
-}
-
-.erp-menu-item--link:hover {
-  background: var(--w-selected, var(--accent-soft));
-  color: var(--w-label, var(--text));
-}
-
-/* A screen that is planned but not built says so; it must not look pressable. */
-.erp-menu-item--pending,
-.erp-menu-item--preview {
-  color: var(--w-muted, var(--text-muted));
-}
-
-/* The workspace the pages sit on. */
-.erp-main {
-  background: var(--w-canvas, var(--surface-sunken));
-}
-
-.erp-footer {
-  border-block-start: 1px solid var(--w-line-strong, var(--border));
-  background: linear-gradient(
-    180deg,
-    var(--w-title-a, var(--surface)),
-    var(--w-title-b, var(--surface))
-  );
-}
-
-.erp-footer__copy,
-.erp-footer__version {
-  color: var(--w-label, var(--text-muted));
-}
-
-/* The context strip: company, branch, currency, period. */
-.erp-context,
-.erp-branch {
-  color: var(--w-label, var(--text-soft));
-}
-
-/* ── The toolbar, as a toolbar ────────────────────────────────────────────
-   The chrome was still the modern application's: pill-shaped switches, a
-   round avatar, tab underlines, generous height. Alongside a ruled grid it
-   read as two products stacked on each other.
-
-   What follows squares everything off and shrinks it. The rules are ordered
-   after the originals and match on the same classes, so they replace rather
-   than fight; anything not restated here is deliberately left alone. */
-
-.erp-shell {
-  font-family: inherit;
-}
-
-.erp-header {
-  block-size: 3.4rem;
-  border-block-end: 1px solid var(--w-chrome-line, var(--border));
-  background: linear-gradient(
-    180deg,
-    var(--w-chrome-a, var(--surface)),
-    var(--w-chrome-b, var(--surface))
-  );
-  box-shadow: none;
-  backdrop-filter: none;
-  color: var(--w-chrome-text, var(--text));
-}
-
-.erp-brand strong,
-.erp-header__identity,
-.erp-user-trigger__name {
-  color: var(--w-chrome-text, var(--text));
-  font-size: 0.82rem;
-}
-
-.erp-user-trigger__role,
-.erp-brand span {
-  color: var(--w-chrome-text, var(--text-muted));
-  font-size: 0.7rem;
-  opacity: 0.75;
-}
-
-/* Every control in the bar is the same square button. A toolbar in this kind
-   of software is a row of identical stamps, not a set of shapes. */
-.erp-icon-button,
-.erp-locale-toggle,
-.erp-theme-toggle,
-.erp-mobile-trigger {
-  inline-size: 1.9rem;
-  block-size: 1.9rem;
-  min-inline-size: 1.9rem;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 0.12rem;
-  background: transparent;
-  color: var(--w-chrome-text, var(--text));
-  box-shadow: none;
-}
-
-.erp-icon-button svg,
-.erp-locale-toggle svg,
-.erp-theme-toggle svg,
-.erp-mobile-trigger svg {
-  inline-size: 1rem;
-  block-size: 1rem;
-  stroke-width: 1.8;
-}
-
-.erp-icon-button:hover,
-.erp-locale-toggle:hover,
-.erp-theme-toggle:hover,
-.erp-mobile-trigger:hover,
-.erp-icon-button[aria-expanded="true"],
-.erp-locale-toggle[aria-expanded="true"] {
-  border-color: var(--w-chrome-line, var(--border));
-  background: var(--w-field, #fff);
-  color: var(--w-chrome-text, var(--text));
-}
-
-/* The language button carries two characters beside its icon. */
-.erp-locale-toggle {
-  inline-size: auto;
-  min-inline-size: 2.6rem;
-  gap: 0.25rem;
-  padding-inline: 0.3rem;
-  font-size: 0.7rem;
-  font-weight: 700;
-}
-
-/* Was a sliding pill with a sun and a moon in it. */
-.erp-theme-toggle {
-  display: inline-grid;
-  place-items: center;
-}
-
-.erp-theme-toggle::before,
-.erp-theme-toggle::after {
-  content: none;
-}
-
-.erp-theme-toggle__sun,
-.erp-theme-toggle__moon {
-  grid-area: 1 / 1;
-}
-
-[data-theme="light"] .erp-theme-toggle__moon,
-[data-theme="dark"] .erp-theme-toggle__sun {
-  display: none;
-}
-
-/* The module bar: menu entries, not tabs with an underline. */
-.erp-nav > button,
-.erp-nav [class*="erp-module"] > button {
-  border: 1px solid transparent;
-  border-radius: 0.12rem;
-  color: var(--w-chrome-text, var(--text));
-  font-size: 0.79rem;
-  font-weight: 600;
-}
-
-.erp-nav > button::after,
-.erp-nav [class*="erp-module"] > button::after {
-  content: none;
-}
-
-.erp-nav > button:hover,
-.erp-nav > button[aria-expanded="true"] {
-  border-color: var(--w-chrome-line, var(--border));
-  background: var(--w-field, #fff);
-}
-
-/* The person, as a tile rather than a badge. */
-.erp-user-trigger {
-  gap: 0.45rem;
-  padding: 0.15rem 0.35rem;
-  border: 1px solid transparent;
-  border-radius: 0.12rem;
-}
-
-.erp-user-trigger:hover,
-.erp-user-trigger[aria-expanded="true"] {
-  border-color: var(--w-chrome-line, var(--border));
-  background: var(--w-field, #fff);
-}
-
-.erp-user-trigger__avatar {
-  inline-size: 1.75rem;
-  block-size: 1.75rem;
-  border: 1px solid var(--w-chrome-line, var(--border));
-  border-radius: 0.12rem;
-  background: var(--w-head-strong, var(--surface-sunken));
-  color: var(--w-label, var(--text));
-  font-size: 0.7rem;
-  font-weight: 700;
-}
-
-.erp-user-trigger__chevron {
-  inline-size: 0.8rem;
-  block-size: 0.8rem;
-}
-
-/* Popovers and drawers: squared, and drawn from the palette. */
-.erp-utility-popover,
-.erp-module-popover,
-.erp-mobile-drawer,
-.erp-appearance-drawer {
-  border: 1px solid var(--w-line-strong, var(--border));
-  border-radius: 0.2rem;
-  background: var(--w-bg, var(--surface-raised));
-  color: var(--w-text, var(--text));
-  box-shadow: 0 2px 6px rgb(24 39 31 / 18%);
-}
-
-.erp-utility-popover__heading,
-.erp-module-popover h2,
-.erp-appearance-drawer h2 {
-  padding: 0.35rem 0.7rem;
-  border-block-end: 1px solid var(--w-title-line, var(--border));
-  background: linear-gradient(180deg, var(--w-title-a, var(--surface)), var(--w-title-b, var(--surface)));
-  color: var(--w-label, var(--text));
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
-/* The preference rows inside the appearance drawer. */
-.erp-preference {
-  border-block-end: 1px solid var(--w-rule, var(--border));
-}
-
-.erp-preference button,
-.erp-preference [role="radio"] {
-  border: 1px solid var(--w-line-strong, var(--border));
-  border-radius: 0.12rem;
-  background: var(--w-field, #fff);
-  color: var(--w-text, var(--text));
-  font-size: 0.74rem;
-}
-
-.erp-preference button[aria-checked="true"],
-.erp-preference button[aria-pressed="true"] {
-  border-color: var(--w-amber-line, var(--accent));
-  background: linear-gradient(180deg, var(--w-amber-a, var(--accent-soft)), var(--w-amber-b, var(--accent-soft)));
-  color: var(--w-accent-ink, #3a2600);
-}
-
-.erp-footer {
-  block-size: auto;
-  padding-block: 0.35rem;
-  border-block-start: 1px solid var(--w-chrome-line, var(--border));
-  background: linear-gradient(
-    180deg,
-    var(--w-chrome-a, var(--surface)),
-    var(--w-chrome-b, var(--surface))
-  );
-  font-size: 0.74rem;
-}
-
-.erp-footer__copy,
-.erp-footer__version {
-  color: var(--w-chrome-text, var(--text-muted));
-}
-
-/* The module entries: a menu bar. The underline that slid in under the active
-   one, and the accent colour it carried, belong to a different kind of
-   application — here the active module is the one drawn as pressed. */
-.erp-nav__trigger {
-  border: 1px solid transparent;
-  border-radius: 0.12rem;
-  color: var(--w-chrome-text, var(--text-soft));
-  font-size: 0.79rem;
-  font-weight: 600;
-}
-
-.erp-nav__trigger::after {
-  content: none;
-}
-
-.erp-nav__trigger:hover,
-.erp-nav__trigger[aria-expanded="true"],
-.erp-nav__trigger[data-active="true"] {
-  border-color: var(--w-chrome-line, var(--border));
-  background: var(--w-field, #fff);
-  color: var(--w-chrome-text, var(--text));
-}
-
-/* The module you are in is pressed, not underlined. */
-.erp-nav__trigger[data-active="true"] {
-  background: var(--w-selected, var(--accent-soft));
-  box-shadow: inset 0 1px 2px rgb(24 39 31 / 14%);
-}
-
-/* The screen you are on, inside an open module menu. Marked the way the grid
-   marks the row you are reading, not in the application's accent blue. */
-.erp-menu-item--link[aria-current="page"] {
-  border-inline-start: 3px solid var(--w-amber-line, var(--accent));
-  background: var(--w-selected, var(--accent-soft));
-  color: var(--w-label, var(--text));
-  font-weight: 700;
-}
-
-.erp-menu-item--link {
-  border-inline-start: 3px solid transparent;
-  border-radius: 0;
-  color: var(--w-text, var(--text));
-}
-
-.erp-menu-item__label {
-  font-size: 0.79rem;
-}
-
-/* The section headings inside the menu. */
-.erp-module-section > h3,
-.erp-utility-popover h3 {
-  color: var(--w-muted, var(--text-muted));
-  font-size: 0.68rem;
-  letter-spacing: 0.05em;
-}
-
 /* ── The page behind the page ─────────────────────────────────────────────
    The workspace is sand; the document behind it was still white, so any
    overscroll — and any screen shorter than the viewport — showed a white
@@ -4088,94 +4333,6 @@ html:has([data-palette]) {
 
 html:has([data-palette]) body {
   background: var(--w-canvas);
-}
-
-/* ── The global search, in the window's terms ─────────────────────────────*/
-.erp-search__panel {
-  border: 1px solid var(--w-line-strong, var(--border));
-  border-radius: 0.2rem;
-  background: var(--w-bg, var(--surface-raised));
-  color: var(--w-text, var(--text));
-  box-shadow: 0 2px 6px rgb(24 39 31 / 18%);
-}
-
-.erp-search__bar {
-  border-block-end: 1px solid var(--w-rule, var(--border));
-  background: var(--w-head, var(--surface-sunken));
-}
-
-.erp-search__bar input {
-  border: 1px solid var(--w-line-strong, var(--border-strong));
-  border-radius: 0.12rem;
-  background: var(--w-field, var(--surface));
-  color: var(--w-text, var(--text));
-  font-size: 0.8rem;
-}
-
-.erp-search__bar input:focus {
-  background: var(--w-focus, var(--surface));
-  outline: 1px solid var(--w-title-line, var(--accent));
-  outline-offset: -1px;
-  box-shadow: none;
-  border-color: var(--w-line-strong, var(--border-strong));
-}
-
-.erp-search__results :is(a, button) {
-  border-inline-start: 3px solid transparent;
-  border-radius: 0;
-  color: var(--w-text, var(--text));
-  font-size: 0.79rem;
-}
-
-.erp-search__results :is(a, button):hover,
-.erp-search__results [aria-selected='true'] {
-  border-inline-start-color: var(--w-amber-line, var(--accent));
-  background: var(--w-selected, var(--accent-soft));
-  color: var(--w-label, var(--text));
-}
-
-.erp-search__hint,
-.erp-search__empty,
-.erp-search__text small {
-  color: var(--w-muted, var(--text-muted));
-  font-size: 0.74rem;
-}
-
-/* ── The branch picker in the header ──────────────────────────────────────
-   The select dresses as the value it replaces: the person reads "Branch HQ"
-   either way, and the affordance is the chevron the browser draws. */
-.erp-branch__form {
-  display: contents;
-}
-
-.erp-branch__select {
-  max-inline-size: 7rem;
-  padding: 0 0.1rem;
-  border: 1px solid transparent;
-  border-radius: 0.12rem;
-  background: transparent;
-  color: var(--w-chrome-text, var(--text));
-  font-size: 0.72rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.erp-branch__select:hover,
-.erp-branch__select:focus-visible {
-  border-color: var(--w-chrome-line, var(--border));
-  background: var(--w-field, var(--surface));
-  outline: none;
-}
-
-/* The branch was hidden below 108rem — on any ordinary screen it simply was
-   not there, which read as "this system has no branches" and, now that it is
-   a picker, as "I cannot change branch". It stays until the mobile drawer
-   takes over at 35rem; the drawer carries the same picker. */
-@media (min-width: 35.0625rem) {
-  .erp-branch,
-  .erp-header__utilities > .erp-branch {
-    display: flex;
-  }
 }
 
 /* ── Printing a screen directly ───────────────────────────────────────────
@@ -4362,192 +4519,6 @@ html:has([data-palette]) body {
   border-block-end: 2px solid var(--border-strong);
 }
 
-.erp-appearance-drawer {
-  inline-size: min(46rem, 96vw);
-}
-
-.erp-appearance-section {
-  display: grid;
-  gap: 0.65rem;
-}
-
-.erp-appearance-section__heading h3 {
-  margin: 0;
-  color: var(--text);
-  font-size: 0.86rem;
-}
-
-.erp-appearance-section__heading p {
-  margin: 0.25rem 0 0;
-  color: var(--text-muted);
-  font-size: 0.74rem;
-}
-
-.erp-appearance-cards {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.65rem;
-}
-
-.erp-appearance-card {
-  display: grid;
-  min-inline-size: 0;
-  gap: 0.3rem;
-  padding: 0.6rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text);
-  background: var(--surface-raised);
-  text-align: start;
-  cursor: pointer;
-}
-
-.erp-appearance-card:hover,
-.erp-appearance-card[aria-checked="true"] {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent-soft) 40%, var(--surface-raised));
-}
-
-.erp-appearance-card:focus-visible {
-  outline: 3px solid rgb(var(--accent-rgb) / 34%);
-  outline-offset: 2px;
-}
-
-.erp-appearance-card__heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.4rem;
-  font-size: 0.77rem;
-}
-
-.erp-appearance-card__heading svg {
-  inline-size: 0.9rem;
-  block-size: 0.9rem;
-  color: var(--accent);
-}
-
-.erp-appearance-card__description {
-  min-block-size: 1.1rem;
-  color: var(--text-muted);
-  font-size: 0.67rem;
-}
-
-.erp-appearance-preview {
-  display: grid;
-  min-inline-size: 0;
-  gap: 0.32rem;
-  margin-block-start: 0.2rem;
-  padding: 0.4rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface-sunken);
-  overflow: hidden;
-}
-
-.erp-appearance-preview__bar {
-  display: flex;
-  gap: 0.18rem;
-  padding: 0.18rem 0.3rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 0.25rem);
-  background: var(--surface-raised);
-}
-
-.erp-appearance-preview__bar span {
-  inline-size: 0.28rem;
-  block-size: 0.28rem;
-  border-radius: 50%;
-  background: var(--accent-border);
-}
-
-.erp-appearance-preview section[class*="_panel_"] {
-  display: grid;
-  gap: 0.3rem;
-}
-
-.erp-appearance-preview__title,
-.erp-appearance-preview__lines span {
-  display: block;
-  block-size: 0.23rem;
-  border-radius: 999px;
-  background: var(--border-strong);
-}
-
-.erp-appearance-preview__title {
-  inline-size: 48%;
-  background: var(--accent-border);
-}
-
-.erp-appearance-preview__lines {
-  display: grid;
-  gap: 0.18rem;
-}
-
-.erp-appearance-preview__lines span:last-child {
-  inline-size: 72%;
-}
-
-.erp-appearance-preview__table {
-  inline-size: 100%;
-  border-collapse: collapse;
-}
-
-.erp-appearance-preview__table td {
-  block-size: 0.3rem;
-  border-block-end: 1px solid var(--border);
-}
-
-.erp-appearance-preview__table td:first-child {
-  inline-size: 66%;
-}
-
-.erp-appearance-preview .button {
-  justify-self: start;
-  min-block-size: 1.35rem;
-  padding-inline: 0.42rem;
-  font-size: 0.56rem;
-}
-
-.erp-appearance-settings-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.85rem;
-}
-
-.erp-advanced-appearance {
-  border-block-start: 1px solid var(--border);
-}
-
-.erp-advanced-appearance > summary {
-  padding-block: 0.75rem;
-  color: var(--text-soft);
-  font-size: 0.8rem;
-  font-weight: 750;
-  cursor: pointer;
-}
-
-.erp-advanced-appearance > .erp-appearance-settings-grid {
-  padding-block-end: 0.75rem;
-}
-
-.erp-appearance-save-state {
-  min-block-size: 1rem;
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 0.69rem;
-}
-
-@media (max-width: 36rem) {
-  .erp-appearance-cards,
-  .erp-appearance-settings-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .erp-appearance-drawer {
-    inline-size: 100vw;
-  }
-}
 
 /*
  * Preset signatures. Current intentionally has no appearance-specific rules:

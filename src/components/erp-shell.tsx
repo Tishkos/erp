@@ -16,6 +16,7 @@ import {
   Calculator,
   Check,
   ChevronDown,
+  ChevronsUpDown,
   Activity,
   Files,
   FolderKanban,
@@ -74,7 +75,8 @@ type UtilityPanel = 'notifications' | 'messages' | 'user';
 /**
  * What the header gives up, in order, so the module names keep their size
  * beside the company's name (`fitNav`): the user's name beside the avatar,
- * the "Active branch" caption, the chevrons, and last the company's name.
+ * the "Active branch" caption, the company's name, and last the chevrons.
+ * Search is one icon throughout (by direction, 2026-10-04).
  */
 // The chevrons go last — after the company's name — by direction 2026-10-06 ("make sure the arrow icon appears").
 const HEADER_SQUEEZE = ['user', 'branch', 'name', 'chevrons'] as const;
@@ -614,6 +616,7 @@ export function ErpShell({
                 </option>
               ))}
             </select>
+            <ChevronsUpDown className="erp-branch__chevron" aria-hidden="true" />
           </form>
         ) : (
           <strong className="erp-branch__value">{branchCode || '—'}</strong>

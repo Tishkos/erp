@@ -245,6 +245,13 @@ export function GlobalSearch({ sections }: { readonly sections: readonly MenuSec
         type="button"
       >
         <Search aria-hidden="true" />
+        {/* Drawn only when the bar has room to spare (HEADER_SQUEEZE › 'search'); else the icon alone. */}
+        <span aria-hidden="true" className="erp-search-trigger__label">
+          {shell('search')}
+        </span>
+        <kbd aria-hidden="true" className="erp-search-trigger__kbd">
+          {shell('search_shortcut')}
+        </kbd>
       </button>
 
       {open ? (
@@ -290,7 +297,7 @@ export function GlobalSearch({ sections }: { readonly sections: readonly MenuSec
             <ul className="erp-search__results" id={`${base}list`} role="listbox">
               {rows.map((row) =>
                 row.kind === 'heading' ? (
-                  <li className="erp-search__empty" key={row.id} role="presentation">
+                  <li className="erp-search__group" key={row.id} role="presentation">
                     {row.label}
                   </li>
                 ) : (
