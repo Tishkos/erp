@@ -183,12 +183,10 @@ function Panel({ phone }: { readonly phone: boolean }) {
     const el = list.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [turns.length, busy, proposal]);
-  useLayoutEffect(() => {
-    const el = field.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 7 * 16)}px`;
-  }, [body]);
+  // One line that scrolls sideways as you type (2026-10-07, by direction: "my
+  // texts automatically get in the next line"); only Shift+Enter opens another
+  // line, up to five.
+  const lines = Math.min(5, body.split('\n').length);
 
   const push = (turn: Turn) => setTurns((prev) => [...prev, turn].slice(-KEEP));
 
@@ -289,7 +287,7 @@ function Panel({ phone }: { readonly phone: boolean }) {
       aria-label={t('title')}
       className={cn(
         'fixed flex flex-col overflow-hidden bg-overlay text-overlay-fg shadow-2xl print:hidden',
-        phone ? 'inset-0 z-[80] h-dvh w-full' : 'bottom-[4.75rem] end-4 z-[46] h-[34rem] max-h-[calc(100dvh-6.5rem)] w-[22.5rem] rounded-xl border border-border',
+        phone ? 'inset-0 z-[80] h-dvh w-full' : 'bottom-[4.75rem] end-4 z-[46] h-[34rem] max-h-[calc(100dvh-6.5rem)] w-[26rem] max-w-[calc(100vw-2rem)] rounded-xl border border-border',
       )}
       data-assistant-panel=""
     >
@@ -382,7 +380,7 @@ function Panel({ phone }: { readonly phone: boolean }) {
           <textarea
             aria-label={t('question')}
             className={cn(
-              'max-h-28 min-h-9 min-w-0 flex-1 resize-none rounded-2xl border-0 bg-muted px-3.5 py-2 text-sm leading-5 text-fg shadow-none',
+              'min-w-0 flex-1 resize-none overflow-x-auto overflow-y-hidden whitespace-pre rounded-2xl border-0 bg-muted px-3.5 py-2 text-sm leading-5 text-fg shadow-none [scrollbar-width:none]',
               'placeholder:text-muted-fg focus:outline-hidden focus:ring-2 focus:ring-ring/25',
             )}
             disabled={busy}
@@ -398,8 +396,9 @@ function Panel({ phone }: { readonly phone: boolean }) {
             onPaste={onPaste}
             placeholder={t('placeholder')}
             ref={field}
-            rows={1}
+            rows={lines}
             value={body}
+            wrap="off"
           />
           <button
             aria-label={t('send')}

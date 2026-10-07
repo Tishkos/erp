@@ -50,7 +50,7 @@ export function useAssistant(): AssistantState {
 /** The AI button's width and the gap beside it. */
 export const BUTTON_ROOM = '4.75rem';
 /** The open panel's width with its gaps — what the chat dock gives up while it is open. */
-export const PANEL_ROOM = '24.5rem';
+export const PANEL_ROOM = '28rem';
 
 /** The inline-end inset the chat dock sits at, so it never sits under the AI dock. */
 export function roomFor(open: boolean): string {

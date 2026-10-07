@@ -23,6 +23,9 @@
  *     question (`history`) and nothing is written to `whatsapp_message`. The
  *     audit trail still gets `assistant.answered` per answer and the WhatsApp
  *     action rows per Yes (`whatsapp-do.auditDone`, `e164` = `web`).
+ *   * **No stamp.** The group's "— QS ERP · as of … · read as …" line is left
+ *     off here (`stamp: false`): the person is signed in and the panel is
+ *     theirs; who read what, and when, is on the audit row instead.
  *
  * Proposals wait in memory per user for `CONFIRM_MINUTES`, as the bridge's
  * do: an intention for the next few minutes, lost on a restart, which is the
@@ -136,6 +139,8 @@ export async function ask(input: {
     settings,
     ...(input.locale ? { locale: input.locale } : {}),
     history,
+    // No "— QS ERP · as of … · read as …" line under the answer: the panel is the signed-in person's own (2026-10-07, by direction).
+    stamp: false,
     agent: (ctx, asked, userName) =>
       runAgentFor({
         client,

@@ -945,6 +945,14 @@ export async function answer(input: {
   readonly agent?: (ctx: ReadContext, question: string, userName: string) => Promise<AgentOutcome>;
   /** The last few turns of this chat, so "all" and "and Erbil?" mean something. */
   readonly history?: readonly { readonly role: 'user' | 'assistant'; readonly text: string }[];
+  /**
+   * The W-R7 stamp under the answer ("— QS ERP · as of … · branch … · read
+   * as …"). On by default — the group's provenance. The AI dock passes false
+   * (2026-10-07, by direction: "can you delete that please"): the person is
+   * signed in and the panel is theirs alone, so the line said nothing the
+   * screen did not. `readAs` still carries the same facts to the audit row.
+   */
+  readonly stamp?: boolean;
 }): Promise<Reply> {
   const at = input.now ?? new Date();
   const locale = input.locale ?? detectLocale(input.text);
@@ -1018,11 +1026,13 @@ export async function answer(input: {
    * never about this line: W-R7 says *every* reply, `wa01-bridge` holds it on
    * a reply with no figure in it at all, and narrowing an audit requirement on
    * an inference is not a judgement call to make quietly. It stays until
-   * somebody asks for it to go.
+   * somebody asks for it to go — which the owner did for the AI dock in the
+   * application (2026-10-07), where the reader is signed in and alone:
+   * `stamp: false` leaves it off there, and the group keeps it.
    */
   const laid = layOutAnswer(text, pictures);
-  const stamp = footer(locale, { at, branchCode, userName });
-  text = `${laid.text}\n\n${stamp}`;
+  const stamp = input.stamp === false ? null : footer(locale, { at, branchCode, userName });
+  text = stamp ? `${laid.text}\n\n${stamp}` : laid.text;
   const parts = partsOf(laid.parts, stamp);
 
   return {
@@ -1046,12 +1056,13 @@ export async function answer(input: {
 }
 
 /**
- * The laid-out answer as things to send, the stamp under the last of them.
+ * The laid-out answer as things to send, the stamp under the last of them
+ * (none when the caller asked for no stamp).
  *
  * A picture that cannot be read is left out and its words still go — unless
  * its words were only its own caption, which without the picture say nothing.
  */
-function partsOf(laid: ReadonlyArray<AnswerPart>, stamp: string): Array<{ text: string; image: Attachment | null }> {
+function partsOf(laid: ReadonlyArray<AnswerPart>, stamp: string | null): Array<{ text: string; image: Attachment | null }> {
   const out: Array<{ text: string; image: Attachment | null }> = [];
   for (const part of laid) {
     if (!part.picture) {
@@ -1075,6 +1086,7 @@ function partsOf(laid: ReadonlyArray<AnswerPart>, stamp: string): Array<{ text: 
     }
   }
   const last = out[out.length - 1];
+  if (stamp === null) return last ? out : [{ text: '', image: null }];
   if (!last) return [{ text: stamp, image: null }];
   // Under a picture the stamp would crowd the step; it goes under the last words instead.
   const lastWords = [...out].reverse().find((part) => !part.image);
