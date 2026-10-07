@@ -12,7 +12,11 @@ import { describe, expect, it } from 'vitest';
 import { MENU } from '@domain/menu';
 import { isDelivered, routeFor } from '@domain/screens';
 
-const hr = MENU.find((section) => section.key === 'hr_payroll')!;
+// The thirteen in three headings since 2026-10-07 (by direction: grouped by
+// what they do, like Payables) — the sponsor's order kept across them.
+const HR_SECTIONS = ['hr_payroll', 'hr_time_pay', 'hr_talent'] as const;
+const sections = HR_SECTIONS.map((key) => MENU.find((section) => section.key === key)!);
+const hr = { items: sections.flatMap((section) => section.items.map((item) => ({ ...item, sectionKey: section.key }))) };
 const en = JSON.parse(readFileSync(join(process.cwd(), 'messages/en.json'), 'utf8')) as { page: Record<string, string>; nav: Record<string, string> };
 
 describe('FX15 · the HR menu', () => {
@@ -32,11 +36,11 @@ describe('FX15 · the HR menu', () => {
       'Documents',
       'Reports',
     ]);
-    expect(en.nav.hr_payroll).toBe('Human Resources');
+    expect(sections.map((section) => en.nav[section.key])).toEqual(['People & Organisation', 'Time & Pay', 'Talent & Requests']);
   });
 
   it('every one of the thirteen is built, under /hr (REQ-HR-001 HR-6)', () => {
-    const built = hr.items.filter((item) => isDelivered(routeFor(item, hr.key))).map((item) => routeFor(item, hr.key));
+    const built = hr.items.filter((item) => isDelivered(routeFor(item, item.sectionKey))).map((item) => routeFor(item, item.sectionKey));
     expect(built).toEqual([
       '/hr/dashboard',
       '/hr/employees',

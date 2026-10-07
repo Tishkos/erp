@@ -3,6 +3,7 @@
 import { useId, useRef, useState } from 'react';
 import { Pencil, Plus, X } from 'lucide-react';
 import styles from './admin.module.css';
+import { IntentSelect } from '@/components/admin/intent-select';
 
 /**
  * One line of a report's layout, opened in a dialog — new, or the one being
@@ -149,8 +150,7 @@ export function StatementLineDialog({
                 {/* "Equity at the beginning of the period" and "Total Income"
                     are worked out from the ledger. They rename and move like
                     any other line, but there is nothing to turn them into. */}
-                <select
-                  className={styles.select}
+                <IntentSelect
                   disabled={computed}
                   id={field('kind')}
                   name="kind"
@@ -166,7 +166,7 @@ export function StatementLineDialog({
                       <option value="subtotal">{labels.kindSubtotal}</option>
                     </>
                   )}
-                </select>
+                </IntentSelect>
               </div>
 
               {parents ? (
@@ -174,8 +174,7 @@ export function StatementLineDialog({
                   <label className={styles.label} htmlFor={field('parent')}>
                     {labels.parent}
                   </label>
-                  <select
-                    className={styles.select}
+                  <IntentSelect
                     defaultValue={initial?.parentId ?? ''}
                     id={field('parent')}
                     name="parentId"
@@ -186,7 +185,7 @@ export function StatementLineDialog({
                         {parent.label}
                       </option>
                     ))}
-                  </select>
+                  </IntentSelect>
                 </div>
               ) : null}
 
@@ -195,8 +194,7 @@ export function StatementLineDialog({
                   <label className={styles.label} htmlFor={field('side')}>
                     {labels.side}
                   </label>
-                  <select
-                    className={styles.select}
+                  <IntentSelect
                     defaultValue={initial?.side ?? sides[0]?.value ?? ''}
                     id={field('side')}
                     name="side"
@@ -207,7 +205,7 @@ export function StatementLineDialog({
                         {side.label}
                       </option>
                     ))}
-                  </select>
+                  </IntentSelect>
                 </div>
               ) : null}
 
@@ -219,8 +217,7 @@ export function StatementLineDialog({
                   <label className={styles.label} htmlFor={field('cash')}>
                     {labels.cash}
                   </label>
-                  <select
-                    className={styles.select}
+                  <IntentSelect
                     id={field('cash')}
                     name="isCash"
                     onChange={(event) => setIsCash(event.target.value === 'yes')}
@@ -228,7 +225,7 @@ export function StatementLineDialog({
                   >
                     <option value="no">—</option>
                     <option value="yes">{labels.cash}</option>
-                  </select>
+                  </IntentSelect>
                 </div>
               ) : null}
             </div>

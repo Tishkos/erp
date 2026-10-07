@@ -20,6 +20,7 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as performance from '@/server/services/performance';
 import * as recordNotes from '@/server/services/record-notes';
 import { assignReviewer, cancelReview, commentOnReview, completeReview, reopenReview, saveGoals, signOffReview } from '../actions';
+import { IntentSelect } from '@/components/admin/intent-select';
 
 /**
  * One performance review — REQ-HR-001 Stage HR-5. Copies the Purchase
@@ -267,14 +268,14 @@ export default async function ReviewPage({ params, searchParams }: { params: Pro
                       </td>
                       <td>
                         {reviewer ? (
-                          <select aria-label={`${x('rating')} ${i + 1}`} className={s.sapCellField} defaultValue={goal?.rating ? String(goal.rating) : ''} name={`rating_${i}`}>
+                          <IntentSelect aria-label={`${x('rating')} ${i + 1}`} compact defaultValue={goal?.rating ? String(goal.rating) : ''} name={`rating_${i}`}>
                             <option value="">—</option>
                             {RATINGS.map((r) => (
                               <option key={r} value={String(r)}>
                                 {`${r} · ${x(`rating_${r}`)}`}
                               </option>
                             ))}
-                          </select>
+                          </IntentSelect>
                         ) : (
                           ratingLabel(goal?.rating ?? null)
                         )}

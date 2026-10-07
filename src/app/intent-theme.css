@@ -26,7 +26,8 @@
 ) *));
 
 @theme inline {
-  --font-sans: var(--font-inter), var(--font-arabic-loaded), ui-sans-serif, system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+  /* Inter by name, then the Arabic face — see `--font-sans` in globals.css for why not `var(--font-inter)`. */
+  --font-sans: Inter, var(--font-arabic-loaded), ui-sans-serif, system-ui, "Segoe UI", Roboto, Arial, sans-serif;
   --font-mono: "Cascadia Code", "SFMono-Regular", Consolas, ui-monospace, monospace;
 
   --color-bg: var(--ui-bg);
@@ -188,7 +189,11 @@ html:has(.erp-root[data-palette]),
   --ui-danger-subtle: color-mix(in oklab, var(--status-rejected) 14%, transparent);
   --ui-danger-subtle-fg: color-mix(in oklab, var(--status-rejected) 70%, var(--w-text, oklch(0.21 0.006 285.885)));
   --ui-border: var(--w-line, oklch(0.911 0.006 286.286));
-  --ui-input: var(--w-line-strong, oklch(0.871 0.006 286.286));
+  /* A field's outline: the palette's strong line drawn toward the text colour,
+     so a text box, a select or a date reads as a field on every palette, light
+     or dark (about 3:1 against the field, the non-text contrast a control's
+     boundary asks for; the bare line was 1.5:1 on Sand). */
+  --ui-input: color-mix(in oklab, var(--w-line-strong, oklch(0.871 0.006 286.286)) 65%, var(--w-text, oklch(0.21 0.006 285.885)) 35%);
   --ui-ring: var(--w-primary, oklch(0.546 0.245 262.881));
   --ui-navbar: var(--w-chrome-a, oklch(0.995 0 0));
   --ui-navbar-fg: var(--w-chrome-text, oklch(0.141 0.005 285.823));

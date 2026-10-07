@@ -33,6 +33,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { ownerPool, rejection, resetTestData, seedBranch } from './setup';
+import { linkItemsToSuppliers } from './item-supplier';
 import { withScope } from '@/server/db/client';
 import * as authz from '@/server/services/authorization';
 import * as coa from '@/server/services/chart-of-accounts';
@@ -485,6 +486,9 @@ async function everythingAgrees() {
 }
 
 // ---------------------------------------------------------------------------
+// 0408 — an item is bought only from a supplier linked to it; this suite's items are every supplier's.
+beforeEach(linkItemsToSuppliers);
+
 describe('ops 15 · the lifecycle the sponsor asked for, step by step', () => {
   it('purchase, purchase, sale, sales return, purchase return, transfer, back, sale', async () => {
     // Opening stock: nothing.

@@ -4,6 +4,7 @@ import { AdminPage, Flash, admin as s, Submit } from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { ProfileLink } from '@/components/admin/profile-link';
+import { DueDateText } from '@/components/admin/due-date-text';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
@@ -249,7 +250,8 @@ export default async function SupplierCreditNotePage({
                         <ProfileLink code={open.invoiceNo} kind="purchase_invoice" />
                       </td>
                       <td>
-                        <bdi dir="ltr">{formatBusinessDate(open.dueDate, locale as Locale)}</bdi>
+                        {/* Only once set on purpose — an advance's balance waits for its SWIFT (2026-10-07). */}
+                        <DueDateText date={open.dueDate} locale={locale} waiting={t('balance_due.waiting')} />
                       </td>
                       <td className={s.sapNum}>
                         <bdi dir="ltr">{money(open.outstandingIqd)}</bdi>

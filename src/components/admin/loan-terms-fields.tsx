@@ -3,6 +3,8 @@
 import { useId, useState } from 'react';
 import { addMonths } from '@/lib/dates';
 import styles from './admin.module.css';
+import { IntentSelect } from '@/components/admin/intent-select';
+import { IntentDateField } from '@/components/admin/intent-date-field';
 
 /**
  * The two parts of the new-loan form that answer back while they are filled
@@ -64,8 +66,7 @@ export function LoanCommissionFields({
         <label className={styles.label} htmlFor="f-commission_basis">
           {labels.basis}
         </label>
-        <select
-          className={styles.select}
+        <IntentSelect
           id="f-commission_basis"
           name="commission_basis"
           onChange={(event) => setBasis(event.target.value)}
@@ -76,7 +77,7 @@ export function LoanCommissionFields({
               {option.label}
             </option>
           ))}
-        </select>
+        </IntentSelect>
       </div>
 
       {basis === 'percentage' ? (
@@ -154,8 +155,7 @@ export function LoanBankField({
         <label className={styles.label} htmlFor="f-bank_code">
           {labels.bank}
         </label>
-        <select
-          className={styles.select}
+        <IntentSelect
           id="f-bank_code"
           name="bank_code"
           onChange={(event) => setChosen(event.target.value)}
@@ -168,7 +168,7 @@ export function LoanBankField({
             </option>
           ))}
           <option value={newBankValue}>{labels.another}</option>
-        </select>
+        </IntentSelect>
       </div>
 
       {/* Only when the register has no row for it. Unmounted rather than
@@ -290,8 +290,7 @@ export function LoanScheduleFields({
         <label className={styles.label} htmlFor={`${id}-frequency`}>
           {labels.frequency}
         </label>
-        <select
-          className={styles.select}
+        <IntentSelect
           id={`${id}-frequency`}
           onChange={(event) => setFrequency(event.target.value)}
           value={frequency}
@@ -301,7 +300,7 @@ export function LoanScheduleFields({
               {option.label}
             </option>
           ))}
-        </select>
+        </IntentSelect>
         <span className={styles.hint}>{labels.hint}</span>
       </div>
 
@@ -316,9 +315,8 @@ export function LoanScheduleFields({
               *
             </span>
           </label>
-          <input
+          <IntentDateField
             autoComplete="off"
-            className={`${styles.input} ${styles.dateInput}`}
             id={`${id}-due-${index}`}
             name={`due_${index}`}
             onChange={(event) => {
@@ -328,7 +326,6 @@ export function LoanScheduleFields({
               if (index === 0) setFirst(event.target.value);
             }}
             required
-            type="date"
             value={date}
           />
         </div>

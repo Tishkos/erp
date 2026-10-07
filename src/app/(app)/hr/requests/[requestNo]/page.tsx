@@ -31,6 +31,8 @@ import {
   submitRequest,
   updateRequest,
 } from '../actions';
+import { IntentSelect } from '@/components/admin/intent-select';
+import { IntentDateField } from '@/components/admin/intent-date-field';
 
 /**
  * One employee request — REQ-HR-001 Stage HR-6. Copies the Purchase Invoice
@@ -341,17 +343,17 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
                         <bdi dir="ltr">{line ? line.lineNo : '+'}</bdi>
                       </td>
                       <td>
-                        <input aria-label={`${x('spent_on')} ${i + 1}`} className={s.sapCellField} defaultValue={line?.spentOn ?? ''} name={`spent_on_${i}`} type="date" />
+                        <IntentDateField aria-label={`${x('spent_on')} ${i + 1}`} compact defaultValue={line?.spentOn ?? ''} name={`spent_on_${i}`} />
                       </td>
                       <td>
-                        <select aria-label={`${x('category')} ${i + 1}`} className={s.sapCellField} defaultValue={line?.categoryCode ?? ''} name={`category_${i}`}>
+                        <IntentSelect aria-label={`${x('category')} ${i + 1}`} compact defaultValue={line?.categoryCode ?? ''} name={`category_${i}`}>
                           <option value="">—</option>
                           {categories.map((c) => (
                             <option key={c.code} value={c.code}>
                               {c.name}
                             </option>
                           ))}
-                        </select>
+                        </IntentSelect>
                       </td>
                       <td>
                         <input aria-label={`${x('line_description')} ${i + 1}`} className={s.sapCellField} defaultValue={line?.description ?? ''} name={`description_${i}`} />

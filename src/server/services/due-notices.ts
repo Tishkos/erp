@@ -92,6 +92,9 @@ export async function raiseDueNotices(
     });
 
     for (const item of items) {
+      // A purchase invoice whose due date nobody has set yet (the balance of
+      // an advance, waiting for its SWIFT) is due on no day: nothing to tell.
+      if (!item.dueDateSet) continue;
       const untilDue = daysBetween(asOf, item.dueDate);
 
       // Exactly one of the three, so an invoice is never announced twice on
@@ -191,12 +194,14 @@ export async function announcePaidLate(
     readonly invoiceId: string;
     readonly invoiceNo: string;
     readonly partyName: string | null;
-    readonly dueDate: string;
+    /** Null when no due date was ever set (an advance's balance): it cannot have been paid late. */
+    readonly dueDate: string | null;
     readonly paidOn: string;
     readonly branchCode: string | null;
     readonly link: string;
   },
 ): Promise<void> {
+  if (input.dueDate === null) return;
   const daysLate = daysBetween(input.dueDate, input.paidOn);
   if (daysLate <= 0) return; // paid on time is not news
 

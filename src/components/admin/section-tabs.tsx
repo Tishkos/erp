@@ -1,10 +1,9 @@
-import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { can } from '@domain/permissions';
 import { screenRoutes } from '@domain/screens';
 import { requireContext } from '@/server/session';
 import { visibleRoute } from '@/server/delivered';
-import styles from './admin.module.css';
+import { SectionTabsNav } from './section-tabs-nav';
 
 /**
  * The screens that live next to this one — one compact row of tabs.
@@ -28,9 +27,19 @@ import styles from './admin.module.css';
  * Nothing is invented and nothing is offered that the URL would refuse: a
  * screen appears only if it is built and the signed-in
  * person may view it. A row of one is no row at all, so it is not drawn.
+ *
+ * ── One line, never a scrollbar (2026-10-06) ───────────────────────────────
+ * By direction ("try to avoid the header tab … scrollable"): the row is one
+ * line at every width. What does not fit goes behind a "More" button at its
+ * end — measured in the browser by `SectionTabsNav`; the server draws every
+ * tab, so a row that fits never moves.
  */
 export async function SectionTabs({ route }: { readonly route: string }) {
-  const [page, context] = await Promise.all([getTranslations('page'), requireContext()]);
+  const [page, tabs, context] = await Promise.all([
+    getTranslations('page'),
+    getTranslations('tabs'),
+    requireContext(),
+  ]);
   const all = [...screenRoutes().values()];
   const current = all.find((screen) => screen.route === route);
   if (!current) return null;
@@ -47,17 +56,14 @@ export async function SectionTabs({ route }: { readonly route: string }) {
   if (siblings.length < 2) return null;
 
   return (
-    <nav aria-label={page(current.item.key)} className={styles.tabsBar}>
-      {siblings.map((screen) => (
-        <Link
-          aria-current={screen.route === route ? 'page' : undefined}
-          className={styles.tabItem}
-          href={screen.route}
-          key={screen.route}
-        >
-          {page(screen.item.key)}
-        </Link>
-      ))}
-    </nav>
+    <SectionTabsNav
+      label={page(current.item.key)}
+      moreLabel={tabs('more')}
+      tabs={siblings.map((screen) => ({
+        current: screen.route === route,
+        href: screen.route,
+        label: page(screen.item.key),
+      }))}
+    />
   );
 }

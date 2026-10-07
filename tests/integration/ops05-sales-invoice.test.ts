@@ -18,6 +18,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { ownerPool, resetTestData, seedBranch } from './setup';
+import { linkItemsToSuppliers } from './item-supplier';
 import { withScope } from '@/server/db/client';
 import * as authz from '@/server/services/authorization';
 import * as coa from '@/server/services/chart-of-accounts';
@@ -331,6 +332,9 @@ const invoiceStock = (
       supplierId: input.supplierId ?? null,
     }),
   );
+
+// 0408 — an item is bought only from a supplier linked to it; this suite's items are every supplier's.
+beforeEach(linkItemsToSuppliers);
 
 describe('ops 5 · approval, posting, stock and the ledger stay in step', () => {
   it('refuses a clerk approval and leaves the direct sale in draft', async () => {
@@ -1427,6 +1431,8 @@ describe('item sales account routing', () => {
     } finally {
       client.release();
     }
+    // 0408 — the new item is bought from a supplier linked to it.
+    await linkItemsToSuppliers();
 
     await buy(jinko, { quantity: '10', unitPrice: '100' });
     await buy(jinko, {

@@ -353,7 +353,7 @@ The line at the bottom repeats the keys: "↑ ↓ to move · Enter to open · Es
 The address holds the phrase and the type (/search?q=…&type=…), so a search can be bookmarked or sent to a colleague, who will see only what they may open.
 
 ### What to type — Global Search
-- A document number in full — for example API-HQ-2026-000012 — finds that document first.
+- A document number in full — for example PUR-HQ-2026-000012 — finds that document first. Purchase invoices entered before 2026-10-06 are numbered API-… and are found by that number (and by "API-12") too.
 - Its short form: the letters of the series and the serial ("AP-12", "API 12"), or the serial alone ("12").
 - The beginning of a number or code ("SUP-0000").
 - A name or part of one: a customer, supplier, item, employee, project or account. Two characters match the beginning of a name; three or more also match inside it.

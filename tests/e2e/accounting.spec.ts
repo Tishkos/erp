@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import { dateField } from './support/controls';
+import { keepEnglish } from './support/locale';
 
 /**
  * Phase 1 · the accounting round trip, in a browser.
@@ -55,6 +57,7 @@ async function signIn(page: Page, user: { email: string; password: string }) {
   // redirects an already-authenticated visitor to the dashboard, so the old
   // session goes first.
   await page.context().clearCookies();
+  await keepEnglish(page.context());
   await page.goto('/sign-in');
   expect(['localhost', '127.0.0.1']).toContain(new URL(page.url()).hostname);
   await page.getByRole('textbox', { name: 'Email', exact: true }).fill(user.email);
@@ -76,8 +79,8 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
       await page.getByRole('button', { name: 'Open a year' }).click();
       await page.waitForTimeout(1200);
       await page.getByRole('textbox', { name: 'Year', exact: true }).fill(`FY${YEAR}`);
-      await page.getByRole('textbox', { name: 'Starts', exact: true }).fill(`${YEAR}-01-01`);
-      await page.getByRole('textbox', { name: 'Ends', exact: true }).fill(`${YEAR}-12-31`);
+      await dateField(page, 'Starts', { exact: true }).fill(`${YEAR}-01-01`);
+      await dateField(page, 'Ends', { exact: true }).fill(`${YEAR}-12-31`);
       await page.getByRole('button', { name: 'Create' }).click();
       await expect(page.getByRole('status')).toContainText('Saved');
     }
@@ -107,7 +110,7 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
       await page.getByRole('button', { name: 'Publish a rate' }).click();
       await page.waitForTimeout(1200);
       await page.getByRole('spinbutton', { name: 'Rate' }).fill('1310');
-      await page.getByRole('textbox', { name: 'Effective from' }).fill(`${YEAR}-01-01`);
+      await dateField(page, 'Effective from').fill(`${YEAR}-01-01`);
       await page.getByRole('button', { name: 'Publish', exact: true }).click();
       await expect(page.getByRole('status')).toContainText('Saved');
     }
@@ -183,7 +186,7 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     entryNo = (await page.getByRole('heading', { level: 1 }).innerText()).trim();
     expect(entryNo).toMatch(/^JE-\d{4}-\d+$/);
     await expect(page.getByText('Draft', { exact: true }).filter({ visible: true }).first()).toBeVisible();
-    await expect(page.getByRole('textbox', { name: 'Posting date', exact: true })).toHaveValue(TODAY);
+    await expect(dateField(page, 'Posting date', { exact: true })).toHaveValue(TODAY);
 
     // The description is typed on the document and saved when the box is left.
     await page.getByRole('textbox', { name: 'Description', exact: true }).fill(`Sale ${RUN}`);

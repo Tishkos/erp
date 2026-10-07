@@ -12,6 +12,12 @@ import { cn } from "@/lib/utils";
 const inter = Inter({
   subsets: ['latin'],
   display: 'swap',
+  // No "Inter Fallback": it is local Arial, which has Arabic letters, so on an
+  // English page every Arabic word (the company's name, a supplier's) was drawn
+  // in Arial's Arabic instead of reaching Noto Sans Arabic next in the stack
+  // (2026-10-06, by direction: "the Arabic font looks good … in English mode,
+  // everywhere").
+  adjustFontFallback: false,
   variable: '--font-inter',
 });
 

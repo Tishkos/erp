@@ -99,9 +99,32 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
   const total = sumMoney(rows.map((row) => row.valueIqd));
   const summaryTotal = sumMoney(summary.map((row) => row.valueIqd));
 
+  // Stock that came without a purchase is added from here (2026-10-06, by
+  // direction): the sheet, with the warehouse the report is filtered to, and
+  // the register of what was added by hand — each to whoever holds its grant.
+  const mayAddManually = can(context.principal, 'create', 'manual_stock_addition') && visibleRoute('/inventory/manual-additions');
+  const mayReadAdditions = can(context.principal, 'view', 'manual_stock_addition') && visibleRoute('/inventory/manual-additions');
+
   return (
     <AdminPage
-      actions={<ExportMenu exportKey="warehouses_report" query={params} />}
+      actions={
+        <>
+          {mayReadAdditions ? (
+            <Link className="action" href="/inventory/manual-additions">
+              {t('manual_additions.view_list')}
+            </Link>
+          ) : null}
+          {mayAddManually ? (
+            <Link
+              className="action action--primary"
+              href={warehouseCode ? `/inventory/manual-additions/new?warehouse=${encodeURIComponent(warehouseCode)}` : '/inventory/manual-additions/new'}
+            >
+              {t('manual_additions.new')}
+            </Link>
+          ) : null}
+          <ExportMenu exportKey="warehouses_report" query={params} />
+        </>
+      }
       back={{ href: '/', label: t('dashboard_label') }}
       // Two figures side by side, one in units and one in dinars, and the
       // second was read as the first on 2026-09-27 — 250,350 IQD of stock at

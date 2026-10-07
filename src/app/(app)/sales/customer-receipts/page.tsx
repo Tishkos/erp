@@ -13,6 +13,8 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as receipts from '@/server/services/customer-receipt';
 import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
 import { savedViewsFor } from '@/server/saved-views-gate';
+import { RegisterFilter } from '@/components/admin/register-filter';
+import { applyRegisterDates, registerDatesOf, registerDatesParams } from '@/server/domain/register-dates';
 
 /**
  * Receipts — Operations build, block 6.
@@ -52,7 +54,14 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Sea
   // The person's saved views of this screen — and, on a bare arrival, their default one.
   const saved = await savedViewsFor('sales.receipts', searchParams);
   const rows = await withCurrentUser((tx) => receipts.list(tx));
-  const shown = rows.filter((row) => matches(row, outcome.q));
+  // The Filter's window of receipt dates and the order, over the whole register — newest first unless asked.
+  const dates = registerDatesOf(await searchParams);
+  const shown = applyRegisterDates(
+    rows.filter((row) => matches(row, outcome.q)),
+    (row) => row.receiptDate,
+    dates,
+    (row) => row.receiptNo,
+  );
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
 
   return (
@@ -88,10 +97,12 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Sea
             clearHref="/sales/customer-receipts"
             clearLabel={t('clear_search')}
             countLabel={t('rows_shown', { count: shown.length })}
+            hidden={registerDatesParams(dates)}
             placeholder={t('search_placeholder')}
             q={outcome.q}
             searchLabel={t('search')}
           >
+            <RegisterFilter dates={dates} keep={{ q: outcome.q }} path="/sales/customer-receipts" />
             <SavedViewsMenu state={saved} />
           </ListToolbar>
 

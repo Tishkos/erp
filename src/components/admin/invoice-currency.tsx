@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { MONEY_PLACES, toNumber } from '@/lib/decimal';
 import styles from './admin.module.css';
 
+import { IntentSelect } from '@/components/admin/intent-select';
 /**
  * The currency a purchase invoice is agreed in, and what it comes to in both —
  * by direction, 2026-10-03.
@@ -64,8 +65,7 @@ export function InvoiceCurrency({
 
   return (
     <>
-      <select
-        className={styles.select}
+      <IntentSelect
         id={`f-${name}`}
         name={name}
         onChange={(event) => setChosen(event.target.value)}
@@ -77,7 +77,7 @@ export function InvoiceCurrency({
             {choice.code === choice.name ? choice.code : `${choice.code} · ${choice.name}`}
           </option>
         ))}
-      </select>
+      </IntentSelect>
       {foreign ? (
         <span className={styles.sapGridCaption}>
           <bdi dir="ltr">

@@ -28,6 +28,7 @@ export const APPROVAL_SOURCES = [
   'payment_application',
   'ap_invoice',
   'service_receipt',
+  'manual_stock_addition',
   'leave',
   'payroll',
   'advance',

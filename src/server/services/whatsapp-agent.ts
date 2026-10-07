@@ -239,7 +239,8 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         return {
           text: [
             `${field('invoiceNo') ?? no} · ${field('status') ?? ''}`,
-            `date ${field('invoiceDate') ?? '—'} · due ${field('dueDate') ?? '—'}`,
+            // A purchase invoice's due date is said only once set on purpose — an advance's balance waits for its SWIFT (2026-10-07).
+            `date ${field('invoiceDate') ?? '—'} · ${args.side !== 'sales' && !field('dueDateSetAt') ? 'no due date yet (it is set once the SWIFT is received, on the import application)' : `due ${field('dueDate') ?? '—'}`}`,
             `total ${money(field('totalIqd'))} · settled ${money(field('settledAmountIqd'))}`,
             `${lines.length} line(s)`,
           ].join(chr10()),

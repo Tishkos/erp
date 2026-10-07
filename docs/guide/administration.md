@@ -54,7 +54,7 @@ The Settings (الإعدادات) module opens a menu whose first heading is Adm
 ### Branch scope — Administration concept
 - Every document belongs to a branch. A person sees and works on the records of the branches they have been given, and no others. Having no branch means seeing nothing, not everything.
 - Branches are given on the user's record (Settings → Administration → Users → open the person → **Branches** card).
-- The **Active branch** (الفرع النشط) control in the header shows the branch the person is working in. With one branch it is plain text; with several it is a list of that person's branches. A new document starts in the active branch. The active branch is only a starting choice — it is not what gives access.
+- The **Active branch** (الفرع النشط) in the person's own menu (their picture at the end of the top bar) shows the branch they are working in. With one branch it is plain text; with several it is a row of that person's branches to choose from. A new document starts in the active branch. The active branch is only a starting choice — it is not what gives access.
 - One of the person's branches is marked **Default** (افتراضي): it is the branch a session starts in.
 - Working on a branch you have not been given is refused with: "Out of scope: this user has no access to branch '…'."
 - The Audit Trail follows the same rule: a person sees the events of their own branches; company-wide events (a permission change, a sign-in failure, a configuration change) are shown only to a Super user.
@@ -452,6 +452,7 @@ Example: prefix EMP, pattern {PREFIX}-{BRANCH}-{SERIAL}, padding 4, in branch HQ
 2. In the **Update** (تحديث) panel change **Prefix** (البادئة), **Pattern** (النمط), **Padding** (عدد الخانات) or the two counter ticks.
 3. Click **Save** (حفظ).
 4. The change applies to numbers issued from now on. Numbers already issued are never renumbered.
+5. Two series should not share a prefix and a pattern: the same number would be written for two kinds of record. If it happens, a number another series already holds is stepped over (the gap stays). For example, on 2026-10-06 **AP_INVOICE** (purchase invoices) moved from API to **PUR** and **PAYABLE_LOCAL_GOODS** (local-goods payables), which had used PUR, moved to **LOC**; the numbers they had issued keep API- and PUR-.
 
 ### How to close or reopen a series — Numbering
 1. Open Settings → Administration → Numbering, click the key, address /administration/numbering/<key>.

@@ -26,9 +26,14 @@ import * as paymentMethods from '@/server/services/payment-methods';
 import * as bankAccounts from '@/server/services/bank-cash-accounts';
 import * as warehouses from '@/server/services/warehouses';
 import { gapsFor } from '@domain/setup-gaps';
-import { createApInvoice, invoiceLineAvailability } from '../actions';
+import Link from 'next/link';
+import { AccountBalanceNote } from '@/components/admin/account-balance-note';
+import { itemPagesIn } from '@/components/admin/item-link';
+import { accountBalanceAction, createApInvoice, invoiceLineAvailability } from '../actions';
 import { businessToday } from '@/server/domain/business-date';
 import { RATE_SCALE, toDecimalString } from '@domain/money';
+import { IntentSelect } from '@/components/admin/intent-select';
+import { IntentDateField } from '@/components/admin/intent-date-field';
 
 /**
  * Raising a Purchase Invoice — Operations build, block 4.
@@ -71,6 +76,19 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
   // Declared before the reads below: the currency rates are fetched for this
   // date, and it used to be declared after them.
   const today = businessToday();
+
+  // The balance under each account is the ledger's, so it is shown to whoever
+  // may read the ledger — the chart of accounts or the G/L inquiry (2026-10-06).
+  const mayReadBalances =
+    can(context.principal, 'view', 'chart_of_account') || can(context.principal, 'view', 'gl_inquiry');
+  const balanceLabels = {
+    balance: t('invoices.balance'),
+    debit: t('invoices.balance_dr'),
+    credit: t('invoices.balance_cr'),
+  };
+  // A refusal naming an item its supplier does not sell carries the item's
+  // page; offered as a link to whoever may link a supplier there (0408).
+  const itemsToLink = can(context.principal, 'configure', 'item') ? itemPagesIn(outcome.error) : [];
 
   const { suppliers, allSuppliers, stockItems, allItems, houses, schedules, accounts, mapped, imports, assignment, moneys, moneyAccounts, methods } =
     await withCurrentUser(async (tx) => ({
@@ -173,6 +191,29 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
         />
       ),
     },
+    /*
+     * The supplier's own number for this bill — "they usually give us a
+     * receipt and we need their receipt number too" (by direction,
+     * 2026-10-06). Optional: left empty, our invoice number stands in, as it
+     * always did; a number this supplier already billed under is refused (§15).
+     */
+    {
+      label: x('supplier_receipt_no'),
+      control: true,
+      value: (
+        <>
+          <input
+            aria-label={x('supplier_receipt_no')}
+            autoComplete="off"
+            dir="auto"
+            maxLength={100}
+            name="supplier_invoice_no"
+            type="text"
+          />
+          <span className={s.sapEnteredNote}>{x('supplier_receipt_no_hint')}</span>
+        </>
+      ),
+    },
     {
       label: column('currency'),
       control: true,
@@ -200,12 +241,11 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
       label: column('posting_date'),
       control: true,
       value: (
-        <input
+        <IntentDateField
           aria-label={column('posting_date')}
           defaultValue={today}
           name="invoice_date"
           required
-          type="date"
         />
       ),
     },
@@ -213,20 +253,33 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
       label: t('invoices.statement_account_supplier'),
       control: true,
       value: (
-        <select
-          aria-label={t('invoices.statement_account_supplier')}
-          defaultValue={mapped.payable ?? ''}
-          name="payable_account_id"
-        >
-          <option value="">{t('invoices.account_default')}</option>
-          {accounts
-            .filter((account) => account.controlAccount === 'supplier')
-            .map((account) => (
-              <option key={account.id} value={account.id}>
-                {`${account.code} · ${account.name}`}
-              </option>
-            ))}
-        </select>
+        <>
+          <IntentSelect
+            aria-label={t('invoices.statement_account_supplier')}
+            defaultValue={mapped.payable ?? ''}
+            name="payable_account_id"
+          >
+            <option value="">{t('invoices.account_default')}</option>
+            {accounts
+              .filter((account) => account.controlAccount === 'supplier')
+              .map((account) => (
+                <option key={account.id} value={account.id}>
+                  {`${account.code} · ${account.name}`}
+                </option>
+              ))}
+          </IntentSelect>
+          {/* The chosen account's balance, from the ledger (2026-10-06); "As
+              configured" shows the account the posting rule would use. */}
+          {mayReadBalances ? (
+            <AccountBalanceNote
+              fallbackAccountId={mapped.payable}
+              labels={balanceLabels}
+              load={accountBalanceAction}
+              locale={locale}
+              selectName="payable_account_id"
+            />
+          ) : null}
+        </>
       ),
     },
     /*
@@ -256,52 +309,83 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
       label: x('import_application'),
       control: true,
       value: (
-        <select aria-label={x('import_application')} defaultValue="" name="payable_id">
+        <IntentSelect aria-label={x('import_application')} defaultValue="" name="payable_id">
           <option value="">{x('import_application_new')}</option>
           {imports.map((row) => (
             <option key={row.id} value={row.id}>
               {`${row.payableNo} · ${row.reference} · ${row.supplierName}`}
             </option>
           ))}
-        </select>
-      ),
-    },
-    {
-      // The percentage, which computes what it comes to as the lines are typed.
-      label: x('advance_percent'),
-      control: true,
-      value: (
-        <AdvanceField
-          currencyField="currency"
-          defaultPercent="20"
-          importField="is_import"
-          label={x('advance_percent')}
-          ledgerCurrency="IQD"
-          ledgerRates={Object.fromEntries(moneys.map((m) => [m.code, m.iqdPerUnit]))}
-          locale={locale}
-          name="advance_percent"
-        />
+        </IntentSelect>
       ),
     },
     /*
-     * Where the advance leaves from and how it travels (2026-10-06, by
-     * direction: "automatically 20% percentage payment application when
-     * applied"). With the percentage, these are all a payment application
-     * needs, so it is raised and approved when the invoice posts rather than
-     * typed again on the import's page. The account follows the currency box:
-     * an import in dollars is paid from a dollar account (D3).
+     * Where the advance leaves from — FIRST, before how much (2026-10-07, by
+     * direction: "before that it checks which bank account, then he can select
+     * the payable amount by percentage or real amount"): the account and its
+     * balance, then the share or the amount paid from it. With the percentage,
+     * the account and the method are all a payment application needs, so it is
+     * raised and approved when the invoice posts rather than typed again on the
+     * import's page. The account follows the currency box: an import in dollars
+     * is paid from a dollar account (D3).
      */
     {
       label: x('advance_paid_from'),
       control: true,
       value: (
-        <AdvanceAccountSelect
-          accounts={moneyAccounts}
+        <>
+          <AdvanceAccountSelect
+            accounts={moneyAccounts}
+            currencyField="currency"
+            importField="is_import"
+            label={x('advance_paid_from')}
+            name="advance_paid_from"
+            noneLabel={x('advance_paid_from_none')}
+          />
+          {/* The balance of the G/L account the bank or cash account is kept on. */}
+          {mayReadBalances ? (
+            <AccountBalanceNote
+              kind="bank_cash"
+              labels={balanceLabels}
+              load={accountBalanceAction}
+              locale={locale}
+              selectName="advance_paid_from"
+            />
+          ) : null}
+        </>
+      ),
+    },
+    /*
+     * Payable in advance — two fields side by side (2026-10-06, by direction):
+     * the selection (No upfront payment / by percentage / by amount) and, for
+     * the two that pay in front, one box beside it, with what it comes to and
+     * what is left under it. No preset share: an import opens on "by
+     * percentage" with the box empty.
+     */
+    {
+      label: x('advance_basis'),
+      bare: true,
+      value: (
+        <AdvanceField
+          accountField="advance_paid_from"
           currencyField="currency"
           importField="is_import"
-          label={x('advance_paid_from')}
-          name="advance_paid_from"
-          noneLabel={x('advance_paid_from_none')}
+          labels={{
+            needsAccount: x('advance_needs_account'),
+            basis: x('advance_basis'),
+            none: x('advance_basis_none'),
+            percent: x('advance_basis_percent'),
+            amount: x('advance_basis_amount'),
+            percentBox: x('advance_percent'),
+            amountBox: x('advance_amount'),
+            payable: x('payable_amount'),
+            left: x('left_to_pay'),
+            share: x.raw('share_of_total'),
+            overTotal: x('advance_over_total'),
+          }}
+          ledgerCurrency="IQD"
+          ledgerRates={Object.fromEntries(moneys.map((m) => [m.code, m.iqdPerUnit]))}
+          locale={locale}
         />
       ),
     },
@@ -310,7 +394,7 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
       control: true,
       value: (
         <>
-          <select
+          <IntentSelect
             aria-label={x('advance_payment_method')}
             // A bank method first — an advance to a supplier abroad travels by transfer.
             defaultValue={(methods.find((m) => m.kind === 'bank') ?? methods.find((m) => m.kind === 'transfer') ?? methods[0])?.code ?? ''}
@@ -322,7 +406,7 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
                 {m.name}
               </option>
             ))}
-          </select>
+          </IntentSelect>
           <span className={s.sapEnteredNote}>{x('advance_hint')}</span>
         </>
       ),
@@ -338,28 +422,28 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
             label: x('project_element'),
             control: true,
             value: (
-              <select aria-label={x('project_element')} defaultValue="" name="project_element">
+              <IntentSelect aria-label={x('project_element')} defaultValue="" name="project_element">
                 <option value="">{x('project_element_none')}</option>
                 {assignment.elements.map((e) => (
                   <option key={`${e.projectCode}|${e.wbsCode}`} value={`${e.projectCode}|${e.wbsCode}`}>
                     {`${e.wbsCode} · ${e.name} (${e.projectName})`}
                   </option>
                 ))}
-              </select>
+              </IntentSelect>
             ),
           },
           {
             label: x('project_cost_code'),
             control: true,
             value: (
-              <select aria-label={x('project_cost_code')} defaultValue="" name="project_cost_code">
+              <IntentSelect aria-label={x('project_cost_code')} defaultValue="" name="project_cost_code">
                 <option value="" />
                 {assignment.codes.map((c) => (
                   <option key={c.code} value={c.code}>
                     {`${c.code} · ${locale === 'ar' && c.nameAr ? c.nameAr : c.nameEn}`}
                   </option>
                 ))}
-              </select>
+              </IntentSelect>
             ),
           },
         ]
@@ -374,6 +458,18 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
       variant="sap"
     >
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={false} savedLabel="" />
+      {itemsToLink.length > 0 ? (
+        <p className={s.sapNote}>
+          {itemsToLink.map((code, index) => (
+            <span key={code}>
+              {index > 0 ? ' · ' : null}
+              <Link className={s.sapLink} href={`/inventory/items/${encodeURIComponent(code)}`}>
+                {x('open_item_to_link', { item: code })}
+              </Link>
+            </span>
+          ))}
+        </p>
+      ) : null}
 
       {missing.length > 0 ? (
         <p className={s.sectionHint}>{missing.join(' ')}</p>
@@ -439,6 +535,13 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
                 stockUnavailable: t('invoices.stock_unavailable'),
                 availableStock: t('invoices.available_stock'),
                 availabilityHint: t('invoices.availability_hint'),
+                // 0408 — the items offered are the supplier's own.
+                supplierItemCode: t('invoices.supplier_item_code'),
+                notLinked: t('invoices.not_linked'),
+                noLinkedItems: t('invoices.no_linked_items'),
+                chooseSupplierFirst: t('invoices.choose_supplier_first'),
+                searchNotLinked: t.raw('invoices.search_not_linked') as string,
+                searchNotFound: t.raw('invoices.search_not_found') as string,
               }}
               locale={locale}
               searchItems

@@ -30,7 +30,7 @@ import { can, type Principal } from '../domain/permissions';
 import { profileHref } from '../domain/profiles';
 import { parseLastRun } from '../domain/scheduled-jobs';
 import { money, quantity } from '../domain/whatsapp';
-import { DOCUMENT_FAMILIES, familyOf, tidyNumber, type DocumentFamily } from '../domain/whatsapp-do';
+import { DOCUMENT_FAMILIES, familyOf, numberShapes, tidyNumber, type DocumentFamily } from '../domain/whatsapp-do';
 import { probe } from './system-health';
 import { inSavepoint } from './whatsapp-sql';
 
@@ -260,7 +260,7 @@ export async function documentStory(tx: Tx, principal: Principal, raw: string, b
   if (!no) return 'Which document? Give its number.';
   const family = familyOf(no);
   if (!family) {
-    return `I cannot tell what kind of document ${no} is from its number. The kinds I can read whole: ${DOCUMENT_FAMILIES.map((one) => `${one.label} (${one.prefix}-…)`).join(', ')}. For a payable (IMP-, PUR-, SVC-…) use payable_status; for a payment application, application_status.`;
+    return `I cannot tell what kind of document ${no} is from its number. The kinds I can read whole: ${DOCUMENT_FAMILIES.map((one) => `${one.label} (${numberShapes(one)})`).join(', ')}. For a payable (IMP-, LOC-, SVC-…) use payable_status; for a payment application, application_status.`;
   }
   // An internal transfer has no grant of its own: it is read by whoever reads the bank and cash accounts.
   const grant = family.key === 'bank_transfer' ? 'bank_cash_account' : family.key;
@@ -282,7 +282,13 @@ export async function documentStory(tx: Tx, principal: Principal, raw: string, b
     const [party] = await tryRows(tx, sql`select code, legal_name, status::text as status from business_partner where id = ${text(doc[shape.party.column])}`);
     if (party) out.push(`${shape.party.side}: ${text(party.code)} · ${text(party.legal_name)}${party.status && party.status !== 'active' ? ` (${text(party.status)})` : ''}`);
   }
-  const dates = shape.dates.filter(([column]) => doc[column]).map(([column, label]) => `${label} ${day(doc[column])}`);
+  // A purchase invoice's due date is told only once set on purpose (`due_date_set_at`) —
+  // until then the balance of its advance waits for the SWIFT (2026-10-07).
+  const dueUnset = family.key === 'ap_invoice' && !doc.due_date_set_at;
+  const dates = shape.dates
+    .filter(([column]) => doc[column] && !(dueUnset && column === 'due_date'))
+    .map(([column, label]) => `${label} ${day(doc[column])}`);
+  if (dueUnset) dates.push('no due date yet — it is set once the SWIFT is received (on the import application, or the invoice)');
   if (dates.length > 0) out.push(dates.join(' · '));
   const total = shape.total?.(doc);
   if (total) out.push(total);

@@ -10,6 +10,8 @@ import { formatBusinessDate, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
+import { RegisterFilter } from '@/components/admin/register-filter';
+import { applyRegisterDates, registerDatesOf, registerDatesParams } from '@/server/domain/register-dates';
 import * as sr from '@/server/services/sales-return';
 
 /**
@@ -41,7 +43,14 @@ export default async function SalesReturnsPage({ searchParams }: { searchParams:
   const mayCreate = can(principal, 'create', sr.PERMISSION_OBJECT);
 
   const rows = await withCurrentUser((tx) => sr.list(tx));
-  const shown = rows.filter((row) => matches(row, outcome.q));
+  // The Filter's window of request dates and the order, over the whole register — newest first unless asked.
+  const dates = registerDatesOf(await searchParams);
+  const shown = applyRegisterDates(
+    rows.filter((row) => matches(row, outcome.q)),
+    (row) => row.requestedOn,
+    dates,
+    (row) => row.returnNo,
+  );
 
   return (
     <AdminPage
@@ -76,10 +85,13 @@ export default async function SalesReturnsPage({ searchParams }: { searchParams:
             clearHref="/sales/sales-returns"
             clearLabel={t('clear_search')}
             countLabel={t('rows_shown', { count: shown.length })}
+            hidden={registerDatesParams(dates)}
             placeholder={t('search_placeholder')}
             q={outcome.q}
             searchLabel={t('search')}
-          />
+          >
+            <RegisterFilter dates={dates} keep={{ q: outcome.q }} path="/sales/sales-returns" />
+          </ListToolbar>
 
           <div className={`${s.sapTableWrap} ${s.sapRegisterTableWrap}`}>
             <table aria-labelledby="sr-list-title" className={`${s.sapTable} ${s.sapRegisterTable}`}>

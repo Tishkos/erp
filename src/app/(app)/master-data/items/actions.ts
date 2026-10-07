@@ -1,6 +1,6 @@
 'use server';
 
-import { flag, runAdminAndReturn, text } from '@/server/admin-action';
+import { flag, list, runAdminAndReturn, text } from '@/server/admin-action';
 import * as items from '@/server/services/items';
 import * as units from '@/server/services/item-units';
 
@@ -39,7 +39,11 @@ function inputFrom(formData: FormData) {
  * not read at all rather than read and ignored.
  */
 export async function createItem(formData: FormData): Promise<void> {
-  await runAdminAndReturn((tx, ctx) => items.create(tx, ctx, inputFrom(formData)), createdRecord);
+  await runAdminAndReturn(
+    // 0408 — the suppliers it is bought from, chosen on the form; the first is its default.
+    (tx, ctx) => items.create(tx, ctx, inputFrom(formData), { supplierIds: list(formData, 'supplierIds') }),
+    createdRecord,
+  );
 }
 
 export async function updateItem(formData: FormData): Promise<void> {
@@ -106,10 +110,11 @@ export async function setItemSupplierPrice(formData: FormData): Promise<void> {
   );
 }
 
+/** 0408 — a supplier is taken off an item with the reason, never deleted. */
 export async function unlinkItemSupplier(formData: FormData): Promise<void> {
   const code = text(formData, 'code');
   await runAdminAndReturn(
-    (tx, ctx) => items.unlinkSupplier(tx, ctx, code, text(formData, 'supplierId')),
+    (tx, ctx) => items.unlinkSupplier(tx, ctx, code, text(formData, 'supplierId'), text(formData, 'reason')),
     record(code),
   );
 }

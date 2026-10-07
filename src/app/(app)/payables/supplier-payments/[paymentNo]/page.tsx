@@ -4,6 +4,7 @@ import { AdminPage, Flash, admin as s, Submit} from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { ProfileLink } from '@/components/admin/profile-link';
+import { DueDateText } from '@/components/admin/due-date-text';
 import { Denied } from '@/components/denied';
 import { PrintSheet } from '@/components/print/print-sheet';
 import { printSheet } from '@/server/print/sheet';
@@ -247,7 +248,8 @@ export default async function PaymentPage({
                   <ProfileLink code={invoice.invoiceNo} kind="purchase_invoice" />
                 </td>
                 <td>
-                  <bdi dir="ltr">{formatBusinessDate(invoice.dueDate, locale as Locale)}</bdi>
+                  {/* Only once set on purpose — an advance's balance waits for its SWIFT (2026-10-07). */}
+                  <DueDateText date={invoice.dueDateSet ? invoice.dueDate : null} locale={locale} waiting={t('balance_due.waiting')} />
                 </td>
                 <td className={s.sapNum}>
                   <bdi dir="ltr">{money(toDecimalString(invoice.outstanding, 4n))}</bdi>
@@ -319,7 +321,7 @@ export default async function PaymentPage({
                       <ProfileLink code={row.invoiceNo} kind="purchase_invoice" />
                     </td>
                     <td>
-                      <bdi dir="ltr">{formatBusinessDate(row.dueDate, locale as Locale)}</bdi>
+                      <DueDateText date={row.dueDate} locale={locale} waiting={t('balance_due.waiting')} />
                     </td>
                     <td>
                       <bdi dir="ltr">{formatBusinessDate(businessDateOf(new Date(row.allocatedAt)), locale as Locale)}</bdi>

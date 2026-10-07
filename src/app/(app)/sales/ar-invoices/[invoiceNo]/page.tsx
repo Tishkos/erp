@@ -40,6 +40,7 @@ import {
   saveArInvoiceLine,
 } from '../actions';
 import { MONEY_SCALE, parseDecimal } from '@domain/money';
+import { IntentSelect } from '@/components/admin/intent-select';
 
 /**
  * One Sales Invoice — Operations build, block 5.
@@ -235,7 +236,7 @@ export default async function ArInvoicePage({
       label: t('invoices.statement_account_customer'),
       control: mayChooseAccounts,
       value: mayChooseAccounts ? (
-        <select
+        <IntentSelect
           aria-label={t('invoices.statement_account_customer')}
           defaultValue={invoice.receivableAccountId ?? ''}
           form="ar-invoice-accounts"
@@ -249,7 +250,7 @@ export default async function ArInvoicePage({
                 {`${account.code} · ${account.name}`}
               </option>
             ))}
-        </select>
+        </IntentSelect>
       ) : (
         accountLabel(invoice.receivableAccountId)
       ),
@@ -258,7 +259,7 @@ export default async function ArInvoicePage({
       label: t('invoices.revenue_account'),
       control: mayChooseAccounts,
       value: mayChooseAccounts ? (
-        <select
+        <IntentSelect
           aria-label={t('invoices.revenue_account')}
           defaultValue={invoice.revenueAccountId ?? ''}
           form="ar-invoice-accounts"
@@ -274,7 +275,7 @@ export default async function ArInvoicePage({
                 {`${account.code} · ${account.name}`}
               </option>
             ))}
-        </select>
+        </IntentSelect>
       ) : (
         accountLabel(invoice.revenueAccountId)
       ),

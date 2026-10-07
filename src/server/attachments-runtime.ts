@@ -611,6 +611,8 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('opening_stock', inventoryRecordParentAccess('opening_stock', ['opening_stock']));
   attachments.registerParentAccessCheck('warehouse_transfer', inventoryRecordParentAccess('warehouse_transfer', ['stock_transfer', 'warehouse_transfer']));
   attachments.registerParentAccessCheck('stock_reconciliation', inventoryRecordParentAccess('stock_reconciliation', ['stock_adjustment']));
+  // A Manual Stock Addition (0415) — its papers: the count sheet, the photo, the note that explains it.
+  attachments.registerParentAccessCheck('manual_stock_addition', inventoryRecordParentAccess('manual_stock_addition', ['manual_stock_addition']));
 }
 
 /** Streams a stored file, for a route handler that has already checked access. */

@@ -7,6 +7,8 @@ import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { ProfileLink } from '@/components/admin/profile-link';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { TaskAssignmentFields } from '@/components/admin/task-assignment-fields';
+import { UserAvatar } from '@/components/chat/chat-avatar';
+import { initials as initialsOf } from '@/components/chat/format';
 import { Denied } from '@/components/denied';
 import { Pagination } from '@/components/ui';
 import { formatBusinessDate, type Locale } from '@/i18n/config';
@@ -15,6 +17,7 @@ import { visibleRoute } from '@/server/delivered';
 import { SCOPE_VIAS, TASK_PRIORITIES, TASK_STATUS_TONE } from '@/server/domain/tasks';
 import { registerAllRecords } from '@/server/records';
 import { requireContext, withCurrentUser } from '@/server/session';
+import * as chatRead from '@/server/services/chat-read';
 import * as tasks from '@/server/services/tasks';
 import { createTask } from './actions';
 
@@ -72,9 +75,14 @@ export default async function TasksPage({ searchParams }: { searchParams: Search
     const counts = await tasks.countsFor(tx, reader, view);
     const workload = view === 'team' ? await tasks.teamWorkload(tx, reader) : [];
     const choices = mayCreate ? await tasks.assignmentChoices(tx, reader, context.scope.branchCode) : [];
-    return { showTeam, view, result, counts, workload, choices };
+    // The status dots on the people's avatars, in one read (known for the people one chats with).
+    const presence = await chatRead.presenceOfUsers(
+      tx,
+      result.rows.flatMap((row) => [row.assigneeId, row.assignedById]).filter((id): id is string => Boolean(id)),
+    );
+    return { showTeam, view, result, counts, workload, choices, presence };
   });
-  const { showTeam, view, result, counts, workload, choices } = found;
+  const { showTeam, view, result, counts, workload, choices, presence } = found;
   const bucket = result.bucket;
   const kinds = mayCreate ? tasks.relatedKinds(reader) : [];
   const mayRaise = mayCreate && choices.length > 0;
@@ -210,7 +218,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Search
                 ) : null}
                 {result.rows.map((row) => {
                   const tone = TASK_STATUS_TONE[row.status] ?? 'draft';
-                  const who = view === 'mine' ? { name: row.assignedByName } : { name: row.assigneeName };
+                  const who = view === 'mine' ? { id: row.assignedById, name: row.assignedByName } : { id: row.assigneeId, name: row.assigneeName };
                   return (
                     <tr key={row.id}>
                       <td>
@@ -222,7 +230,19 @@ export default async function TasksPage({ searchParams }: { searchParams: Search
                         <bdi dir="auto">{row.title}</bdi>
                       </td>
                       <td>
-                        <bdi dir="auto">{who.name ?? (row.status === 'draft' ? x('draft_unassigned') : '—')}</bdi>
+                        {who.id && who.name ? (
+                          <span className="inline-flex items-center gap-2">
+                            <UserAvatar
+                              className="grid size-6 place-items-center rounded-full bg-primary-subtle text-[0.625rem] font-semibold text-primary-subtle-fg"
+                              dotClassName="size-2 ring-[1.5px]"
+                              initials={initialsOf(who.name)}
+                              presence={presence[who.id]}
+                            />
+                            <bdi dir="auto">{who.name}</bdi>
+                          </span>
+                        ) : (
+                          <bdi dir="auto">{who.name ?? (row.status === 'draft' ? x('draft_unassigned') : '—')}</bdi>
+                        )}
                       </td>
                       {view !== 'assigned' ? (
                         <td>

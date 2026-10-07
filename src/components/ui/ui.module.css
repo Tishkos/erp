@@ -1161,4 +1161,175 @@ html[lang="ar"] .dialogBadge {
   font-weight: 500;
 }
 
+/* ── List tables that fit, and cards on a phone (2026-10-06) ───────────────
+   By direction: "so good responsive — try to avoid … table scrollable". The
+   same rules as the registers' (admin.module.css › "Tables that fit"): text
+   wraps between words, figures and chips keep to one line; on a phone a list
+   of four columns or more is a card per row, each cell "label … value" with
+   the label its column's heading (`data-label`, from `TableLabels`). */
+:global(.erp-root) :global(table.list) :is(th, td),
+.table :is(th, td) {
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+:global(.erp-root) :global(table.list) thead th,
+.table thead th {
+  text-wrap: balance;
+}
+
+:global(.erp-root) :global(table.list) :is(td:global(.numeric), td.numeric, time, :global(.status), [data-nowrap]),
+.table :is(td.numeric, time, :global(.status), [data-nowrap]) {
+  white-space: nowrap;
+}
+
+@media (width < 90rem) {
+  :global(.erp-root) :global(table.list) :is(th, td) {
+    padding-inline: 0.5rem;
+  }
+
+  :global(.erp-root) :global(table.list) :is(th, td):first-child {
+    padding-inline-start: 0.875rem;
+  }
+
+  :global(.erp-root) :global(table.list) :is(th, td):last-child {
+    padding-inline-end: 0.875rem;
+  }
+}
+
+@media (max-width: 40rem) {
+  :global(.erp-root) :is(:global(.table-wrap), .tableWrap):has(> :global(table.list) > thead > tr > :nth-child(4)):not(:has([data-table-keep], [role='grid'], [role='treegrid'], td > :is(input:not([type='hidden'], [type='checkbox'], [type='radio']), select, textarea))) {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  :global(.erp-root) :global(table.list):not([data-table-keep], [role='grid'], [role='treegrid'], [role='presentation']):not(:has(td > :is(input:not([type='hidden'], [type='checkbox'], [type='radio']), select, textarea))):has(> thead > tr > :nth-child(4)) {
+    display: block;
+    inline-size: 100%;
+    min-inline-size: 0;
+    background: transparent;
+
+    & > colgroup {
+      display: none;
+    }
+
+    & > caption {
+      display: block;
+      padding: 0 0.125rem 0.5rem;
+      text-align: start;
+    }
+
+    & > thead {
+      position: absolute;
+      inline-size: 1px;
+      block-size: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    & > thead th {
+      position: static;
+    }
+
+    & > :is(tbody, tfoot) {
+      display: grid;
+      gap: 0.625rem;
+    }
+
+    & > :is(tbody, tfoot) + :is(tbody, tfoot) {
+      margin-block-start: 0.625rem;
+    }
+
+    & > :is(tbody, tfoot) > tr {
+      display: block;
+      padding: 0.5rem 0.875rem;
+      border: 1px solid var(--ui-border);
+      border-radius: var(--radius-lg);
+      background: var(--ui-overlay);
+      box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+    }
+
+    & > tbody > tr.totalsRow,
+    & > tfoot > tr {
+      background: var(--ui-muted);
+    }
+
+    & > :is(tbody, tfoot) > tr > :is(td, th) {
+      display: flow-root;
+      position: static;
+      block-size: auto;
+      min-block-size: 0;
+      padding: 0.3125rem 0;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+      text-align: end;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    & :is(td, th) [data-nowrap] {
+      white-space: normal;
+    }
+
+    & > :is(tbody, tfoot) > tr > :is(td, th)[data-label]:not([data-label=''])::before {
+      content: attr(data-label);
+      float: inline-start;
+      max-inline-size: 50%;
+      margin-inline-end: 0.75rem;
+      color: var(--ui-muted-fg);
+      font-size: 0.8125rem;
+      font-weight: 500;
+      line-height: 1.5;
+      text-align: start;
+      overflow-wrap: break-word;
+    }
+
+    & > :is(tbody, tfoot) > tr > :is(td, th)[colspan]:not([colspan='1']) {
+      text-align: start;
+      font-weight: 600;
+    }
+
+    & > :is(tbody, tfoot) > tr > :is(td, th):is(:empty, [data-empty]) {
+      display: none;
+    }
+
+    & > tbody > tr > :first-child[data-label]:not([data-label='']) {
+      color: var(--ui-fg);
+      font-weight: 600;
+    }
+
+    & > tbody > tr:has(> :only-child[colspan]:not([colspan='1'])) {
+      padding: 0.25rem 0.125rem 0;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+  }
+}
+
+/* The search box's button wears the accent, as every search button does
+   (2026-10-07, by direction: "that button should match the highlight colour
+   — everywhere"). */
+.searchSubmit.searchSubmit {
+  border-color: var(--ui-primary);
+  background: var(--ui-primary);
+  color: var(--ui-primary-fg);
+}
+
+.searchSubmit.searchSubmit:hover {
+  border-color: color-mix(in oklab, var(--ui-primary) 88%, var(--ui-fg));
+  background: color-mix(in oklab, var(--ui-primary) 88%, var(--ui-fg));
+  color: var(--ui-primary-fg);
+}
+
+.searchSubmit.searchSubmit:focus-visible {
+  outline: 2px solid var(--ui-ring, var(--ui-primary));
+  outline-offset: 2px;
+}
+
 }

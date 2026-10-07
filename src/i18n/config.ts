@@ -25,7 +25,20 @@
 export const LOCALES = ['en', 'ar'] as const;
 export type Locale = (typeof LOCALES)[number];
 
+/** The formatters' default when a caller names no locale (exports, print, jobs). */
 export const DEFAULT_LOCALE: Locale = 'en';
+
+/**
+ * The language a person sees before they choose one — Arabic, for everyone
+ * (2026-10-07, by direction: "default language be Arabic, not English, for
+ * everyone"). A choice made with the language switch is kept in the cookie and
+ * wins. `ERP_DEFAULT_LOCALE` sets another for a machine that needs it; the
+ * end-to-end suite instead sends its own English cookie (playwright.config.ts).
+ */
+export function interfaceDefaultLocale(): Locale {
+  const configured = process.env.ERP_DEFAULT_LOCALE;
+  return configured && isLocale(configured) ? configured : 'ar';
+}
 
 /** Device-local UI preference. It never carries identity or business data. */
 export const LOCALE_COOKIE = 'erp-locale';

@@ -1,6 +1,7 @@
 import { getLocale, getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
 import { admin as s } from '@/components/admin';
+import { ProfileLink } from '@/components/admin/profile-link';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { withCurrentUser } from '@/server/session';
 import * as openItems from '@/server/services/open-items';
@@ -60,7 +61,10 @@ export async function InvoiceSettlement({
       : { text: t('open_items.paid_on_time'), warn: false }
     : item.daysOverdue > 0
       ? { text: t('open_items.overdue_by', { days: item.daysOverdue }), warn: true }
-      : { text: t('open_items.due_in', { days: item.daysUntilDue }), warn: false };
+      : !item.dueDateSet
+        ? // No due date set yet: an advance's balance waits for its SWIFT (2026-10-07).
+          { text: t('balance_due.waiting'), warn: false }
+        : { text: t('open_items.due_in', { days: item.daysUntilDue }), warn: false };
 
   return (
     <Panel title={t('open_items.settlement')}>
@@ -69,7 +73,7 @@ export async function InvoiceSettlement({
           [
             [t('open_items.terms'), item.paymentTermsName ?? item.paymentTermsCode ?? '—', false],
             [column('invoice_date'), day(item.invoiceDate), false],
-            [column('due_date'), day(item.dueDate), false],
+            [column('due_date'), item.dueDateSet ? day(item.dueDate) : `— ${t('balance_due.waiting')}`, false],
             [column('total_price'), money(item.totalIqd), false],
             [t('open_items.paid'), money(item.paidIqd), false],
             [t('open_items.outstanding'), money(item.outstandingIqd), false],
@@ -91,7 +95,8 @@ export async function InvoiceSettlement({
       </div>
 
       {item.payments.length > 0 ? (
-        <div className={s.sapTableWrap}>
+        // Room between the figures and the payments (by direction, 2026-10-07: "the design doesn't have padding").
+        <div className={`${s.sapTableWrap} mt-5`}>
           <table className={s.sapTable}>
             <thead>
               <tr>
@@ -109,7 +114,8 @@ export async function InvoiceSettlement({
                     <bdi dir="ltr">{day(payment.paidOn)}</bdi>
                   </td>
                   <td className={s.sapAccountCell}>
-                    <bdi dir="ltr">{payment.documentNo ?? '—'}</bdi>
+                    {/* The payment (or receipt) that settled it opens its own page (2026-10-07: "make sure the pay is clickable"). */}
+                    <ProfileLink code={payment.documentNo} kind={side === 'supplier' ? 'supplier_payment' : 'customer_receipt'} />
                   </td>
                   <td className={s.sapNum}>
                     <bdi dir="ltr">{money(payment.amountIqd)}</bdi>

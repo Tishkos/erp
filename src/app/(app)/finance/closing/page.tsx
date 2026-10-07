@@ -20,6 +20,7 @@ import * as attachmentsService from '@/server/services/attachments';
 import * as periods from '@/server/services/periods';
 import * as recordNotes from '@/server/services/record-notes';
 import { attachToPeriod, closePeriodAction } from './actions';
+import { IntentSelect } from '@/components/admin/intent-select';
 
 /**
  * Period / Year-End Closing — REQ-ACC-001 Part D-6.
@@ -104,13 +105,13 @@ export default async function ClosingPage({ searchParams }: { searchParams: Sear
             <form action="/finance/closing" className={s.sapFilterBar} method="get">
               <label className={s.sapFilterField}>
                 <span className={s.sapLabel}>{p('period')}</span>
-                <select defaultValue={period.id} name="period">
+                <IntentSelect defaultValue={period.id} name="period">
                   {calendar.map((row) => (
                     <option key={row.id} value={row.id}>
                       {`${row.name} · ${p(`state_${row.status}`)}`}
                     </option>
                   ))}
-                </select>
+                </IntentSelect>
               </label>
               <button className={`${s.button} ${s.primary}`} type="submit">
                 {p('run_checks')}

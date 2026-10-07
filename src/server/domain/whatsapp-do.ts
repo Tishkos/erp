@@ -169,9 +169,13 @@ export const STEPS_NEEDING_REASON: readonly DocumentStep[] = ['reject', 'reverse
  * `approve` is listed only where the service approves directly. A family
  * without it (a purchase invoice) is approved through the approval inbox —
  * `approve_document` — which is where the approval engine routed it.
+ *
+ * `also` is a prefix the family's numbers were issued under before: purchase
+ * invoices are PUR- since 2026-10-06 (0409) and were API- until then, and the
+ * numbers already issued keep their prefix.
  */
 export const DOCUMENT_FAMILIES = [
-  { prefix: 'API', key: 'ap_invoice', label: 'purchase invoice', steps: ['submit', 'post', 'reverse'] },
+  { prefix: 'PUR', also: ['API'], key: 'ap_invoice', label: 'purchase invoice', steps: ['submit', 'post', 'reverse'] },
   { prefix: 'INV', key: 'ar_invoice', label: 'sales invoice', steps: ['approve', 'post', 'reverse'] },
   { prefix: 'PO', key: 'purchase_order', label: 'purchase order', steps: ['submit', 'approve', 'cancel'] },
   { prefix: 'GRN', key: 'goods_receipt', label: 'goods receipt', steps: ['submit', 'post'] },
@@ -181,9 +185,27 @@ export const DOCUMENT_FAMILIES = [
   { prefix: 'JE', key: 'journal_entry', label: 'journal entry', steps: ['submit', 'approve', 'reject', 'reverse'] },
   { prefix: 'BTR', key: 'bank_transfer', label: 'internal transfer', steps: ['approve', 'post'] },
   { prefix: 'OPN', key: 'opening_stock', label: 'opening stock', steps: ['submit', 'approve'] },
-] as const satisfies readonly { readonly prefix: string; readonly key: string; readonly label: string; readonly steps: readonly DocumentStep[] }[];
+] as const satisfies readonly {
+  readonly prefix: string;
+  readonly also?: readonly string[];
+  readonly key: string;
+  readonly label: string;
+  readonly steps: readonly DocumentStep[];
+}[];
 
 export type DocumentFamily = (typeof DOCUMENT_FAMILIES)[number];
+
+/** Every prefix a family's numbers carry — its own first, then any it used before. */
+export function prefixesOf(family: DocumentFamily): readonly string[] {
+  return 'also' in family ? [family.prefix, ...family.also] : [family.prefix];
+}
+
+/** How a family's numbers begin, said to a person: "PUR-… / API-…". */
+export function numberShapes(family: DocumentFamily): string {
+  return prefixesOf(family)
+    .map((prefix) => `${prefix}-…`)
+    .join(' / ');
+}
 
 /** A number as people type it, tidied: upper case, no spaces. */
 export function tidyNumber(raw: unknown): string {
@@ -193,10 +215,13 @@ export function tidyNumber(raw: unknown): string {
     .replace(/\s+/g, '');
 }
 
-/** Which family a number belongs to, by its prefix — `API-HQ-2026-000004` is a purchase invoice. */
+/**
+ * Which family a number belongs to, by its prefix — `PUR-HQ-2026-000010` is a
+ * purchase invoice, and so is `API-HQ-2026-000004`, issued before 0409.
+ */
 export function familyOf(documentNo: string): DocumentFamily | null {
   const prefix = tidyNumber(documentNo).split('-')[0] ?? '';
-  return DOCUMENT_FAMILIES.find((family) => family.prefix === prefix) ?? null;
+  return DOCUMENT_FAMILIES.find((family) => prefixesOf(family).includes(prefix)) ?? null;
 }
 
 /** What a step does that the person should hear before saying yes. */

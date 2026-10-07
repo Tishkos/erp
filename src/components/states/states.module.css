@@ -1,0 +1,166 @@
+/* Hand-written styles, in the legacy layer: Intent UI utilities win over them (see globals.css). */
+@layer theme, base, legacy, components, utilities;
+
+@layer legacy {
+/*
+ * What only a stylesheet can say about the waiting states (the Intent UI
+ * redesign, 2026-10-06): the shimmer, the delay before a skeleton appears and
+ * the bar along the top. Everything else is Tailwind in the components.
+ */
+
+/*
+ * The skeleton waits a moment before it shows. Most screens answer in a few
+ * hundred milliseconds; a placeholder that flashes up and away again reads as
+ * a flicker, not as progress. The bar along the top (below) is not delayed.
+ */
+.skeleton {
+  animation: skeleton-in 220ms ease-out 120ms both;
+}
+
+/*
+ * A bone: Intent UI's skeleton fill, with a sheen that crosses it.
+ *
+ * The sheen is painted against the viewport (`background-attachment: fixed`),
+ * so every bone on the page shows the same one wave passing over the whole
+ * screen, rather than each bar shimmering out of step with its neighbour. It
+ * travels in the reading direction, and rests off-screen — so when motion is
+ * reduced (the system's setting, or the person's own Animations: Reduced,
+ * which ends every animation at once) a bone is a quiet, still bar.
+ */
+.bone {
+  /* A little of the text colour on the card: the same quiet grey in every
+     palette, light or dark (the palettes' own fills are near-white on some). */
+  --bone: color-mix(in oklab, var(--ui-fg) 9%, var(--ui-overlay));
+  display: block;
+  border-radius: calc(var(--ui-radius, 0.5rem) * 0.8);
+  background-color: var(--bone);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--ui-overlay) 70%, transparent) 50%,
+    transparent 100%
+  );
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  background-size: 45vw 100%;
+  background-position: -45vw 0;
+  animation: sheen 1.8s ease-in-out infinite;
+}
+
+/* A link or the main action: the accent shows through, so the page's shape is legible. */
+.bone[data-tone="primary"] {
+  background-color: color-mix(in oklab, var(--ui-primary) 26%, var(--bone));
+}
+
+/* A quieter bone — a hint line, a column heading. */
+.bone[data-tone="soft"] {
+  background-color: color-mix(in oklab, var(--ui-fg) 5.5%, var(--ui-overlay));
+}
+
+:global(html[dir="rtl"]) .bone {
+  animation-name: sheen-rtl;
+}
+
+@keyframes sheen {
+  from {
+    background-position: -45vw 0;
+  }
+  to {
+    background-position: 100vw 0;
+  }
+}
+
+@keyframes sheen-rtl {
+  from {
+    background-position: 100vw 0;
+  }
+  to {
+    background-position: -45vw 0;
+  }
+}
+
+@keyframes skeleton-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/*
+ * The bar along the top of the viewport, above the header: "something is
+ * happening", visible from across the room and whatever the scroll. It
+ * advances quickly, then slows and never quite reaches the end — the screen
+ * arriving is what ends it.
+ */
+.progress {
+  position: fixed;
+  z-index: 120;
+  inset-block-start: 0;
+  inset-inline: 0;
+  block-size: 2px;
+  overflow: hidden;
+  pointer-events: none;
+  background: color-mix(in oklab, var(--ui-primary) 14%, transparent);
+}
+
+.progress::before {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  content: "";
+  inline-size: 0;
+  border-start-end-radius: 999px;
+  border-end-end-radius: 999px;
+  background: var(--ui-primary);
+  box-shadow: 0 0 8px color-mix(in oklab, var(--ui-primary) 60%, transparent);
+  animation: progress-advance 8s cubic-bezier(0.08, 0.65, 0.2, 1) forwards;
+}
+
+@keyframes progress-advance {
+  0% {
+    inline-size: 0;
+  }
+  10% {
+    inline-size: 35%;
+  }
+  35% {
+    inline-size: 68%;
+  }
+  100% {
+    inline-size: 94%;
+  }
+}
+
+/* A skeleton that moves is decoration, not information: still bones, a still bar. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+
+  .bone {
+    animation: none;
+    background-image: none;
+  }
+
+  .progress::before {
+    inline-size: 60%;
+    animation: none;
+  }
+}
+
+/* Forced colours paint no backgrounds: a bone keeps its outline. */
+@media (forced-colors: active) {
+  .bone {
+    border: 1px solid CanvasText;
+    background-image: none;
+  }
+
+  .progress::before {
+    background: Highlight;
+  }
+}
+}

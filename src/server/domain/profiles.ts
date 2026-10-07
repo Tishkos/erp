@@ -67,6 +67,8 @@ export const PROFILE_KINDS = [
   // Inventory's stock documents (2026-10-04): a transfer and an Item Reconciliation have record pages.
   'stock_transfer',
   'stock_reconciliation',
+  // A Manual Stock Addition (2026-10-06).
+  'manual_stock_addition',
   'project_certificate',
   'project_budget',
   'project_variation',
@@ -153,6 +155,7 @@ const BASES: Readonly<Record<ProfileKind, string | null>> = {
   opening_stock: '/inventory/opening-stock',
   stock_transfer: '/inventory/transfers',
   stock_reconciliation: '/inventory/stock-reconciliation',
+  manual_stock_addition: '/inventory/manual-additions',
   project_certificate: '/projects/billing',
   project_budget: '/projects/budgets',
   project_variation: '/projects/change-orders',

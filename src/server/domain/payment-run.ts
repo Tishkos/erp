@@ -53,6 +53,12 @@ export interface Candidate {
   /** §15 — what is still owed. Never zero for a real candidate. */
   readonly outstandingIqd: bigint;
   readonly dueDate: string;
+  /**
+   * False for a purchase invoice whose due date nobody has set yet — an
+   * advance's balance waits for its SWIFT (2026-10-07). It falls due on no
+   * day, so a run never takes it as due. Left out, the date is a real one.
+   */
+  readonly dueDateSet?: boolean;
   readonly currency: string;
   /** 1 is the most urgent. See `rank`. */
   readonly priority: number;
@@ -129,6 +135,13 @@ export function classify(candidate: Candidate, payOn: string, accountCurrency: s
 
   // Last, because paying early is a decision rather than a default: an item that
   // is not yet due is eligible in every other respect and is reported as such.
+  // One with no due date set is not yet due on any pay date.
+  if (candidate.dueDateSet === false) {
+    return reject(
+      'excluded_not_due',
+      `${candidate.reference} has no due date yet: it is set once the SWIFT for its advance is received.`,
+    );
+  }
   if (candidate.dueDate > payOn) {
     return reject(
       'excluded_not_due',

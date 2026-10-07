@@ -1,6 +1,8 @@
 import { getTranslations } from 'next-intl/server';
 import type { ReactNode } from 'react';
 import { admin as s } from './index';
+import { IntentSelect } from '@/components/admin/intent-select';
+import { IntentDateField } from '@/components/admin/intent-date-field';
 
 /**
  * A financial report, drawn as the same window every document in the system
@@ -111,38 +113,38 @@ export async function ReportFilter({
       {from !== undefined ? (
         <label className={s.sapFilterField}>
           <span className={s.sapLabel}>{t('reports.from')}</span>
-          <input defaultValue={from} name="from" required type="date" />
+          <IntentDateField defaultValue={from} name="from" required />
         </label>
       ) : null}
       {to !== undefined ? (
         <label className={s.sapFilterField}>
           <span className={s.sapLabel}>{t('reports.to')}</span>
-          <input defaultValue={to} name="to" required type="date" />
+          <IntentDateField defaultValue={to} name="to" required />
         </label>
       ) : null}
       {asAt !== undefined ? (
         <label className={s.sapFilterField} title={t('reports.as_at_hint')}>
           <span className={s.sapLabel}>{t('reports.as_at_label')}</span>
-          <input defaultValue={asAt} name="to" required type="date" />
+          <IntentDateField defaultValue={asAt} name="to" required />
         </label>
       ) : null}
       <label className={s.sapFilterField} title={t('reports.currency_hint')}>
         <span className={s.sapLabel}>{t('reports.currency')}</span>
-        <select defaultValue={currency} name="currency">
+        <IntentSelect defaultValue={currency} name="currency">
           <option value="IQD">IQD</option>
           <option value="USD">USD</option>
-        </select>
+        </IntentSelect>
       </label>
       {level !== undefined ? (
         <label className={s.sapFilterField} title={t('reports.level_hint')}>
           <span className={s.sapLabel}>{t('reports.level')}</span>
-          <select defaultValue={String(level)} name="level">
+          <IntentSelect defaultValue={String(level)} name="level">
             {levels.map((n) => (
               <option key={n} value={String(n)}>
                 {t('reports.level_n', { level: n })}
               </option>
             ))}
-          </select>
+          </IntentSelect>
         </label>
       ) : null}
       <button className={`${s.button} ${s.primary}`} type="submit">

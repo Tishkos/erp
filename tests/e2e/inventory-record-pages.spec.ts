@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
+import { keepEnglish } from './support/locale';
 
 /**
  * The two record pages Inventory did not have — a Transfer and an Item
@@ -42,7 +43,7 @@ async function photograph(page: Page, route: string, name: string) {
   const width = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(width, `${name}: no horizontal scroll at 390px`).toBeLessThanOrEqual(390);
   await page.screenshot({ path: `${SHOTS}/${name}-mobile-ar.png`, fullPage: true });
-  await page.context().clearCookies({ name: 'erp-locale' });
+  await keepEnglish(page.context());
   await page.setViewportSize({ width: 1366, height: 900 });
   await page.goto(route);
   await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');

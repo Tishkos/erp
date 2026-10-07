@@ -1,9 +1,4 @@
-import type { CSSProperties } from 'react';
-import { getTranslations } from 'next-intl/server';
-// The palettes' `--w-*` tokens, which the Intent theme reads: the skeleton is
-// often drawn before the screen that would have loaded them.
-import '@/components/admin/admin.module.css';
-import styles from '../route-states.module.css';
+import { RouteSkeleton } from '@/components/states/route-skeleton';
 
 /**
  * What a screen shows while it is being produced.
@@ -14,66 +9,16 @@ import styles from '../route-states.module.css';
  * were — only the page segment is swapped for this placeholder, and then for
  * the screen.
  *
- * Two signals, for two distances. A thin progress bar along the top of the
- * viewport says "something is happening" from across the room; a skeleton in
- * the shape of a typical screen — title and actions, a toolbar, a table —
- * reserves the space the real screen will take so nothing jumps when it lands.
+ * Two signals, for two distances: a thin bar along the top of the viewport
+ * says "something is happening" from across the room; a skeleton in the shape
+ * of the screen being opened — Home's figures and charts, a register, a
+ * document — reserves the space it will take, so nothing jumps when it lands.
+ *
+ * This one covers moving between modules and opening Home. A boundary covers
+ * only the folder it sits in, so every folder whose children are screens has
+ * a `loading.tsx` of its own drawing the same component (`RouteSkeleton`
+ * explains why).
  */
-const ROWS = [0, 1, 2, 3, 4, 5, 6, 7] as const;
-const COLUMNS = [0, 1, 2, 3, 4] as const;
-
-export default async function Loading() {
-  const t = await getTranslations('error');
-
-  return (
-    <div aria-busy="true" aria-live="polite" className={styles.skeleton}>
-      <span className={styles.srOnly}>{t('loading_title')}</span>
-      <span aria-hidden="true" className={styles.progress} />
-
-      <div className={styles.skeletonHeader}>
-        <div className={styles.skeletonHeading}>
-          <span className={`${styles.bar} ${styles.crumb}`} />
-          <span className={`${styles.bar} ${styles.title}`} />
-          <span className={`${styles.bar} ${styles.subtitle}`} />
-        </div>
-        <div className={styles.skeletonActions}>
-          <span className={`${styles.bar} ${styles.ghostButton}`} />
-          <span className={`${styles.bar} ${styles.primaryButton}`} />
-        </div>
-      </div>
-
-      <div className={styles.skeletonStrip}>
-        {[0, 1, 2, 3].map((slot) => (
-          <span className={styles.card} key={slot}>
-            <span className={`${styles.bar} ${styles.cardLabel}`} />
-            <span className={`${styles.bar} ${styles.cardValue}`} />
-          </span>
-        ))}
-      </div>
-
-      <div className={styles.skeletonTable}>
-        <div className={styles.skeletonToolbar}>
-          <span className={`${styles.bar} ${styles.search}`} />
-          <span className={`${styles.bar} ${styles.chip}`} />
-          <span className={`${styles.bar} ${styles.chip}`} />
-        </div>
-        <div className={`${styles.skeletonRow} ${styles.skeletonRowHead}`}>
-          {COLUMNS.map((column) => (
-            <span className={`${styles.bar} ${styles.cell}`} key={column} />
-          ))}
-        </div>
-        {ROWS.map((row) => (
-          <div
-            className={styles.skeletonRow}
-            key={row}
-            style={{ '--row': row } as CSSProperties}
-          >
-            {COLUMNS.map((column) => (
-              <span className={`${styles.bar} ${styles.cell}`} key={column} />
-            ))}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+export default function Loading() {
+  return <RouteSkeleton />;
 }

@@ -7,7 +7,7 @@
  */
 import { getRequestConfig } from 'next-intl/server';
 import { cookies } from 'next/headers';
-import { DEFAULT_LOCALE, isLocale, LOCALE_COOKIE } from './config';
+import { interfaceDefaultLocale, isLocale, LOCALE_COOKIE } from './config';
 
 export default getRequestConfig(async ({ requestLocale }) => {
   // A caller may name the locale outright — getTranslations({locale}) does,
@@ -16,7 +16,8 @@ export default getRequestConfig(async ({ requestLocale }) => {
   // is named does the device preference in the cookie decide.
   const named = await requestLocale;
   const requested = named ?? (await cookies()).get(LOCALE_COOKIE)?.value;
-  const locale = requested && isLocale(requested) ? requested : DEFAULT_LOCALE;
+  // Nothing named and nothing chosen: the interface's default — Arabic (2026-10-07).
+  const locale = requested && isLocale(requested) ? requested : interfaceDefaultLocale();
 
   return {
     locale,

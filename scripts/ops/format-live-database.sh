@@ -200,6 +200,8 @@ cost_layer
 inventory_movement
 opening_stock_line
 opening_stock
+manual_stock_addition_line
+manual_stock_addition
 stock_count_line
 stock_count
 warehouse_transfer_line

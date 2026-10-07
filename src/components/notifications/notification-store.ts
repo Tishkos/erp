@@ -21,6 +21,8 @@
 import { useSyncExternalStore } from 'react';
 import { markAllReadAction, markReadAction, markUnreadAction } from '@/app/(app)/notifications/actions';
 import { pollIntervalMs, type NotificationCategory } from '@domain/notification-center';
+import { notificationChime } from '@/lib/sound-rules';
+import { play } from '@/lib/sounds';
 import type { FeedItem } from '@/server/services/notification-center';
 import type { CategoryCount } from '@/server/services/notifications';
 
@@ -78,12 +80,42 @@ export const snapshot = (): BellSnapshot => state;
 // ---------------------------------------------------------------------------
 
 let mounts = 0;
+/** The counts at the last answer — what a new answer is compared with for the chime; null before the first. */
+let heard: readonly CategoryCount[] | null = null;
+/** The person marked something read or unread themself: the next change in the counts is theirs, not news. */
+let ownChange = false;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let inFlight = false;
 let again = false;
 let failures = 0;
 
 const visible = (): boolean => typeof document === 'undefined' || document.visibilityState === 'visible';
+
+/** Something new reached the bell — the moment its chime plays — with the counts before and after. */
+export interface BellArrival {
+  readonly before: readonly CategoryCount[];
+  readonly after: readonly CategoryCount[];
+  /** The popover was open: the person is looking at the list already. */
+  readonly open: boolean;
+}
+
+const arrivalListeners = new Set<(arrival: BellArrival) => void>();
+
+/** Hear each arrival (the pop-up notifications, `components/toasts`). Returns the way to stop. */
+export function onArrival(listener: (arrival: BellArrival) => void): () => void {
+  arrivalListeners.add(listener);
+  return () => arrivalListeners.delete(listener);
+}
+
+function tellArrival(arrival: BellArrival): void {
+  for (const listener of arrivalListeners) {
+    try {
+      listener(arrival);
+    } catch {
+      // A listener's trouble never stops the bell.
+    }
+  }
+}
 
 function schedule(): void {
   if (timer) clearTimeout(timer);
@@ -137,6 +169,13 @@ async function poll(): Promise<void> {
     if (!response.ok) throw new Error(String(response.status));
     const body = (await response.json()) as FeedAnswer;
     failures = 0;
+    // A soft chime when something new reached the bell — not on the page's first look, not for the chat's own.
+    if (!ownChange && heard !== null && notificationChime(heard, body.categories, { busy: false })) {
+      play('notification');
+      tellArrival({ before: heard, after: body.categories, open: state.open });
+    }
+    heard = body.categories;
+    ownChange = false;
     // A list for a scope the person has since left is not shown.
     const current = body.items !== null && body.scope === state.scope && body.category === state.category;
     set({
@@ -219,7 +258,13 @@ export function setCategory(category: NotificationCategory | null): void {
   pollNow();
 }
 
+/** A form was sent (it may mark notifications read or unread): the next change in the counts is the person's own. */
+export function expectOwnChange(): void {
+  ownChange = true;
+}
+
 function patch(id: string, read: boolean): void {
+  ownChange = true;
   if (state.items === null) return;
   const was = state.items.find((item) => item.id === id);
   if (!was || was.read === read) return;
@@ -251,6 +296,7 @@ export function markUnread(id: string): void {
 
 /** Everything unread of the chosen category (or all of them) is read. */
 export function markAllRead(): void {
+  ownChange = true;
   const category = state.category;
   set({
     items: state.items === null ? null : state.items.map((item) => (category === null || item.category === category ? { ...item, read: true } : item)),

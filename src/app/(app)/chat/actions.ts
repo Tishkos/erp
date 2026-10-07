@@ -4,7 +4,7 @@ import { runAdmin } from '@/server/admin-action';
 import { registerAllRecords } from '@/server/records';
 import * as chat from '@/server/services/chat';
 import * as chatRead from '@/server/services/chat-read';
-import { CHAT_MAX_FILES_PER_MESSAGE } from '@/server/domain/chat';
+import { CHAT_MAX_FILES_PER_MESSAGE, isChosenStatus } from '@/server/domain/chat';
 
 /**
  * What the chat screen does, one server action each.
@@ -111,6 +111,12 @@ export async function muteAction(conversationId: string, muted: boolean): Promis
 
 export async function busyAction(busy: boolean): Promise<ActionResult> {
   return done(await runAdmin((tx, ctx) => chat.setBusy(tx, ctx, busy)));
+}
+
+/** Available, Busy, Away or Appear offline — the account menu's choice. */
+export async function statusAction(status: string): Promise<ActionResult> {
+  if (!isChosenStatus(status)) return { ok: false, error: 'That is not a status.' };
+  return done(await runAdmin((tx, ctx) => chat.setStatus(tx, ctx, status)));
 }
 
 // ---------------------------------------------------------------------------

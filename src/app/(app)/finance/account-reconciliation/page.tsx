@@ -14,6 +14,7 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import { businessToday } from '@/server/domain/business-date';
 import { ProfileLink } from '@/components/admin/profile-link';
 import * as subledger from '@/server/services/account-reconciliation';
+import { IntentDateField } from '@/components/admin/intent-date-field';
 
 /**
  * Account Reconciliation — REQ-ACC-001 Part D-4.
@@ -71,7 +72,7 @@ export default async function AccountReconciliationPage({ searchParams }: { sear
           <form action="/finance/account-reconciliation" className={s.sapFilterBar} method="get">
             <label className={s.sapFilterField} title={admin('reports.as_at_hint')}>
               <span className={s.sapLabel}>{admin('reports.as_at_label')}</span>
-              <input defaultValue={asOf} name="to" required type="date" />
+              <IntentDateField defaultValue={asOf} name="to" required />
             </label>
             <button className={`${s.button} ${s.primary}`} type="submit">
               {admin('reports.run')}

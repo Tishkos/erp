@@ -96,8 +96,20 @@ const RAISE_ONLY: PermissionVerb[] = ['view', 'create', 'edit_draft', 'submit', 
 const READ: PermissionVerb[] = ['view', 'export', 'print'];
 
 /** The objects in a menu section, straight from the menu. */
+/**
+ * A module heading that was split into several (2026-10-07: Receivables,
+ * Inventory, Projects and HR, by direction) still means all of its parts to the
+ * roles that name it, so nobody loses a screen to the regrouping.
+ */
+const SPLIT_HEADINGS: Readonly<Record<string, readonly string[]>> = {
+  sales: ['sales', 'sales_receipts', 'sales_balances'],
+  inventory: ['inventory', 'inventory_in_out', 'inventory_control'],
+  projects: ['projects', 'projects_execution', 'projects_billing'],
+  hr_payroll: ['hr_payroll', 'hr_time_pay', 'hr_talent'],
+};
+
 function objectsOf(...sections: string[]): string[] {
-  const wanted = new Set(sections);
+  const wanted = new Set(sections.flatMap((key) => SPLIT_HEADINGS[key] ?? [key]));
   const objects = new Set<string>();
   for (const section of MENU) {
     if (!wanted.has(section.key)) continue;

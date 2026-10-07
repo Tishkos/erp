@@ -112,7 +112,9 @@ export default async function ItemPage({
   const revenue = accounts.filter((a) => a.accountType === 'revenue');
   const expense = accounts.filter((a) => a.accountType === 'expense');
   const asset = accounts.filter((a) => a.accountType === 'asset');
-  const linkedIds = new Set(row.suppliers.map((supplier) => supplier.supplierId));
+  // A supplier taken off the item (0408) may be linked again; one in use may not twice.
+  const inUse = row.suppliers.filter((supplier) => supplier.active);
+  const linkedIds = new Set(inUse.map((supplier) => supplier.supplierId));
   const linkable = suppliers.filter((supplier) => !linkedIds.has(supplier.id));
   // Platform phase, Agent 9 — where the item stands, which layers cost it, and the movements and documents behind them.
   const related = row.isStock
@@ -264,8 +266,12 @@ export default async function ItemPage({
         </div>
 
         <div className={s.profileStack}>
-          {/* Requirement 4 — one or more suppliers, one of them the default. */}
-          <Panel title={t('items.suppliers_title', { count: row.suppliers.length })}>
+          {/* Requirement 4 — one or more suppliers, one of them the default.
+              Since 0408 (2026-10-06) the link is what a purchase may buy: an
+              item is bought only from a supplier listed here, and a supplier
+              is taken off with the reason — the row stays, out of use. */}
+          <Panel title={t('items.suppliers_title', { count: inUse.length })}>
+            <p className={s.sectionHint}>{t('items.suppliers_rule')}</p>
             {row.suppliers.length === 0 ? (
               <p className="muted">{t('items.no_suppliers')}</p>
             ) : (
@@ -282,7 +288,7 @@ export default async function ItemPage({
                   </thead>
                   <tbody>
                     {row.suppliers.map((supplier) => (
-                      <tr key={supplier.supplierId}>
+                      <tr data-active={supplier.active ? 'true' : 'false'} key={supplier.supplierId}>
                         <td>
                           <Link
                             href={`/payables/suppliers/${encodeURIComponent(supplier.supplierCode)}?role=supplier`}
@@ -290,10 +296,16 @@ export default async function ItemPage({
                             {supplier.supplierCode}
                           </Link>{' '}
                           · {supplier.supplierName}
+                          {supplier.active ? null : (
+                            <>
+                              {' '}
+                              <Pill label={t('inactive')} on={false} />
+                            </>
+                          )}
                         </td>
                         <td>{supplier.supplierItemCode ?? t('none')}</td>
                         <td>
-                          {mayEdit ? (
+                          {mayEdit && supplier.active ? (
                             <Form action={setItemSupplierPrice}>
                               <Hidden name="code" value={row.code} />
                               <Hidden name="supplierId" value={supplier.supplierId} />
@@ -316,7 +328,7 @@ export default async function ItemPage({
                         <td>
                           {supplier.isDefault ? (
                             <Pill label={t('items.default')} on />
-                          ) : mayEdit ? (
+                          ) : mayEdit && supplier.active ? (
                             <ActionButton
                               action={makeDefaultSupplier}
                               hidden={{
@@ -332,11 +344,17 @@ export default async function ItemPage({
                         </td>
                         {mayEdit ? (
                           <td>
-                            <ActionButton
-                              action={unlinkItemSupplier}
-                              hidden={{ code: row.code, supplierId: supplier.supplierId }}
-                              label={t('items.unlink')}
-                            />
+                            {supplier.active ? (
+                              <ReasonForm
+                                action={unlinkItemSupplier}
+                                hidden={{ code: row.code, supplierId: supplier.supplierId }}
+                                label={t('items.unlink')}
+                                reasonLabel={t('items.unlink_reason', { supplier: supplier.supplierCode })}
+                                reasonPlaceholder={t('reason_placeholder')}
+                              />
+                            ) : (
+                              <bdi dir="auto">{supplier.deactivatedReason ?? '—'}</bdi>
+                            )}
                           </td>
                         ) : null}
                       </tr>

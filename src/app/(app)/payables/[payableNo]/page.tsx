@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
+import { Plus } from 'lucide-react';
 import {
   AdminPage,
   Field,
@@ -23,7 +24,15 @@ import { RelatedRecords } from '@/components/admin/related-records';
 import { AttachmentsButton, HistoryButton, NotesButton } from '@/components/admin/icon-dialog';
 import { RecordAttachmentsDoor } from '@/components/admin/record-attachments-door';
 import { ExportIcon, ExportMenu } from '@/components/print/export-menu';
-import * as papers from '@/server/services/payable-papers';
+import * as importFiles from '@/server/services/import-attachments';
+import * as goodsJourney from '@/server/services/import-goods-journey';
+import { GatheredFiles } from '../import-files';
+import { FileViewSwitch } from '@/components/admin/file-views';
+import { GoodsJourneySection } from './goods-journey';
+import { BalanceDueBanner, dueDateMarkText } from '../balance-due';
+import { DueDateText } from '@/components/admin/due-date-text';
+import { importDueDate } from '@/server/domain/balance-due';
+import * as balanceDue from '@/server/services/balance-due';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { StopDialog } from '@/components/admin/stop-dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
@@ -93,13 +102,12 @@ export default async function PayablePage({
   if (!visibleRoute('/payables')) notFound();
 
   const { payableNo } = await params;
-  const [t, pa, cp, sh, lo, lc, admin, pageT, statusT, locale, context, outcome, query] = await Promise.all([
+  const [t, pa, cp, sh, lo, admin, pageT, statusT, locale, context, outcome, query] = await Promise.all([
     getTranslations('admin.payables'),
     getTranslations('admin.payment_applications'),
     getTranslations('admin.customs_pd'),
     getTranslations('admin.shipments'),
     getTranslations('admin.loans'),
-    getTranslations('admin.landed_cost'),
     getTranslations('admin'),
     getTranslations('page'),
     getTranslations('status'),
@@ -177,9 +185,24 @@ export default async function PayablePage({
   const daysSince = (since: Date | string) =>
     Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 86_400_000));
 
-  // Every attachment the import has, wherever it was put: on the invoice,
-  // the declaration, a payment application, a bill of lading or a container.
-  const allPapers = await withCurrentUser((tx) => papers.papersFor(tx, row.id));
+  /*
+   * Every file of the import's chain comes back to its own block (2026-10-07,
+   * by direction: "their attachment should come back to their blocks"), and
+   * the goods' journey from the hold to the warehouse — both read here, in one
+   * session of their own, so the record's statement count (HD14) is untouched.
+   */
+  const isImportRecord = row.payableTypeCode === 'import';
+  const { gathered, journey, duePrompt } = await withCurrentUser(async (tx) => ({
+    gathered: await importFiles.gather(tx, principal, row.id),
+    journey: isImportRecord ? await goodsJourney.journeyFor(tx, principal, row.id) : null,
+    // The balance's due date: asked for once the SWIFT is in, shown with who set it (2026-10-07).
+    duePrompt: isImportRecord ? await balanceDue.promptFor(tx, principal, row.id) : null,
+  }));
+  const relatedDoor = (section: importFiles.ImportFileSection) => ({
+    related: <GatheredFiles sources={gathered[section]} userId={principal.userId} />,
+    relatedCount: importFiles.countOf(gathered[section]),
+  });
+  const headerDoor = relatedDoor('header');
 
   // Platform phase, Agent 9 — the chain of real records around this import, as this reader may see it.
   const related =
@@ -266,6 +289,18 @@ export default async function PayablePage({
    */
   const written = log.rows.filter((event) => event.eventCode === 'NOTE_ADDED');
 
+  /*
+   * The due date only once an invoice of it was set on purpose (2026-10-07, by
+   * direction: "don't show the due date until we get the SWIFT"); before that,
+   * a dash and why. Once set, who set it and when.
+   */
+  const bd = await getTranslations('admin.balance_due');
+  const dueKnown = importDueDate(
+    row.dueDate,
+    invoices.map((invoice) => ({ ...invoice, status: String(invoice.status) })),
+  );
+  const dueMark = dueKnown.date && duePrompt ? await dueDateMarkText(duePrompt.mark, locale) : null;
+
   const fields: DocumentField[] = [
     { label: t('col_no'), value: <bdi dir="ltr">{row.payableNo}</bdi> },
     {
@@ -321,7 +356,19 @@ export default async function PayablePage({
       ),
     },
     { label: t('document_date'), value: <bdi dir="ltr">{day(row.documentDate)}</bdi> },
-    { label: t('due_date'), value: <bdi dir="ltr">{day(row.dueDate)}</bdi> },
+    {
+      label: t('due_date'),
+      value: (
+        <span data-due-date-field="">
+          <DueDateText date={dueKnown.date} locale={locale} waiting={dueKnown.waiting ? bd('waiting') : null} />
+          {dueMark ? (
+            <span className="block text-xs text-muted-fg" data-due-date-mark="">
+              <bdi dir="auto">{dueMark}</bdi>
+            </span>
+          ) : null}
+        </span>
+      ),
+    },
     { label: t('col_branch'), value: <bdi dir="ltr">{row.branchCode}</bdi> },
     { label: t('quantity'), value: row.quantity ? <bdi dir="ltr">{formatQuantity(row.quantity, locale as Locale)}</bdi> : '—' },
     { label: t('terms'), value: row.paymentTermsText ?? '—', wide: true },
@@ -332,16 +379,24 @@ export default async function PayablePage({
   return (
     <AdminPage
       actions={
-        mayEdit && !row.cancelledAt && !row.closedAt ? (
-          <StopDialog
-            back={base}
-            defaultLane="order"
-            lanes={laneOptions}
-            owners={ownerOptions}
-            payableNo={row.payableNo}
-            reasons={reasonOptions}
+        <>
+          {/* Blocks / List for every paperclip's files, beside Stop / follow-up
+              (2026-10-07, by direction: "next to [the] stop follow button"). */}
+          <FileViewSwitch
+            labels={{ group: t('files_view_label'), blocks: t('files_view_blocks'), list: t('files_view_list') }}
+            userId={principal.userId}
           />
-        ) : null
+          {mayEdit && !row.cancelledAt && !row.closedAt ? (
+            <StopDialog
+              back={base}
+              defaultLane="order"
+              lanes={laneOptions}
+              owners={ownerOptions}
+              payableNo={row.payableNo}
+              reasons={reasonOptions}
+            />
+          ) : null}
+        </>
       }
       back={{ href: '/payables', label: t('title') }}
       tabs={<SectionTabs route="/payables" />}
@@ -350,6 +405,8 @@ export default async function PayablePage({
       variant="sap"
     >
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
+      {/* The SWIFT is in and the balance has no due date: ask (2026-10-07). */}
+      {duePrompt ? <BalanceDueBanner locale={locale} prompt={duePrompt} /> : null}
 
       <DocumentWindow
         titleActions={
@@ -361,11 +418,14 @@ export default async function PayablePage({
               id={row.payableNo}
               title={`${type.name} ${row.payableNo}`}
             />
+            {/* The import's own files, then its purchase invoices' and its claims' (2026-10-07);
+                uploading here still files under the import itself. */}
             <AttachmentsButton
               closeLabel={admin('close')}
-              count={found.attachments.rows.length}
+              count={found.attachments.rows.length + headerDoor.relatedCount}
               label={t('tab_attachments')}
               title={t('tab_attachments')}
+              wide={headerDoor.relatedCount > 0}
             >
               <Attachments
                 preloaded={found.attachments}
@@ -375,6 +435,7 @@ export default async function PayablePage({
                 objectId={row.id}
                 objectType={payables.PERMISSION_OBJECT}
               />
+              {headerDoor.related}
             </AttachmentsButton>
             {/*
               The notes somebody wrote on this import, behind the same door the
@@ -601,6 +662,10 @@ export default async function PayablePage({
         </section>
       ) : null}
 
+      {/* ── The goods' journey (2026-10-07): On Process → In Process → B/L →
+          containers → customs → clearance → landed cost → received. ── */}
+      {journey ? <GoodsJourneySection dueDate={dueKnown.date} journey={journey} payableNo={row.payableNo} /> : null}
+
       {/* ── The invoices against it ──────────────────────────────────── */}
       <section aria-labelledby="payable-invoices-title" className={s.sapDoc}>
         <div className={s.sapWindow}>
@@ -766,7 +831,7 @@ export default async function PayablePage({
               </span>
               {/* This section's own papers — the bank's letter, the SWIFT copy (2026-10-06, by direction). */}
               <span className={s.sapTitleActions}>
-                <RecordAttachmentsDoor object="payable_payments" recordId={row.id} />
+                <RecordAttachmentsDoor object="payable_payments" recordId={row.id} {...relatedDoor('payments')} />
               </span>
             </h2>
             {held.length > 0 ? (
@@ -918,7 +983,10 @@ export default async function PayablePage({
               <div className={s.sapBody}>
                 <SubmitRow>
                   {/* A sheet of its own since 2026-10-06, by direction; the record opens on its own page, not this one. */}
-                  <Link className="action" href={`/payables/payment-applications/new?import=${encodeURIComponent(row.payableNo)}`}>
+                  {/* The same primary button as the landed cost's "Add charge" (2026-10-07: "some of these buttons
+                      except Add charge are not blue … it's weird"): each section's way to a new record looks alike. */}
+                  <Link className={`${s.button} ${s.primary}`} href={`/payables/payment-applications/new?import=${encodeURIComponent(row.payableNo)}`}>
+                    <Plus aria-hidden="true" />
                     {pa('new')}
                   </Link>
                 </SubmitRow>
@@ -938,7 +1006,7 @@ export default async function PayablePage({
               <span className={s.sapTitleMeta}>{t('rows', { count: pds.length })}</span>
               {/* The customs papers of this import that belong to no one PD (2026-10-06, by direction). */}
               <span className={s.sapTitleActions}>
-                <RecordAttachmentsDoor object="payable_customs" recordId={row.id} />
+                <RecordAttachmentsDoor object="payable_customs" recordId={row.id} {...relatedDoor('customs')} />
               </span>
             </h2>
             <div className={s.sapTableWrap}>
@@ -1002,7 +1070,8 @@ export default async function PayablePage({
               <div className={s.sapBody}>
                 <SubmitRow>
                   {/* A sheet of its own since 2026-10-06, by direction; the record opens on its own page, not this one. */}
-                  <Link className="action" href={`/payables/pd/new?import=${encodeURIComponent(row.payableNo)}`}>
+                  <Link className={`${s.button} ${s.primary}`} href={`/payables/pd/new?import=${encodeURIComponent(row.payableNo)}`}>
+                    <Plus aria-hidden="true" />
                     {cp('register')}
                   </Link>
                 </SubmitRow>
@@ -1024,7 +1093,7 @@ export default async function PayablePage({
               </span>
               {/* The shipping papers of this import that belong to no one B/L or container (2026-10-06, by direction). */}
               <span className={s.sapTitleActions}>
-                <RecordAttachmentsDoor object="payable_shipment" recordId={row.id} />
+                <RecordAttachmentsDoor object="payable_shipment" recordId={row.id} {...relatedDoor('shipment')} />
               </span>
             </h2>
             <div className={s.sapTableWrap}>
@@ -1119,7 +1188,8 @@ export default async function PayablePage({
               <div className={s.sapBody}>
                 <SubmitRow>
                   {/* A sheet of its own since 2026-10-06, by direction; the record opens on its own page, not this one. */}
-                  <Link className="action" href={`/payables/shipments/new?import=${encodeURIComponent(row.payableNo)}`}>
+                  <Link className={`${s.button} ${s.primary}`} href={`/payables/shipments/new?import=${encodeURIComponent(row.payableNo)}`}>
+                    <Plus aria-hidden="true" />
                     {sh('new_bl')}
                   </Link>
                 </SubmitRow>
@@ -1139,16 +1209,9 @@ export default async function PayablePage({
           may={{ addCharge: mayAddCharge, lock: mayLock, withdraw: mayWithdraw }}
           returnTo={`/payables/${encodeURIComponent(row.payableNo)}#landed-cost`}
           row={{ id: row.id, payableNo: row.payableNo }}
-          titleActions={
-            <>
-              {visibleRoute('/logistics/landed-costs') ? (
-                <Link className={s.sapLink} href={`/logistics/landed-costs/${encodeURIComponent(row.payableNo)}`}>
-                  {lc('open_sheet')}
-                </Link>
-              ) : null}
-              <RecordAttachmentsDoor object="payable_landed_cost" recordId={row.id} />
-            </>
-          }
+          // No "Open the landed cost sheet" here (by direction, 2026-10-07: "hide Open the landed cost sheet please on
+          // the import application"): the section is the sheet, and the sheet stays at /logistics/landed-costs/<import>.
+          titleActions={<RecordAttachmentsDoor object="payable_landed_cost" recordId={row.id} {...relatedDoor('landed_cost')} />}
         />
       ) : null}
       </div>

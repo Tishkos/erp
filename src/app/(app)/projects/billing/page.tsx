@@ -18,6 +18,7 @@ import * as psch from '@/server/services/project-schedule';
 import * as ps from '@/server/services/project-system';
 import { chipOf } from '../chip';
 import { addBillingLine, cancelBillingLine, certifyProgress, raiseCertificate, runRecognition } from './actions';
+import { IntentDateField } from '@/components/admin/intent-date-field';
 
 /**
  * Billing — REQ-PM-001 §11, §13. Copies the Progress workspace: one window
@@ -309,7 +310,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
                               <Form action={raiseCertificate}>
                                 {keep}
                                 <Hidden name="line_no" value={String(l.lineNo)} />
-                                <input aria-label={x('certified_on')} defaultValue={today} name="certified_on" required type="date" />
+                                <IntentDateField aria-label={x('certified_on')} defaultValue={today} name="certified_on" required />
                                 <Submit label={x('raise_certificate')} small tone="secondary" />
                               </Form>
                             ) : null}

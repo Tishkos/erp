@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { keepEnglish } from './support/locale';
 
 /**
  * The system foundation, end to end in a browser.
@@ -154,6 +155,7 @@ test.describe('Phase 0 · the administration screens read and write the database
     const code = `role_${RUN.toLowerCase()}`;
     // Roles are the CEO's to create and grant (by direction); the administrator sees them.
     await page.context().clearCookies();
+    await keepEnglish(page.context());
     await signIn(page, { email: 'ceo@example.com', password: 'Ledger-Trial-Balance-7' });
     await page.goto('/administration/roles');
     await page.getByRole('button', { name: 'New role' }).click();

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { keepEnglish } from './support/locale';
 
 /**
  * Phase 1 §1 — sub-accounts.
@@ -16,6 +17,7 @@ const MANAGER = { email: 'manager@example.com', password: 'Ledger-Trial-Balance-
 
 async function signIn(page: Page, user: { email: string; password: string }) {
   await page.context().clearCookies();
+  await keepEnglish(page.context());
   await page.goto('/sign-in');
   await page.getByRole('textbox', { name: 'Email', exact: true }).fill(user.email);
   await page.getByLabel('Password', { exact: true }).fill(user.password);

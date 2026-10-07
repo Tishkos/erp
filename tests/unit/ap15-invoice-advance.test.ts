@@ -10,7 +10,7 @@
  * "no advance".
  */
 import { describe, expect, it } from 'vitest';
-import { advanceInCurrency, advanceOf } from '@/server/domain/payment-applications';
+import { advanceInCurrency, advanceOf, advanceShareOf, advanceTxnFor, invoiceAdvance } from '@/server/domain/payment-applications';
 
 /** The money scale: 265,720.0000 as the books hold it. */
 const iqd = (text: string): bigint => {
@@ -132,5 +132,52 @@ describe('AP-15 · the advance in the import\u2019s own currency (2026-10-06)', 
     expect(advanceInCurrency(iqd('262000'), 'USD', 'USD', '0')).toBeNull();
     expect(advanceInCurrency(iqd('262000'), 'USD', 'USD', 'abc')).toBeNull();
     expect(advanceInCurrency(0n, 'USD', 'USD', '1310')).toBeNull();
+  });
+});
+
+/*
+ * 0411 (2026-10-06, by direction): "choose percentage select or amount … never
+ * more than 100 percent … total amount − payable amount". No share is preset
+ * any more ("what is 20 percentage? … any percentage"); the figures below are
+ * typed values, not defaults.
+ */
+describe('AP-15 · the advance by percentage or by amount (`invoiceAdvance`)', () => {
+  it('by percentage: the share of the total, as `advanceOf` takes it, and what is left', () => {
+    const advance = invoiceAdvance({ totalIqd: iqd('1000000'), basis: 'percent', percent: '35', amount: null })!;
+    expect(advance).toEqual({ basis: 'percent', iqd: iqd('350000'), currency: 'IQD', agreed: iqd('350000'), totalAgreed: iqd('1000000') });
+    expect(advanceShareOf(advance)).toBe('35');
+    // An invoice written before 0411 carries only its percentage: it is a percentage advance.
+    expect(invoiceAdvance({ totalIqd: iqd('1000000'), basis: null, percent: '35', amount: null })?.iqd).toBe(iqd('350000'));
+  });
+
+  it('by amount: exactly the amount written, its share of the total, and in a foreign currency its dinars at the agreed rate', () => {
+    const dinars = invoiceAdvance({ totalIqd: iqd('1000000'), basis: 'amount', percent: null, amount: '125000' })!;
+    expect(dinars).toMatchObject({ basis: 'amount', iqd: iqd('125000'), agreed: iqd('125000'), currency: 'IQD' });
+    expect(advanceShareOf(dinars)).toBe('12.5');
+    // USD 1,000 of goods at 1,310 = IQD 1,310,000; USD 333.33 asked in front.
+    const dollars = invoiceAdvance({ totalIqd: iqd('1310000'), basis: 'amount', percent: null, amount: '333.33', agreedCurrency: 'USD', agreedRate: '1310.00000000' })!;
+    expect(dollars).toMatchObject({ currency: 'USD', agreed: iqd('333.33'), totalAgreed: iqd('1000'), iqd: iqd('436662.3') });
+    expect(advanceShareOf(dollars)).toBe('33.33');
+    // What the bank is asked for: the amount itself in the import's currency, the dinars for a dinar import, none across currencies.
+    expect(advanceTxnFor(dollars, 'USD')).toBe(iqd('333.33'));
+    expect(advanceTxnFor(dollars, 'IQD')).toBe(iqd('436662.3'));
+    expect(advanceTxnFor(dollars, 'EUR')).toBeNull();
+    expect(advanceTxnFor(dinars, 'USD')).toBeNull();
+  });
+
+  it('never more than the invoice: an amount above the total, or a percentage above a hundred, is refused', () => {
+    expect(() => invoiceAdvance({ totalIqd: iqd('1000'), basis: 'amount', percent: null, amount: '1000.0001' })).toThrow(/cannot be more than the invoice/);
+    expect(invoiceAdvance({ totalIqd: iqd('1000'), basis: 'amount', percent: null, amount: '1000' })?.agreed).toBe(iqd('1000'));
+    expect(() => invoiceAdvance({ totalIqd: iqd('1000'), basis: 'percent', percent: '100.01', amount: null })).toThrow(/100%/);
+    // USD 1,000 exactly, against the dinars it was converted to: equal, not over.
+    expect(invoiceAdvance({ totalIqd: iqd('1310000'), basis: 'amount', percent: null, amount: '1000', agreedCurrency: 'USD', agreedRate: '1310' })?.iqd).toBe(iqd('1310000'));
+  });
+
+  it('is nothing to ask for when nothing is written, nought is written, or the invoice totals nothing', () => {
+    expect(invoiceAdvance({ totalIqd: iqd('1000'), basis: 'amount', percent: null, amount: '' })).toBeNull();
+    expect(invoiceAdvance({ totalIqd: iqd('1000'), basis: 'amount', percent: null, amount: '0' })).toBeNull();
+    expect(invoiceAdvance({ totalIqd: iqd('1000'), basis: 'percent', percent: '', amount: null })).toBeNull();
+    expect(invoiceAdvance({ totalIqd: 0n, basis: 'amount', percent: null, amount: '10' })).toBeNull();
+    expect(invoiceAdvance({ totalIqd: iqd('1000'), basis: null, percent: null, amount: null })).toBeNull();
   });
 });

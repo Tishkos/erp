@@ -443,8 +443,9 @@ describe('a draft from chat', () => {
 
     const done = await confirm(world.clerk, made.pending);
     if (!done.ok) throw new Error(done.reason);
-    expect(done.said).toMatch(/Purchase invoice API-\S+ is saved as a draft for \S+ · Jinko Solar\./);
-    expect(done.said).toMatch(/\/payables\/invoices\/API-/);
+    // Numbered PUR- since 0409 (2026-10-06).
+    expect(done.said).toMatch(/Purchase invoice PUR-\S+ is saved as a draft for \S+ · Jinko Solar\./);
+    expect(done.said).toMatch(/\/payables\/invoices\/PUR-/);
     const { rows } = await ownerPool.query(
       `select i.invoice_no, i.status, i.supplier_id, i.invoice_date::text as invoice_date, i.journal_entry_id, i.created_by,
               (select count(*)::int from ap_invoice_line l where l.ap_invoice_id = i.id) as lines

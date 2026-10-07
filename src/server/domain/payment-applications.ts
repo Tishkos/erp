@@ -504,3 +504,131 @@ export function advanceInCurrency(
   const cents = half(half(advanceIqd * 100000000n, rate), 100n);
   return cents <= 0n ? null : cents * 100n;
 }
+
+/**
+ * How an invoice's advance is agreed (2026-10-06, by direction: "choose
+ * percentage select or amount … 'no in-front payment' or 'payable by amount'
+ * or 'payable amount by percentage'"): a share of the total, or an amount
+ * written in the currency the invoice was agreed in. No advance is no basis.
+ */
+export const ADVANCE_BASES = ['percent', 'amount'] as const;
+export type AdvanceBasis = (typeof ADVANCE_BASES)[number];
+
+export const isAdvanceBasis = (value: unknown): value is AdvanceBasis =>
+  typeof value === 'string' && (ADVANCE_BASES as readonly string[]).includes(value);
+
+/** A decimal at four places as a bigint, or null — "2,000.5" → 20005000n. */
+function scaled4(text: string | null | undefined): bigint | null {
+  const clean = (text ?? '').trim().replace(/,/g, '');
+  if (!/^\d+(\.\d+)?$/.test(clean)) return null;
+  const [whole = '0', fraction = ''] = clean.split('.');
+  return BigInt(whole) * 10000n + BigInt((fraction + '0000').slice(0, 4));
+}
+
+/** The rate at eight places, as the rates table keeps it, or null. */
+function rate8(text: string | null | undefined): bigint | null {
+  const clean = (text ?? '').trim();
+  if (!/^\d+(\.\d+)?$/.test(clean)) return null;
+  const [whole = '0', fraction = ''] = clean.split('.');
+  const rate = BigInt(whole) * 100000000n + BigInt((fraction + '00000000').slice(0, 8));
+  return rate > 0n ? rate : null;
+}
+
+const halfUp = (numerator: bigint, denominator: bigint) => {
+  const quotient = numerator / denominator;
+  return (numerator % denominator) * 2n >= denominator ? quotient + 1n : quotient;
+};
+
+export interface InvoiceAdvanceInput {
+  /** The invoice's total in dinars, at four places — the lines, as the posting values them. */
+  readonly totalIqd: bigint;
+  /** `ap_invoice.advance_basis`; an invoice written before 0411 carries only its percentage. */
+  readonly basis: string | null | undefined;
+  readonly percent: string | null | undefined;
+  /** In the currency the invoice was agreed in (`agreedCurrency`, else dinars). */
+  readonly amount: string | null | undefined;
+  readonly agreedCurrency?: string | null | undefined;
+  readonly agreedRate?: string | null | undefined;
+}
+
+export interface InvoiceAdvance {
+  readonly basis: AdvanceBasis;
+  /** The payable amount in dinars, four places. */
+  readonly iqd: bigint;
+  /** The currency the invoice was agreed in — dinars when it names none. */
+  readonly currency: string;
+  /** The payable amount in that currency, four places: the amount itself, or the share to the cent. */
+  readonly agreed: bigint;
+  /** The total in that currency (the dinars back at the agreed rate, to the cent), for "left to pay". */
+  readonly totalAgreed: bigint;
+}
+
+/**
+ * The advance an invoice agrees — the payable amount, in dinars and in the
+ * currency it was agreed in — by percentage or by amount (2026-10-06).
+ *
+ *   percent  `advanceOf` of the total, as before; in a foreign currency the
+ *            dinars back at the invoice's own rate, to the cent.
+ *   amount   exactly the amount written, in the agreed currency; its dinars at
+ *            the agreed rate, half up at four places.
+ *
+ * Null when nothing is asked for: no basis and no percentage, nought, or a
+ * total of nothing. Never more than the whole invoice: a percentage above a
+ * hundred throws (`advanceOf`), an amount above the total throws too — the
+ * form will not take either, and this is what the arithmetic refuses for a
+ * caller that reached it another way.
+ */
+export function invoiceAdvance(input: InvoiceAdvanceInput): InvoiceAdvance | null {
+  const foreign = Boolean(input.agreedCurrency) && input.agreedCurrency !== 'IQD';
+  const currency = foreign ? input.agreedCurrency! : 'IQD';
+  const rate = foreign ? rate8(input.agreedRate) : null;
+  if (foreign && rate === null) return null;
+  if (input.totalIqd <= 0n) return null;
+  const toAgreed = (iqd: bigint) => (foreign ? halfUp(halfUp(iqd * 100000000n, rate!), 100n) * 100n : iqd);
+  const totalAgreed = toAgreed(input.totalIqd);
+  const basis: AdvanceBasis = input.basis === 'amount' ? 'amount' : 'percent';
+
+  if (basis === 'percent') {
+    const iqd = advanceOf(input.totalIqd, input.percent);
+    if (iqd === null) return null;
+    const agreed = toAgreed(iqd);
+    return { basis, iqd, currency, agreed, totalAgreed };
+  }
+
+  const agreed = scaled4(input.amount);
+  if (agreed === null || agreed <= 0n) return null;
+  if (agreed > totalAgreed) {
+    throw new Error(`an advance cannot be more than the invoice — ${currency} ${amountText(agreed)} asked of ${currency} ${amountText(totalAgreed)}`);
+  }
+  const iqd = foreign ? halfUp(agreed * rate!, 100000000n) : agreed;
+  return { basis, iqd: iqd > input.totalIqd ? input.totalIqd : iqd, currency, agreed, totalAgreed };
+}
+
+/**
+ * What the bank is asked for, in the import's own currency: the payable amount
+ * in the currency the invoice was agreed in when the import is in it too —
+ * exactly the amount written, or the share to the cent — the dinars when the
+ * import is in dinars, and null when the two differ (a rate would have to be
+ * chosen, and that stays the accountant's). The same answers
+ * `advanceInCurrency` gives a percentage.
+ */
+export function advanceTxnFor(advance: InvoiceAdvance, importCurrency: string): bigint | null {
+  if (importCurrency === advance.currency) return advance.agreed;
+  if (importCurrency === 'IQD') return advance.iqd;
+  return null;
+}
+
+/** What part of the total an advance comes to, as a percentage at two places, half up — "That is 12.5% of the total". */
+export function advanceShareOf(advance: Pick<InvoiceAdvance, 'agreed' | 'totalAgreed'>): string {
+  if (advance.totalAgreed <= 0n) return '0';
+  const hundredths = halfUp(advance.agreed * 10000n, advance.totalAgreed);
+  const whole = hundredths / 100n;
+  const rest = hundredths % 100n;
+  return rest === 0n ? whole.toString() : `${whole}.${rest.toString().padStart(2, '0').replace(/0$/, '')}`;
+}
+
+function amountText(value: bigint): string {
+  const whole = value / 10000n;
+  const fraction = (value % 10000n).toString().padStart(4, '0').replace(/0+$/, '');
+  return `${whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')}${fraction ? `.${fraction}` : ''}`;
+}

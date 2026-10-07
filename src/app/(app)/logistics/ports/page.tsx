@@ -166,7 +166,6 @@ export default async function PortsPage({ searchParams }: { searchParams: Search
             <span>{t('routes_title')}</span>
             <span className={s.sapTitleMeta}>{admin('rows_shown', { count: routes.length })}</span>
           </h2>
-          <p className={`${s.sapNote} m-0 px-4 py-3 sm:px-5`}>{t('routes_subtitle')}</p>
           <div className={s.sapTableWrap}>
             <table aria-labelledby="routes-title" className={s.sapTable}>
               <thead>

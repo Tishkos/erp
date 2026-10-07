@@ -15,6 +15,7 @@ import styles from './admin.module.css';
 import { ColumnGrip, useColumnWidths } from './column-widths';
 import { PAIRED_CHOICE } from './paired-picker';
 import { MONEY_PLACES, lineTotal, scaled, toNumber, toText } from '@/lib/decimal';
+import { IntentSelect } from '@/components/admin/intent-select';
 
 /**
  * The lines of an invoice, typed straight into the grid.
@@ -54,11 +55,16 @@ export interface LineItem {
     readonly isPurchaseDefault: boolean;
     readonly isSalesDefault: boolean;
   }[];
-  /** Whose stock this line draws from; empty when the item has no links. */
+  /**
+   * The suppliers linked to the item — whose stock a sale draws from, and,
+   * since 0408, who a purchase may buy it from. Empty when it has no links.
+   */
   readonly suppliers?: readonly {
     readonly id: string;
     readonly label: string;
     readonly purchasePriceIqd?: string | null;
+    /** The supplier's own code for the item, shown beside it on a purchase line. */
+    readonly itemCode?: string | null;
   }[];
   readonly defaultUnitPriceIqd?: string | null;
 }
@@ -127,6 +133,24 @@ export interface InvoiceLineLabels {
   readonly availabilityHint: string;
   /** The Unit column's heading, when the grid has one (FIX-4). */
   readonly unit?: string;
+  /**
+   * A purchase follows its supplier (0408): the items offered are the ones
+   * linked to it. "Their code" beside the item; what a line says when its item
+   * is not one the supplier sells; what the entry row says when the supplier
+   * sells nothing linked yet, or none is chosen.
+   */
+  readonly supplierItemCode?: string;
+  readonly notLinked?: string;
+  readonly noLinkedItems?: string;
+  readonly chooseSupplierFirst?: string;
+  /**
+   * What a search by code or name says when it finds nothing to buy (2026-10-07,
+   * by direction: "say this item is either not available in our data or not
+   * linked"): raw, `{query}` filled here — the item exists but is not linked
+   * to this supplier, or no item matches at all.
+   */
+  readonly searchNotLinked?: string;
+  readonly searchNotFound?: string;
 }
 
 interface Row {
@@ -352,6 +376,39 @@ export function InvoiceLinesGrid({
   const [chosenPurchaseSupplier, setChosenPurchaseSupplier] = useState(
     purchaseSupplierId ?? '',
   );
+  /*
+   * 0408 (by direction, 2026-10-06: "an item needed to be linked to a
+   * supplier before buying") — a purchase grid that knows its supplier offers
+   * only the items linked to that supplier, and follows the header when the
+   * supplier changes. The names of every item stay known, so a saved line
+   * whose link was since removed still reads as what it is.
+   */
+  const followsSupplier = mode === 'purchase' && (purchaseSupplierField !== undefined || purchaseSupplierId !== undefined);
+  const linkOf = useCallback(
+    (item: LineItem | undefined) =>
+      item?.suppliers?.find((supplier) => supplier.id === chosenPurchaseSupplier),
+    [chosenPurchaseSupplier],
+  );
+  const offered = useMemo(
+    () => (followsSupplier ? items.filter((item) => Boolean(linkOf(item))) : items),
+    [followsSupplier, items, linkOf],
+  );
+  /**
+   * What a search that matches nothing on offer means (2026-10-07): the text,
+   * at least two characters, found in no offered item's code or name — then
+   * either some item of ours has it but is not linked to this supplier, or none
+   * does. Nothing is said while something on offer still matches.
+   */
+  const searchVerdict = (query: string): { readonly kind: 'not_linked' | 'not_found'; readonly text: string } | null => {
+    if (query.length < 2) return null;
+    const folded = query.toLocaleLowerCase();
+    const hits = (item: LineItem) => item.code.toLocaleLowerCase().includes(folded) || item.name.toLocaleLowerCase().includes(folded);
+    if (offered.some(hits)) return null;
+    if (followsSupplier && chosenPurchaseSupplier && items.some(hits)) {
+      return labels.searchNotLinked ? { kind: 'not_linked', text: labels.searchNotLinked.replace('{query}', query) } : null;
+    }
+    return labels.searchNotFound ? { kind: 'not_found', text: labels.searchNotFound.replace('{query}', query) } : null;
+  };
   const availabilityRequests = useRef(new Map<string, { key: string }>());
 
   const { widthOf, gripProps, resizing } = useColumnWidths<ColumnKey>(COLUMN_KEYS, widthsKey);
@@ -819,7 +876,8 @@ export function InvoiceLinesGrid({
                       {...field('item_code', index)}
                     />
                   ) : (
-                    <select
+                    <IntentSelect
+                      compact
                       aria-label={labels.itemCode}
                       dir="ltr"
                       disabled={locked}
@@ -829,13 +887,35 @@ export function InvoiceLinesGrid({
                       {...field('item_code', index)}
                     >
                       <option value="">{labels.chooseItem}</option>
-                      {items.map((option) => (
+                      {offered.map((option) => (
                         <option key={option.code} value={option.code}>
                           {option.code}
                         </option>
                       ))}
-                    </select>
+                    </IntentSelect>
                   )}
+                  {/* 0408 — what the entry row says when nothing can be bought
+                      from the supplier yet, and what a line says when its item
+                      is not one the supplier sells (the service refuses it). */}
+                  {followsSupplier && last && row.itemCode === '' && offered.length === 0 ? (
+                    <span className={styles.sapCellNote} data-linked-items="none">
+                      {chosenPurchaseSupplier ? labels.noLinkedItems : labels.chooseSupplierFirst}
+                    </span>
+                  ) : null}
+                  {followsSupplier && item && chosenPurchaseSupplier && !linkOf(item) && labels.notLinked ? (
+                    <span className={styles.sapRowError} data-not-linked="">
+                      {labels.notLinked}
+                    </span>
+                  ) : null}
+                  {/* A search that finds nothing to buy says why: not linked to this supplier, or not in our items at all. */}
+                  {searchItems && !item ? (() => {
+                    const said = searchVerdict(row.itemName.trim() || row.itemCode.trim());
+                    return said ? (
+                      <span className={styles.sapRowError} data-search-miss={said.kind}>
+                        {said.text}
+                      </span>
+                    ) : null;
+                  })() : null}
                   {/* The item's own unit travels with the line. Without it every
                       line is billed in "each", whatever the item is measured in. */}
                   {live || unitColumn ? null : (
@@ -864,6 +944,12 @@ export function InvoiceLinesGrid({
                   ) : (
                     <bdi dir="auto">{item?.name ?? ''}</bdi>
                   )}
+                  {/* The supplier's own code for the item, when the link names one (0408). */}
+                  {followsSupplier && labels.supplierItemCode && linkOf(item)?.itemCode ? (
+                    <span className={styles.sapCellNote}>
+                      {labels.supplierItemCode}: <bdi dir="ltr">{linkOf(item)!.itemCode}</bdi>
+                    </span>
+                  ) : null}
                 </td>
                 <td className={styles.sapNum}>
                   <input
@@ -897,7 +983,8 @@ export function InvoiceLinesGrid({
                 </td>
                 {unitColumn ? (
                   <td>
-                    <select
+                    <IntentSelect
+                      compact
                       aria-label={labels.unit}
                       disabled={locked || !item}
                       onChange={(event) => {
@@ -917,7 +1004,7 @@ export function InvoiceLinesGrid({
                           {unit.numerator === unit.denominator ? '' : ` (${toText((BigInt(unit.numerator) * 1_000_000n) / BigInt(unit.denominator), 6)} ${item?.uomCode ?? ''})`}
                         </option>
                       ))}
-                    </select>
+                    </IntentSelect>
                   </td>
                 ) : null}
                 <td className={styles.sapNum}>
@@ -964,7 +1051,8 @@ export function InvoiceLinesGrid({
                 </td>
                 {showSupplier ? (
                   <td>
-                    <select
+                    <IntentSelect
+                      compact
                       aria-label={labels.supplier}
                       // Disabled rather than hidden when the item has no links:
                       // the column stays where the eye expects it, and the
@@ -981,11 +1069,12 @@ export function InvoiceLinesGrid({
                           {supplier.label}
                         </option>
                       ))}
-                    </select>
+                    </IntentSelect>
                   </td>
                 ) : null}
                 <td>
-                  <select
+                  <IntentSelect
+                    compact
                     aria-label={labels.warehouse}
                     disabled={locked}
                     onChange={(event) => patch(row.key, { warehouseCode: event.target.value })}
@@ -997,7 +1086,7 @@ export function InvoiceLinesGrid({
                         {house.code} · {house.name}
                       </option>
                     ))}
-                  </select>
+                  </IntentSelect>
                 </td>
                 <td className={styles.sapRowRemove}>
                   {live_ ? (
@@ -1064,12 +1153,12 @@ export function InvoiceLinesGrid({
       {searchItems ? (
         <>
           <datalist id={codeList}>
-            {items.map((option) => (
+            {offered.map((option) => (
               <option key={option.code} value={option.code} />
             ))}
           </datalist>
           <datalist id={nameList}>
-            {items.map((option) => (
+            {offered.map((option) => (
               <option key={option.code} value={option.name} />
             ))}
           </datalist>

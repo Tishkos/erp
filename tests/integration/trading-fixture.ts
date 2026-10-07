@@ -8,6 +8,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { ownerPool, resetTestData, seedBranch } from './setup';
+import { linkItemToSupplier } from './item-supplier';
 import { withScope } from '@/server/db/client';
 import * as authz from '@/server/services/authorization';
 import * as coa from '@/server/services/chart-of-accounts';
@@ -165,6 +166,8 @@ export async function buildTradingWorld(): Promise<TradingWorld> {
     [SUPPLIER],
   );
   const supplierId = supplier[0].id as string;
+  // 0408 — an item is bought only from a supplier linked to it: the panel is Jinko's.
+  await linkItemToSupplier(PANEL, supplierId);
 
   const { rows: customer } = await ownerPool.query(
     `insert into business_partner (code, legal_name, is_customer, is_supplier, status, active)

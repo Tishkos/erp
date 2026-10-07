@@ -15,6 +15,7 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as applications from '@/server/services/payment-applications';
 import * as payables from '@/server/services/payables';
 import { createApplication, startApplication } from '../actions';
+import { IntentSelect } from '@/components/admin/intent-select';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,14 +79,14 @@ export default async function NewPaymentApplicationPage({ searchParams }: { sear
         label: t('import'),
         control: true,
         value: (
-          <select aria-label={t('import')} defaultValue="" name="payable_no" required>
+          <IntentSelect aria-label={t('import')} defaultValue="" name="payable_no" required>
             <option value="" />
             {found.imports.map((row) => (
               <option key={row.payableNo} value={row.payableNo}>
                 {`${row.payableNo} · ${row.reference} · ${row.supplierName}`}
               </option>
             ))}
-          </select>
+          </IntentSelect>
         ),
       },
     ];
@@ -135,26 +136,26 @@ export default async function NewPaymentApplicationPage({ searchParams }: { sear
       label: t('col_method'),
       control: true,
       value: (
-        <select aria-label={t('col_method')} defaultValue={pickers.methods[0]?.code ?? ''} name="payment_method" required>
+        <IntentSelect aria-label={t('col_method')} defaultValue={pickers.methods[0]?.code ?? ''} name="payment_method" required>
           {pickers.methods.map((method) => (
             <option key={method.code} value={method.code}>
               {method.name}
             </option>
           ))}
-        </select>
+        </IntentSelect>
       ),
     },
     {
       label: t('col_account'),
       control: true,
       value: (
-        <select aria-label={t('col_account')} defaultValue={pickers.accounts[0]?.id ?? ''} name="bank_cash_account_id" required>
+        <IntentSelect aria-label={t('col_account')} defaultValue={pickers.accounts[0]?.id ?? ''} name="bank_cash_account_id" required>
           {pickers.accounts.map((account) => (
             <option key={account.id} value={account.id}>
               {`${account.code} · ${account.name}${account.bankName ? ` · ${account.bankName}` : ''} — ${t('available_short')} ${money(account.availableIqd, 'IQD')}`}
             </option>
           ))}
-        </select>
+        </IntentSelect>
       ),
     },
     {
@@ -163,14 +164,14 @@ export default async function NewPaymentApplicationPage({ searchParams }: { sear
       control: true,
       value: (
         <>
-          <select aria-label={t('payee')} defaultValue={payee} name="payee_bank_account_id">
+          <IntentSelect aria-label={t('payee')} defaultValue={payee} name="payee_bank_account_id">
             <option value="">—</option>
             {pickers.payees.map((one) => (
               <option key={one.id} value={one.id}>
                 {`${one.bankName} · ${one.iban ?? one.accountNumber}${one.swift ? ` · ${one.swift}` : ''} · ${one.currency}${one.verified ? '' : ` (${t('unverified')})`}`}
               </option>
             ))}
-          </select>
+          </IntentSelect>
           <span className={s.sapEnteredNote}>{t('payee_hint')}</span>
         </>
       ),
@@ -182,14 +183,14 @@ export default async function NewPaymentApplicationPage({ searchParams }: { sear
             control: true,
             value: (
               <>
-                <select aria-label={t('loan')} defaultValue="" name="loan_id">
+                <IntentSelect aria-label={t('loan')} defaultValue="" name="loan_id">
                   <option value="">—</option>
                   {pickers.loans.map((loan) => (
                     <option key={loan.id} value={loan.id}>
                       {`${loan.loanNo} · ${loan.bankName} · ${loan.accountCode} — ${money(loan.unallocatedTxn, row.currency)}`}
                     </option>
                   ))}
-                </select>
+                </IntentSelect>
                 <span className={s.sapEnteredNote}>{t('loan_hint')}</span>
               </>
             ),

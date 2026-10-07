@@ -1,55 +1,82 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { lineTotal, MONEY_PLACES, toNumber } from '@/lib/decimal';
+import { lineTotal, MONEY_PLACES, scaled, toNumber } from '@/lib/decimal';
+import { IntentSelect } from '@/components/admin/intent-select';
+import { ADVANCE_ACCOUNT_EVENT } from './advance-account-select';
 import { inLedger } from './invoice-currency';
 import styles from './admin.module.css';
 
+/** How the advance is agreed — the selection's three choices (0411). */
+export type AdvanceChoice = 'none' | 'percent' | 'amount';
+
+export interface AdvanceFieldLabels {
+  /** "Payable in advance" — the selection. */
+  readonly basis: string;
+  readonly none: string;
+  readonly percent: string;
+  readonly amount: string;
+  /** The box beside it: "Advance payment %" / "Advance amount". */
+  readonly percentBox: string;
+  readonly amountBox: string;
+  /** "Payable amount", "Left to pay". */
+  readonly payable: string;
+  readonly left: string;
+  /** "That is {percent}% of the total", raw — the placeholder is filled here. */
+  readonly share: string;
+  /** Said under an amount above the invoice's total; the form will not send it. */
+  readonly overTotal: string;
+  /** Said while no account is chosen to pay it from: nothing can be paid in front from nowhere. */
+  readonly needsAccount?: string;
+}
+
 /**
- * The advance a purchase invoice is paid in front, and what it comes to —
- * §15.3, by direction 2026-10-03.
+ * The advance a purchase invoice is paid in front — two fields, side by side
+ * (2026-10-06, by direction: "no extra field — two fields; one is hidden when
+ * the payable selection is 'no upfront payment'; then for Payable by
+ * percentage / Payable by amount open a new input next to it").
  *
- * "when eg 20 percent should show us how much total advanced": a percentage on
- * its own is a sum somebody has to do in their head against a total that is
- * still being typed, and getting it wrong means asking a bank for the wrong
- * money. So the figure is worked out here, from the lines as they are entered,
- * and shown beside the box.
+ *   Payable in advance   No upfront payment · Payable by percentage ·
+ *                        Payable by amount (`advance_basis`)
+ *   the box beside it    a percentage (`advance_percent`, more than nought,
+ *                        never more than a hundred) or an amount
+ *                        (`advance_amount`, more than nought, never more than
+ *                        the invoice) — not drawn, so not sent, for none
  *
- * It is shown, not submitted. Only the percentage crosses to the server, and
- * the server works the figure out again from the total it has just committed
- * (`advanceOf`, the same arithmetic in the same order) — so the figure on the
- * screen and the figure asked of the bank come from one rule rather than two
- * that agree today. A form that posted its own arithmetic would be a form that
- * could lie about it.
+ * Under the box a line says what it comes to, worked out from the lines as
+ * they are typed: by percentage the payable amount and what is left to pay; by
+ * amount the share of the total it is and what is left. In the currency the
+ * invoice is agreed in, and the dinars beside a foreign figure. Exact, on
+ * bigints (`src/lib/decimal.ts`); the server works it out again
+ * (`invoiceAdvance`) and refuses what this box would not take.
  *
- * Two figures and nothing else (2026-10-03): the money the supplier gets in
- * front, and the dinars that leave the bank account to send it. The sentence
- * that used to follow them folded the cell onto three lines to say something
- * true of every advance ever raised.
+ * No preset share (by direction: "what is 20 percentage? it should start
+ * [at] import, any percentage"): with Import ticked the selection opens on
+ * Payable by percentage with the box empty, without it on No upfront payment;
+ * once the person chooses, the choice is theirs.
  *
  * The lines are read off the form by name, the way `due-date-field.tsx`
  * watches the partner and the date: a form-level `input` listener, because the
  * grid is a component of its own and this is not its business.
  */
 export function AdvanceField({
-  label,
-  name,
+  labels,
   currencyField,
   ledgerCurrency,
   ledgerRates,
   locale,
-  defaultPercent,
   importField,
+  accountField,
 }: {
-  readonly label: string;
-  readonly name: string;
+  readonly labels: AdvanceFieldLabels;
   /**
-   * The share an import is paid in front unless the accountant writes another
-   * (2026-10-06, by direction: "automatically 20% … payment application").
-   * It stands while the `importField` box is ticked and nothing has been typed
-   * here; untick Import and the box is empty again, type and it is yours.
+   * The "Advance paid from" select. While it names no account the selection
+   * is No upfront payment and cannot be changed (2026-10-07, by direction: "if
+   * there is no bank account the payable upfront cannot be selected — which
+   * bank account is it going to be issued from?").
    */
-  readonly defaultPercent?: string;
+  readonly accountField?: string;
+  /** The Import tick box: ticked, the selection opens on Payable by percentage. */
   readonly importField?: string;
   /**
    * The form field holding the currency the invoice is agreed in, so the
@@ -61,15 +88,36 @@ export function AdvanceField({
   readonly ledgerRates: Readonly<Record<string, string>>;
   readonly locale: string;
 }) {
+  const select = useRef<HTMLSelectElement>(null);
   const box = useRef<HTMLInputElement>(null);
-  const [percent, setPercent] = useState(defaultPercent ?? '');
-  // Once the accountant has typed a share it is theirs: the default never comes back over it.
-  const typedRef = useRef(false);
+  const [choice, setChoice] = useState<AdvanceChoice>(importField ? 'percent' : 'none');
+  const choiceRef = useRef<AdvanceChoice>(importField ? 'percent' : 'none');
+  const [typed, setTyped] = useState('');
+  // Once the person has chosen, the Import box no longer moves the selection.
+  const chosenRef = useRef(false);
   const [total, setTotal] = useState<bigint>(0n);
   const [agreed, setAgreed] = useState(ledgerCurrency);
+  // Whether an account to pay it from is chosen; without one the advance is "none" and locked.
+  const [hasAccount, setHasAccount] = useState(!accountField);
 
   useEffect(() => {
-    const form = box.current?.form;
+    const form = select.current?.form;
+    if (!form || !accountField) return;
+    const read = (event?: Event) => {
+      const chosen = event instanceof CustomEvent && typeof event.detail === 'string' ? event.detail : value(form, accountField);
+      setHasAccount(chosen !== '');
+    };
+    read();
+    form.addEventListener(ADVANCE_ACCOUNT_EVENT, read);
+    form.addEventListener('change', read);
+    return () => {
+      form.removeEventListener(ADVANCE_ACCOUNT_EVENT, read);
+      form.removeEventListener('change', read);
+    };
+  }, [accountField]);
+
+  useEffect(() => {
+    const form = select.current?.form;
     if (!form) return;
 
     /*
@@ -99,15 +147,19 @@ export function AdvanceField({
     };
 
     /*
-     * The default share follows the Import box: an import is paid 20% in
-     * front unless the accountant says otherwise; an expense or a local
-     * purchase starts with no advance at all.
+     * The selection follows the Import box until the person chooses: an
+     * import opens on Payable by percentage with the box empty (any share,
+     * none preset), a local purchase or an expense on No upfront payment.
      */
     const followImport = () => {
-      if (!defaultPercent || !importField || typedRef.current) return;
+      if (!importField || chosenRef.current) return;
       const tick = form.elements.namedItem(importField);
       const ticked = tick instanceof HTMLInputElement ? tick.checked : true;
-      setPercent(ticked ? defaultPercent : '');
+      const next: AdvanceChoice = ticked ? 'percent' : 'none';
+      if (next === choiceRef.current) return;
+      choiceRef.current = next;
+      setChoice(next);
+      setTyped('');
     };
 
     readTotal();
@@ -118,66 +170,141 @@ export function AdvanceField({
       form.removeEventListener('input', readTotal);
       form.removeEventListener('input', followImport);
     };
-  }, [currencyField, defaultPercent, importField]);
+  }, [currencyField, importField]);
 
   /*
-   * The share, by the same steps the server takes: the percentage scaled to
-   * four places, multiplied, divided by a hundred, rounded half-up on the last
-   * place. Kept in step with `advanceOf` deliberately — if the two ever
-   * disagree the screen is the one that is wrong, and the server's figure is
-   * the one the bank is asked for.
+   * What the box comes to. By percentage, the share by the same steps the
+   * server takes (`advanceShare`, the twin of `advanceOf`); by amount, the
+   * amount itself and the share of the total it is. If the two ever disagree
+   * the screen is the one that is wrong: the server's figure is the one the
+   * bank is asked for.
    */
-  const share = advanceShare(total, percent);
+  // No account, no advance: what is shown and sent is "none" until one is chosen.
+  const shownChoice: AdvanceChoice = hasAccount ? choice : 'none';
+  const payable = shownChoice === 'percent' ? advanceShare(total, typed) : shownChoice === 'amount' ? amountOf(typed) : null;
+  const over = shownChoice === 'amount' && payable !== null && total > 0n && payable > total;
+  const left = payable !== null && !over ? total - payable : null;
   const shown = (value: bigint, places: number, least = 0) =>
     toNumber(value, MONEY_PLACES).toLocaleString(locale === 'ar' ? 'ar' : 'en-US', {
       maximumFractionDigits: places,
       minimumFractionDigits: least,
     });
+  const money = (value: bigint) => `${agreed} ${shown(value, agreed === 'IQD' ? 0 : 2, agreed === 'IQD' ? 0 : 2)}`;
+  const inDinars = (value: bigint) =>
+    agreed !== ledgerCurrency && ledgerRates[agreed] ? `${ledgerCurrency} ${shown(inLedger(value, ledgerRates[agreed]!), 0)}` : null;
+
+  // An amount above the invoice is not sent: the box says why and the form will not submit it.
+  useEffect(() => {
+    box.current?.setCustomValidity(over ? labels.overTotal : '');
+  }, [labels.overTotal, over]);
 
   return (
     <>
-      <input
-        aria-label={label}
-        inputMode="decimal"
-        max={100}
-        min={0}
-        name={name}
-        /*
-         * Never more than a hundred (2026-10-03). An advance of 120% asks a
-         * bank for more than the goods cost, so the box does not take the
-         * figure: `advanceOf` refuses it on the server and 0270's CHECK
-         * refuses the row, and a box that accepted it would be a box that
-         * made somebody find out at the third refusal.
-         */
-        onChange={(event) => {
-          typedRef.current = true;
-          const typed = event.target.value;
-          const asked = Number(typed);
-          setPercent(Number.isFinite(asked) && asked > 100 ? '100' : typed);
-        }}
-        ref={box}
-        step="any"
-        type="number"
-        value={percent}
-      />
-      {share !== null ? (
-        <span className={styles.sapEnteredNote}>
-          <bdi dir="ltr">
-            {agreed} {shown(share, 2, 2)}
-          </bdi>
-          {/* And what leaves the bank account, which is the dinars. */}
-          {agreed !== ledgerCurrency && ledgerRates[agreed] ? (
-            <>
-              {' · '}
-              <bdi dir="ltr">
-                {ledgerCurrency} {shown(inLedger(share, ledgerRates[agreed]!), 0)}
-              </bdi>
-            </>
+      <div className={styles.sapField}>
+        <span className={styles.sapLabel}>{labels.basis}</span>
+        <IntentSelect
+          aria-label={labels.basis}
+          disabled={!hasAccount}
+          name="advance_basis"
+          onChange={(event) => {
+            chosenRef.current = true;
+            choiceRef.current = event.target.value as AdvanceChoice;
+            setChoice(event.target.value as AdvanceChoice);
+            setTyped('');
+          }}
+          ref={select}
+          value={shownChoice}
+        >
+          <option value="none">{labels.none}</option>
+          <option value="percent">{labels.percent}</option>
+          <option value="amount">{labels.amount}</option>
+        </IntentSelect>
+        {/* A disabled select is not sent: the form still says "none". */}
+        {hasAccount ? null : <input name="advance_basis" type="hidden" value="none" />}
+        {!hasAccount && labels.needsAccount ? (
+          <span className={styles.sapEnteredNote} data-advance-needs-account="">
+            {labels.needsAccount}
+          </span>
+        ) : null}
+      </div>
+      {shownChoice === 'none' ? null : (
+        <div className={styles.sapField} data-advance-box={shownChoice}>
+          <span className={styles.sapLabel}>{shownChoice === 'percent' ? labels.percentBox : labels.amountBox}</span>
+          <input
+            aria-invalid={over || undefined}
+            aria-label={shownChoice === 'percent' ? labels.percentBox : labels.amountBox}
+            dir="ltr"
+            inputMode="decimal"
+            // Never more than a hundred (2026-10-03): the box does not take the figure,
+            // `invoiceAdvance` refuses it on the server and 0270's CHECK refuses the row.
+            {...(shownChoice === 'percent' ? { max: 100 } : {})}
+            min={0}
+            name={shownChoice === 'percent' ? 'advance_percent' : 'advance_amount'}
+            onChange={(event) => {
+              const text = event.target.value;
+              const asked = Number(text);
+              setTyped(shownChoice === 'percent' && Number.isFinite(asked) && asked > 100 ? '100' : text);
+            }}
+            ref={box}
+            step="any"
+            type="number"
+            value={typed}
+          />
+          {/* Two short read-only lines under the box: what it comes to, and what is left. */}
+          {payable !== null ? (
+            <span className={`${styles.sapEnteredNote} tabular-nums`} data-payable-amount="">
+              {over ? (
+                <span className="text-danger-subtle-fg">{labels.overTotal}</span>
+              ) : shownChoice === 'percent' ? (
+                <>
+                  <span>{labels.payable}: </span>
+                  <bdi className="font-medium text-fg" dir="ltr">
+                    {money(payable)}
+                  </bdi>
+                  {inDinars(payable) ? (
+                    <>
+                      {' · '}
+                      <bdi dir="ltr">{inDinars(payable)}</bdi>
+                    </>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <span>{labels.share.replace('{percent}', shareText(payable, total, locale))}</span>
+                  {inDinars(payable) ? (
+                    <>
+                      {' · '}
+                      <bdi dir="ltr">{inDinars(payable)}</bdi>
+                    </>
+                  ) : null}
+                </>
+              )}
+            </span>
           ) : null}
-        </span>
-      ) : null}
+          {left !== null ? (
+            <span className={`${styles.sapEnteredNote} tabular-nums`} data-left-to-pay="">
+              <span>{labels.left}: </span>
+              <bdi dir="ltr">{money(left)}</bdi>
+            </span>
+          ) : null}
+        </div>
+      )}
     </>
   );
+}
+
+/** An amount typed in the box, at four places; null while it is not one above nought. */
+function amountOf(text: string): bigint | null {
+  const value = scaled(text.trim(), MONEY_PLACES);
+  return value === null || value <= 0n ? null : value;
+}
+
+/** amount ÷ total as a percentage at two places, half up — the twin of `advanceShareOf`. */
+function shareText(amount: bigint, total: bigint, locale: string): string {
+  if (total <= 0n) return '0';
+  const numerator = amount * 10_000n;
+  const hundredths = numerator / total + ((numerator % total) * 2n >= total ? 1n : 0n);
+  return toNumber(hundredths, 2).toLocaleString(locale === 'ar' ? 'ar' : 'en-US', { maximumFractionDigits: 2 });
 }
 
 /** The value of a named field, whatever kind of control holds it. */

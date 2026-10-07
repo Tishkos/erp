@@ -20,6 +20,7 @@ import * as recruitment from './recruitment';
 import * as notifications from './notifications';
 import * as openItems from './open-items';
 import * as statement from './partner-statement';
+import { knownInvoiceDueSql, knownPayableDueSql } from './known-due-date';
 import { businessToday } from '../domain/business-date';
 
 /**
@@ -247,6 +248,8 @@ export async function waitingFor(tx: Tx, principal: Principal): Promise<Waiting>
           from payable p
           join business_partner bp on bp.id = p.supplier_id
          where p.due_date between ${businessToday()}::date and ${businessToday()}::date + 7
+           -- A due date nobody set (an advance's balance waiting for its SWIFT) falls due on no day.
+           and ${knownPayableDueSql(sql`p.id`, sql`p.due_date`)} is not null
            and p.cancelled_at is null and p.closed_at is null
            and p.stage_code not in ('paid', 'closed')
          order by p.due_date
@@ -315,7 +318,7 @@ const MONEY = 4n;
  * bucket them costs nothing worth the duplication.
  */
 function bucketed(
-  invoices: readonly { readonly dueDate: string; readonly outstanding: bigint }[],
+  invoices: readonly { readonly dueDate: string | null; readonly outstanding: bigint }[],
   asOf: string,
 ): Ageing {
   const totals = new Map<AgeingBucket, { amount: bigint; count: number }>();
@@ -323,7 +326,8 @@ function bucketed(
   let overdue = 0n;
 
   for (const invoice of invoices) {
-    const bucket = bucketFor(invoice.dueDate, asOf);
+    // No due date set yet (an advance's balance waiting for its SWIFT): not yet due.
+    const bucket = invoice.dueDate === null ? 'current' : bucketFor(invoice.dueDate, asOf);
     const held = totals.get(bucket) ?? { amount: 0n, count: 0 };
     totals.set(bucket, { amount: held.amount + invoice.outstanding, count: held.count + 1 });
     total += invoice.outstanding;
@@ -382,7 +386,8 @@ export async function payableAgeing(
 ): Promise<Ageing> {
   const open = await tx
     .select({
-      dueDate: apInvoice.dueDate,
+      // None until it was set on purpose (2026-10-07): an unset one is not late.
+      dueDate: knownInvoiceDueSql(apInvoice.dueDate, apInvoice.dueDateSetAt),
       total: apInvoice.totalIqd,
       settled: apInvoice.settledAmountIqd,
     })

@@ -427,6 +427,20 @@ async function main() {
         ('CUS-00001', 'Erbil Retail Group', false, true, true, 'active')
       ON CONFLICT DO NOTHING
     `);
+
+    // An item is bought only from a supplier linked to it (0408, 2026-10-06):
+    // the seed cable is sold by both seed suppliers, Al-Rafidain its default,
+    // so every purchase screen and spec that buys ITM-SEED from them can.
+    await tx.execute(sql`
+      INSERT INTO item_supplier (item_id, supplier_id, is_default, active)
+      SELECT i.id, bp.id,
+             bp.code = 'SUP-00001' AND NOT EXISTS (SELECT 1 FROM item_supplier d WHERE d.item_id = i.id AND d.is_default),
+             true
+        FROM item i
+        JOIN business_partner bp ON bp.code IN ('SUP-00001', 'SUP-00002')
+       WHERE i.code = 'ITM-SEED'
+      ON CONFLICT (item_id, supplier_id) DO NOTHING
+    `);
   });
 
   console.log(

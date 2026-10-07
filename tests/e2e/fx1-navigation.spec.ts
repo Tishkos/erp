@@ -38,9 +38,10 @@ test.describe('FX2 · the module dropdowns', () => {
     await expect(nav.getByRole('link', { name: 'Purchase Invoices', exact: true })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Payment Applications', exact: true })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Supplier Reconciliation', exact: true })).toBeVisible();
-    // The supplier master heads Supplier Balances (by direction, 2026-10-04),
-    // at the address every supplier link already uses (D-FX-1).
-    await expect(nav.getByRole('link', { name: 'Suppliers', exact: true })).toHaveAttribute('href', '/payables/suppliers');
+    // The supplier master is Master Data — Financial's since 2026-10-06 (by
+    // direction), at the address every supplier link already uses (D-FX-1).
+    await expect(nav.getByRole('link', { name: 'Suppliers', exact: true })).toHaveCount(0);
+    await expect(nav.getByRole('link', { name: 'Supplier Statements', exact: true })).toBeVisible();
     for (const gone of ['Customs Pre-Declarations', 'Bills of Lading', 'Containers', 'Bank Loans']) {
       await expect(nav.getByRole('link', { name: gone, exact: true })).toHaveCount(0);
     }
@@ -66,28 +67,30 @@ test.describe('FX2 · the module dropdowns', () => {
     await expect(nav.getByRole('link', { name: 'Logistics Jobs', exact: true })).toHaveCount(0);
   });
 
-  test('Customers are Receivables’ and Suppliers Payables’, not Master Data’s (2026-10-04)', async ({ page }) => {
+  test('Customers and Suppliers are Master Data’s, at their old addresses (2026-10-06)', async ({ page }) => {
+    // By direction, 2026-10-06: "yes move the customer and supplier to master data".
     const nav = page.getByRole('navigation', { name: 'Primary navigation' });
-    await nav.getByRole('button', { name: 'Receivables' }).click();
-    await expect(nav.getByRole('heading', { name: 'Sales & Receivables', exact: true })).toBeVisible();
-    await expect(nav.getByRole('link', { name: 'Customers', exact: true })).toHaveAttribute('href', '/sales/customers');
-
     await nav.getByRole('button', { name: 'Accounting' }).click();
     await expect(nav.getByRole('heading', { name: 'Master Data — Financial', exact: true })).toBeVisible();
-    await expect(nav.getByRole('link', { name: 'Chart of Accounts', exact: true })).toBeVisible();
-    for (const gone of ['Customers', 'Suppliers']) {
-      await expect(nav.getByRole('link', { name: gone, exact: true })).toHaveCount(0);
-    }
+    await expect(nav.getByRole('link', { name: 'Customers', exact: true })).toHaveAttribute('href', '/sales/customers');
+    await expect(nav.getByRole('link', { name: 'Suppliers', exact: true })).toHaveAttribute('href', '/payables/suppliers');
 
-    // Each page's tabs are its new heading's screens.
+    await nav.getByRole('button', { name: 'Receivables' }).click();
+    await expect(nav.getByRole('heading', { name: 'Sales & Invoices', exact: true })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'Customers', exact: true })).toHaveCount(0);
+    await nav.getByRole('button', { name: 'Payables' }).click();
+    await expect(nav.getByRole('heading', { name: 'Supplier Balances', exact: true })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'Suppliers', exact: true })).toHaveCount(0);
+
+    // Each page's tabs are its new heading's screens: the partners lead Master Data — Financial.
     await page.goto('/payables/suppliers');
     const supplierTabs = page.getByRole('navigation', { name: 'Suppliers' });
-    await expect(supplierTabs.getByRole('link', { name: 'Supplier Statements' })).toBeVisible();
-    await expect(supplierTabs.getByRole('link', { name: 'Chart of Accounts' })).toHaveCount(0);
+    await expect(supplierTabs.getByRole('link', { name: 'Customers', exact: true })).toBeVisible();
+    await expect(supplierTabs.getByRole('link', { name: 'Supplier Statements' })).toHaveCount(0);
     await page.goto('/sales/customers');
     const customerTabs = page.getByRole('navigation', { name: 'Customers' });
-    await expect(customerTabs.getByRole('link', { name: 'Sales Invoices' })).toBeVisible();
-    await expect(customerTabs.getByRole('link', { name: 'Chart of Accounts' })).toHaveCount(0);
+    await expect(customerTabs.getByRole('link', { name: 'Suppliers', exact: true })).toBeVisible();
+    await expect(customerTabs.getByRole('link', { name: 'Sales Invoices' })).toHaveCount(0);
   });
 
   test('Treasury & Banking holds the loans and the deposits beside the accounts', async ({ page }) => {

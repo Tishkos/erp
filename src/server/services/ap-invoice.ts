@@ -65,7 +65,13 @@ import type { PostingLineRequest } from '../domain/posting';
 import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
-import { PaymentApplicationError, advanceInCurrency, advanceOf } from '../domain/payment-applications';
+import {
+  PaymentApplicationError,
+  advanceTxnFor,
+  invoiceAdvance,
+  isAdvanceBasis,
+  type AdvanceBasis,
+} from '../domain/payment-applications';
 import * as payableEvents from './payable-events';
 import * as applications from './payment-applications';
 import * as payables from './payables';
@@ -82,7 +88,8 @@ import * as execution from './project-execution';
 import * as advances from './supplier-advance';
 import * as advanceHold from './advance-hold';
 import * as units from './item-units';
-import { dispatch as dispatchAutomation } from './automation-dispatch';
+import * as items from './items';
+import { dispatch as dispatchAutomation, listening as automationListening } from './automation-dispatch';
 import * as workflow from './workflow';
 import { recordWindow } from '../domain/automation-events';
 import * as notifications from './notifications';
@@ -260,6 +267,14 @@ export interface CreateApInvoiceInput {
    */
   readonly advancePercent?: string | null;
   /**
+   * 0411 (2026-10-06, by direction) — how the advance is agreed: 'percent'
+   * (`advancePercent`) or 'amount' (`advanceAmount`, written in the currency
+   * the invoice is agreed in). Left out with a percentage, it is a percentage;
+   * left out without one, there is no advance.
+   */
+  readonly advanceBasis?: string | null;
+  readonly advanceAmount?: string | null;
+  /**
    * Where the advance leaves from and how it travels — a bank or cash account
    * in the import's currency, and an active payment method. Checked here, at
    * entry, where a wrong choice can still be corrected; a mismatch found at
@@ -390,6 +405,103 @@ export async function receivedQuantityFor(
       ),
     );
   return rows.reduce((total, row) => total + parseQuantity(row.quantity), 0n);
+}
+
+/**
+ * The advance an invoice is entered with, checked and written the way the
+ * columns keep it (0411): no advance, a percentage (more than nought, at most
+ * a hundred), or an amount (more than nought, at most the invoice's total in
+ * the currency it is agreed in). A basis chosen with its box left empty is no
+ * advance. A caller that names no basis but a percentage — every caller before
+ * 2026-10-06 — means a percentage, and its "0" still means none.
+ */
+function advanceTermsOf(input: CreateApInvoiceInput): {
+  readonly basis: AdvanceBasis | null;
+  readonly percent: string | null;
+  readonly amount: string | null;
+} {
+  const none = { basis: null, percent: null, amount: null } as const;
+  const asked = (input.advanceBasis ?? '').trim();
+  const percentText = (input.advancePercent ?? '').trim();
+  const amountText = (input.advanceAmount ?? '').trim().replace(/,/g, '');
+  // No upfront payment, said: nothing is kept, whatever else the form sent.
+  if (asked === 'none') return none;
+  if (asked === '') {
+    if (!percentText) return none;
+    if (!/^\d+(\.\d+)?$/.test(percentText) || parseDecimal(percentText, 4n) <= 0n) return none;
+  } else if (!isAdvanceBasis(asked)) {
+    throw new Error(`'${asked}' is not a way to agree an advance: no upfront payment, by percentage, or by amount.`);
+  }
+  const basis: AdvanceBasis = asked === 'amount' ? 'amount' : 'percent';
+  if (basis === 'percent') {
+    if (!percentText) return none;
+    if (!/^\d+(\.\d+)?$/.test(percentText)) throw new Error(`"${percentText}" is not a percentage. Write the share paid in front, e.g. 20.`);
+    const scaled = parseDecimal(percentText, 4n);
+    if (scaled <= 0n) throw new Error('An advance percentage is more than nought — or choose No upfront payment.');
+    if (scaled > 100n * 10_000n) throw new Error('An advance cannot be more than 100% of the invoice.');
+    return { basis, percent: toDecimalString(scaled, 4n), amount: null };
+  }
+  if (!amountText) return none;
+  if (!/^\d+(\.\d+)?$/.test(amountText)) throw new Error(`"${amountText}" is not an amount. Write what is paid in front, e.g. 2000.`);
+  const scaled = parseDecimal(amountText, 4n);
+  if (scaled <= 0n) throw new Error('An advance amount is more than nought — or choose No upfront payment.');
+  const totalIqd = input.lines.reduce(
+    (sum, line) => sum + (line.quantity * line.unitPriceIqd) / 1_000_000n - (line.discountIqd ?? 0n),
+    0n,
+  );
+  // Throws when the amount is more than the invoice comes to, in the invoice's own currency.
+  invoiceAdvance({
+    totalIqd,
+    basis: 'amount',
+    percent: null,
+    amount: toDecimalString(scaled, 4n),
+    agreedCurrency: input.agreedCurrency ?? null,
+    agreedRate: input.agreedRate ?? null,
+  });
+  return { basis, percent: null, amount: toDecimalString(scaled, 4n) };
+}
+
+/**
+ * A draft's lines changed: an advance written as an amount must still be no
+ * more than the invoice comes to (0411) — refused here, in the same
+ * transaction, so the line change does not stand.
+ */
+async function assertAdvanceFits(tx: Tx, id: string): Promise<void> {
+  const { invoice, lines } = await load(tx, id);
+  if (invoice.advanceBasis !== 'amount') return;
+  try {
+    agreedAdvanceOf(invoice, lines);
+  } catch (error) {
+    throw new ApInvoiceStateError(
+      invoice.invoiceNo,
+      invoice.status,
+      `${error instanceof Error ? error.message : String(error)}. Keep the lines, or raise the invoice again with a smaller advance.`,
+    );
+  }
+}
+
+/** The advance an invoice agrees, out of the lines it now has — `invoiceAdvance` over the stored terms. */
+function agreedAdvanceOf(
+  invoice: typeof apInvoice.$inferSelect,
+  lines: readonly (typeof apInvoiceLine.$inferSelect)[],
+) {
+  return invoiceAdvance({
+    totalIqd: lines.reduce((sum, line) => sum + lineValue(line), 0n),
+    basis: invoice.advanceBasis,
+    percent: invoice.advancePercent,
+    amount: invoice.advanceAmount,
+    agreedCurrency: invoice.agreedCurrency,
+    agreedRate: invoice.agreedRate,
+  });
+}
+
+/** How an advance is said in a sentence: "20%", or "USD 2,000" for one written as an amount. */
+function advanceWords(invoice: typeof apInvoice.$inferSelect): string {
+  if (invoice.advanceBasis === 'amount') {
+    return say(invoice.advanceAmount ?? '0', invoice.agreedCurrency && invoice.agreedCurrency !== 'IQD' ? invoice.agreedCurrency : 'IQD');
+  }
+  // "20%", not "20.0000%": the column keeps four places, a sentence does not.
+  return `${(invoice.advancePercent ?? '').replace(/(\.\d*?[1-9])0+$|\.0+$/, '$1')}%`;
 }
 
 /** D12 — the type of fee, active, with the account it posts to by default. */
@@ -535,6 +647,17 @@ export async function create(
     }
   }
 
+  /*
+   * 0408 — an item is bought only from a supplier it is linked to (by
+   * direction, 2026-10-06). Lines taken from a purchase order name the order's
+   * items, which were held to the same rule when the order was raised.
+   */
+  await items.assertBoughtFrom(
+    tx,
+    input.supplierId,
+    input.lines.filter((line) => !line.purchaseOrderLineId).map((line) => line.itemCode ?? null),
+  );
+
   const supplierNumber = input.supplierInvoiceNo.trim();
 
   /*
@@ -632,8 +755,16 @@ export async function create(
    * the import's currency (D3: an import is paid from an account in its own
    * currency) while the form is still in front of the accountant.
    */
-  // No percentage, no advance: an account or a method left on the form then means nothing and is not kept.
-  const hasAdvance = Boolean((input.advancePercent ?? '').trim());
+  /*
+   * 0411 — the advance by percentage or by amount (2026-10-06, by direction),
+   * never more than the invoice: a percentage above nought and at most a
+   * hundred, an amount above nought and at most the total in the currency the
+   * invoice is agreed in. `invoiceAdvance` is the arithmetic the form, the
+   * record, the print and the posting all use.
+   */
+  const advance = advanceTermsOf(input);
+  // No advance, nothing to keep: an account or a method left on the form then means nothing and is not kept.
+  const hasAdvance = advance.basis !== null;
   const advancePaidFromAccountId = hasAdvance ? input.advancePaidFromAccountId?.trim() || null : null;
   const advancePaymentMethodCode = hasAdvance ? input.advancePaymentMethodCode?.trim() || null : null;
   if (advancePaidFromAccountId) {
@@ -714,8 +845,19 @@ export async function create(
       branchCode: input.branchCode,
       invoiceDate: input.invoiceDate,
       dueDate,
+      /*
+       * A due date written on the document as it is raised — an expense's, a
+       * contract period's, a debit note's, one said in chat — is set on
+       * purpose, and stamped so. A date the service fills in itself (the
+       * supplier's terms, or the entry day) is not: the balance of an advance
+       * falls due once the SWIFT is in, and the import asks for it then
+       * (2026-10-07). The purchase invoice form asks for none.
+       */
+      dueDateSetAt: input.dueDate?.trim() ? new Date() : null,
       currency: input.currency ?? 'IQD',
-      advancePercent: input.advancePercent ?? null,
+      advanceBasis: advance.basis,
+      advancePercent: advance.percent,
+      advanceAmount: advance.amount,
       advancePaidFromAccountId,
       advancePaymentMethodCode,
       agreedCurrency: input.agreedCurrency ?? null,
@@ -1024,6 +1166,55 @@ export async function setChosenAccounts(
   });
 }
 
+/**
+ * The supplier's own invoice or receipt number, corrected on a draft (2026-10-06,
+ * by direction: "they usually give us a receipt and we need their receipt
+ * number too").
+ *
+ * The same §15 control as at entry: one number per supplier, so a number this
+ * supplier already billed under is refused with the invoice that holds it.
+ * Cleared, the invoice takes its own number again — the column is never empty.
+ * The import application keeps the reference it was opened with: its reference
+ * is its key, and it is not this invoice's to rename.
+ */
+export async function setSupplierInvoiceNo(tx: Tx, ctx: ActorContext, id: string, value: string): Promise<void> {
+  const { invoice } = await editableDraft(tx, ctx, id);
+  const typed = (value ?? '').trim();
+  const next = typed || invoice.invoiceNo;
+  if (next === invoice.supplierInvoiceNo) return;
+
+  if (typed) {
+    const [existing] = await tx
+      .select({ invoiceNo: apInvoice.invoiceNo })
+      .from(apInvoice)
+      .where(
+        and(
+          eq(apInvoice.supplierId, invoice.supplierId),
+          eq(apInvoice.supplierInvoiceNo, typed),
+          sql`${apInvoice.id} <> ${id}`,
+        ),
+      )
+      .limit(1);
+    if (existing) throw new DuplicateSupplierInvoiceError(typed, existing.invoiceNo);
+  }
+
+  await tx
+    .update(apInvoice)
+    .set({ supplierInvoiceNo: next, updatedAt: new Date() })
+    .where(eq(apInvoice.id, id));
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'ap_invoice.supplier_invoice_no_changed',
+    objectType: PERMISSION_OBJECT,
+    objectId: id,
+    branchCode: invoice.branchCode,
+    before: { supplierInvoiceNo: invoice.supplierInvoiceNo },
+    after: { supplierInvoiceNo: next },
+    outcome: 'success',
+  });
+}
+
 export async function saveLine(
   tx: Tx,
   ctx: ActorContext,
@@ -1054,6 +1245,8 @@ export async function saveLine(
   if (!stockItem.active) {
     throw new ApInvoiceLineError(lineNo, `names ${stockItem.code}, which is no longer active.`);
   }
+  // 0408 — the item must be one this invoice's supplier sells.
+  await items.assertBoughtFrom(tx, invoice.supplierId, [stockItem.code]);
 
   const [house] = await tx
     .select({ code: warehouse.code })
@@ -1111,6 +1304,8 @@ export async function saveLine(
   // The match is recomputed on every change rather than on demand — 05.4's gate
   // asks for a status that is the answer to "as of now".
   await rematch(tx, id);
+  // 0411 — an advance written as an amount stays within what the invoice comes to.
+  await assertAdvanceFits(tx, id);
 
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,
@@ -1169,6 +1364,7 @@ export async function removeLine(
 
   await restateOwnStock(tx, id, invoice.receivesOwnStock);
   await rematch(tx, id);
+  await assertAdvanceFits(tx, id);
 
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,
@@ -1445,6 +1641,56 @@ export async function submit(tx: Tx, ctx: ActorContext, id: string): Promise<voi
     },
     { window: recordWindow(submittedAt.toISOString()) },
   );
+}
+
+/**
+ * A super user's own draft, approved and posted in one step — 2026-10-06, by
+ * direction: "send for approval not needed when super user raises the invoice
+ * … create → approve".
+ *
+ * Sending for approval is a request to somebody else; a super user who raised
+ * the invoice is the somebody else, so the request is recorded and answered in
+ * the same transaction: `submit` (audited `ap_invoice.submitted`, the automation
+ * fact recorded) and then `post` (audited `ap_invoice.posted`, the journal, the
+ * stock, the advance's payment application). The row is locked first, so a
+ * double press posts once. The super user exception is the one 0278 made for
+ * every four-eyes check: the account that carries the flag is the owner's.
+ *
+ * Everybody else keeps the road as it was — Send for approval, then Approve and
+ * post by whoever holds both grants — and is refused here.
+ *
+ * A rule that reviews submitted invoices (Workflow Automation's
+ * `invoice_over_threshold`) still gets its say: when one is listening the
+ * invoice stops at Submitted and the answer says so (`held`); the runner opens
+ * the review, and `post` refuses until a second person has approved it — the
+ * hold works exactly as it does on the ordinary road.
+ */
+export async function approveDraft(tx: Tx, ctx: ActorContext, id: string): Promise<{ posted: boolean; held: boolean }> {
+  const { invoice } = await load(tx, id, { lock: true });
+  if (!ctx.principal.isSuperUser) {
+    throw new ApInvoiceStateError(
+      invoice.invoiceNo,
+      invoice.status,
+      'only a super user approves their own draft in one step; send it for approval, and somebody who holds approve and post posts it.',
+    );
+  }
+  if (invoice.status !== 'draft') {
+    throw new ApInvoiceStateError(invoice.invoiceNo, invoice.status, 'only a draft is approved in one step.');
+  }
+  if (invoice.createdBy !== ctx.principal.userId) {
+    throw new ApInvoiceStateError(
+      invoice.invoiceNo,
+      invoice.status,
+      'it was raised by somebody else; it is sent for approval by whoever raised it, then approved and posted.',
+    );
+  }
+
+  await submit(tx, ctx, id);
+  if (await automationListening(tx, 'ap_invoice.submitted')) {
+    return { posted: false, held: true };
+  }
+  await post(tx, ctx, id);
+  return { posted: true, held: false };
 }
 
 /** What an automation rule is told about an invoice: who, how much, from whom (IQD, exact). */
@@ -1747,10 +1993,9 @@ export async function post(
    * for In Process land in the branch's hold instead; `advance-hold.release`
    * moves them on when a payment application of the import is Paid.
    */
-  const agreesAdvance =
-    invoice.isImport &&
-    Boolean(invoice.payableId) &&
-    advanceOf(lines.reduce((sum, line) => sum + lineValue(line), 0n), invoice.advancePercent) !== null;
+  // By percentage or by amount (0411) — `invoiceAdvance` over the lines as they stand.
+  const agreed = agreedAdvanceOf(invoice, lines);
+  const agreesAdvance = invoice.isImport && Boolean(invoice.payableId) && agreed !== null;
   const inProcessHouse = agreesAdvance ? await advanceHold.inProcessWarehouseOf(tx, invoice.branchCode) : null;
   const holdsGoods = agreesAdvance && inProcessHouse !== null && lines.some((line) => line.warehouseCode === inProcessHouse);
   const holdHouse = holdsGoods ? await advanceHold.holdWarehouseOf(tx, invoice.branchCode) : null;
@@ -1982,9 +2227,10 @@ export async function post(
    * verified supplier account and the instalment trigger, so this moves no
    * money.
    */
-  const advanceIqd = advanceOf(payableIqd, invoice.advancePercent);
-  // "20%", not "20.0000%": the column keeps four places, a sentence does not.
-  const advancePercent = (invoice.advancePercent ?? '').replace(/(\.\d*?[1-9])0+$|\.0+$/, '$1');
+  // The payable amount — a share of the total, or the amount written (0411).
+  const advanceIqd = agreed?.iqd ?? null;
+  // "20%" or "2,000 USD": what was agreed, as a sentence says it.
+  const advancePercent = advanceWords(invoice);
   if (holdHouse && invoice.payableId && advanceIqd !== null) {
     await payableEvents.record(tx, {
       payableId: invoice.payableId,
@@ -1993,7 +2239,7 @@ export async function post(
       sourceId: id,
       sourceNo: invoice.invoiceNo,
       summary:
-        `${invoice.invoiceNo} agrees ${advancePercent}% in front, so its goods wait in ${holdHouse} — ` +
+        `${invoice.invoiceNo} agrees ${advancePercent} in front, so its goods wait in ${holdHouse} — ` +
         'On Process (Without SWIFT) — until a payment application of this import is Paid; then they move to In Process.',
       actorUserId: ctx.principal.userId,
     });
@@ -2008,7 +2254,7 @@ export async function post(
         objectType: PERMISSION_OBJECT,
         objectId: id,
         branchCode: invoice.branchCode,
-        after: { why: 'the invoice names no import application', percent: invoice.advancePercent },
+        after: { why: 'the invoice names no import application', basis: invoice.advanceBasis, percent: invoice.advancePercent, amount: invoice.advanceAmount },
         outcome: 'success',
       });
     } else {
@@ -2022,7 +2268,8 @@ export async function post(
        * cannot say — typed in dinars against an import in dollars: THEN a rate
        * would have to be chosen, and that stays the accountant's.
        */
-      const advanceTxn = advanceInCurrency(advanceIqd, owner.currency, invoice.agreedCurrency, invoice.agreedRate);
+      // By amount: exactly the amount written, when the import is in the invoice's own currency (0411).
+      const advanceTxn = advanceTxnFor(agreed!, owner.currency);
       if (advanceTxn === null) {
         await payableEvents.record(tx, {
           payableId: invoice.payableId,
@@ -2031,7 +2278,7 @@ export async function post(
           sourceId: id,
           sourceNo: invoice.invoiceNo,
           summary:
-            `${invoice.invoiceNo} asks for ${advancePercent}% in front — ` +
+            `${invoice.invoiceNo} asks for ${advancePercent} in front — ` +
             `${say(toDecimalString(advanceIqd, 4n))} — but ${owner.payableNo} is in ${owner.currency} and the invoice ` +
             `was agreed in ${invoice.agreedCurrency ?? 'IQD'}. Raise the payment application by hand at the rate you mean to use.`,
           actorUserId: ctx.principal.userId,
@@ -2050,7 +2297,7 @@ export async function post(
           sourceId: id,
           sourceNo: invoice.invoiceNo,
           summary:
-            `${invoice.invoiceNo} agrees ${advancePercent}% in front — ` +
+            `${invoice.invoiceNo} agrees ${advancePercent} in front — ` +
             `${say(toDecimalString(advanceIqd, 4n))} — and names no account to pay it from. ` +
             'Raise the payment application when the account is decided.',
           actorUserId: ctx.principal.userId,
@@ -2092,7 +2339,7 @@ export async function post(
               payeeBankAccountId: payee?.id ?? null,
               amountTxn: advanceTxn,
               note:
-                `${advancePercent}% advance on ${invoice.invoiceNo}, ` +
+                `${advancePercent} advance on ${invoice.invoiceNo}, ` +
                 `raised when it posted (${say(toDecimalString(payableIqd, 4n))} total).`,
             });
             return { id: made.id, applicationNo: made.applicationNo };
@@ -2116,7 +2363,7 @@ export async function post(
             sourceId: id,
             sourceNo: invoice.invoiceNo,
             summary:
-              `${raised.applicationNo} drafted for ${advancePercent}% of ${invoice.invoiceNo} — ` +
+              `${raised.applicationNo} drafted for ${advancePercent} ${invoice.advanceBasis === 'amount' ? 'on' : 'of'} ${invoice.invoiceNo} — ` +
               `${asked} (${say(toDecimalString(advanceIqd, 4n))}). Send it for approval; once it is Paid the goods move to In Process.`,
             actorUserId: ctx.principal.userId,
           });
@@ -2128,7 +2375,7 @@ export async function post(
             sourceId: id,
             sourceNo: invoice.invoiceNo,
             summary:
-              `${invoice.invoiceNo} asks for ${advancePercent}% in front — ${asked} — ` +
+              `${invoice.invoiceNo} asks for ${advancePercent} in front — ${asked} — ` +
               `and the payment application was refused: ${refusal} Raise it by hand.`,
             actorUserId: ctx.principal.userId,
           });
@@ -2652,6 +2899,8 @@ export async function list(tx: Tx) {
       supplierCode: businessPartner.code,
       invoiceDate: apInvoice.invoiceDate,
       dueDate: apInvoice.dueDate,
+      // A due date is shown only once it was set on purpose (2026-10-07).
+      dueDateSetAt: apInvoice.dueDateSetAt,
       // What the invoice comes to. `total_iqd` is written at posting, so on a
       // draft it is zero — and a register whose Amount column reads nothing for
       // every unposted invoice is a register nobody can scan. Until it is

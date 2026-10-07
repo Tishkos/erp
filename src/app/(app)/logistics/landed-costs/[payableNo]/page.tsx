@@ -20,6 +20,8 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as landedService from '@/server/services/landed-cost';
 import * as payables from '@/server/services/payables';
 import * as recordNotes from '@/server/services/record-notes';
+import * as importFiles from '@/server/services/import-attachments';
+import { GatheredFiles } from '../../../payables/import-files';
 import { landedFor } from '../../../payables/[payableNo]/load';
 import { LandedChargesTable, LandedCostSection, landedChargesTotal } from '../../../payables/landed-cost-section';
 
@@ -74,6 +76,8 @@ export default async function LandedCostSheetPage({ params, searchParams }: { pa
         view,
         landed: await landedFor(tx, view, may),
         notes: await recordNotes.listNotes(tx, { object: 'payable_landed_cost', recordId: view.payable.id }),
+        // The files of the documents its charges came from come back to its paperclip (2026-10-07), as on the import's page.
+        related: (await importFiles.gather(tx, principal, view.payable.id)).landed_cost,
       };
     } catch (error) {
       if (isNotFoundError(error)) return null;
@@ -127,7 +131,13 @@ export default async function LandedCostSheetPage({ params, searchParams }: { pa
           <>
             {/* Printer, paperclip, notes, clock — the four doors in the standing order (2026-10-04). */}
             <ExportIcon exportKey="landed_cost_final" id={row.payableNo} title={lc('final_print')} />
-            <RecordAttachmentsDoor mayAttach={can(principal, 'create', 'attachment')} object="payable_landed_cost" recordId={row.id} />
+            <RecordAttachmentsDoor
+              mayAttach={can(principal, 'create', 'attachment')}
+              object="payable_landed_cost"
+              recordId={row.id}
+              related={<GatheredFiles sources={found.related} userId={principal.userId} />}
+              relatedCount={importFiles.countOf(found.related)}
+            />
             <RecordNotesDoor notes={found.notes} object="payable_landed_cost" recordId={row.id} />
             <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
               <RecordHistory

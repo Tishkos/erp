@@ -15,6 +15,8 @@ import * as receipts from '@/server/services/customer-receipt';
 import { gapsFor } from '@domain/setup-gaps';
 import { createReceipt } from '../actions';
 import { businessToday } from '@/server/domain/business-date';
+import { IntentSelect } from '@/components/admin/intent-select';
+import { IntentDateField } from '@/components/admin/intent-date-field';
 
 /**
  * Recording a Receipt — Operations build, block 6.
@@ -115,12 +117,11 @@ export default async function NewReceiptPage({ searchParams }: { searchParams: S
       label: column('posting_date'),
       control: true,
       value: (
-        <input
+        <IntentDateField
           aria-label={column('posting_date')}
           defaultValue={today}
           name="receipt_date"
           required
-          type="date"
         />
       ),
     },
@@ -144,14 +145,14 @@ export default async function NewReceiptPage({ searchParams }: { searchParams: S
       label: t('customer_receipts.payment_method'),
       control: true,
       value: (
-        <select aria-label={t('customer_receipts.payment_method')} defaultValue="" name="payment_method_code">
+        <IntentSelect aria-label={t('customer_receipts.payment_method')} defaultValue="" name="payment_method_code">
           <option value="">{t('customer_receipts.payment_method_none')}</option>
           {methods.map((method) => (
             <option key={method.code} value={method.code}>
               {`${method.code} · ${method.name}`}
             </option>
           ))}
-        </select>
+        </IntentSelect>
       ),
     },
     {

@@ -10,6 +10,11 @@ import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as hrReports from '@/server/services/hr-reports';
+import { BarList, Legend } from '@/components/admin/charts';
+import { AreaTrend } from '@/components/charts/area-trend';
+import { sharesOf } from '@/components/charts/figures';
+import { directionOf } from '@/i18n/config';
+import { chartNumber } from '@/server/domain/dashboard-charts';
 
 /**
  * HR Dashboard — REQ-HR-001 Stage HR-6. Copies the Dashboard: bands of
@@ -35,6 +40,10 @@ export default async function HrDashboardPage() {
   const view = await withCurrentUser((tx) => hrReports.dashboard(tx, { principal }));
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
   const day = (value: string) => formatBusinessDate(value, locale as Locale);
+  const charts = await getTranslations('home.chart');
+  const count = (value: number) => new Intl.NumberFormat(locale).format(value);
+  const monthOf = (month: string, style: 'short' | 'long') =>
+    new Date(`${month}-01T00:00:00Z`).toLocaleString(locale, style === 'long' ? { month: 'long', year: 'numeric', timeZone: 'UTC' } : { month: 'short', timeZone: 'UTC' });
 
   return (
     <AdminPage back={{ href: '/', label: t('dashboard_label') }} subtitle={x('subtitle', { day: day(view.asOf) })} tabs={<SectionTabs route="/hr/dashboard" />} title={x('title')} variant="sap">
@@ -45,6 +54,18 @@ export default async function HrDashboardPage() {
           <Figure href="/hr/reports?report=headcount" label={x('leavers')} value={view.leaversThisMonth} />
           <Figure href="/hr/leave" label={x('on_leave_today')} value={view.onLeaveToday.length} />
         </Figures>
+        {/* The headcount by department as bars, each with its share — the same rows as the table under it. */}
+        {view.byDepartment.length > 1 ? (
+          <div className="border-border border-t px-4 pt-3 pb-4 sm:px-5">
+            <p className="m-0 mb-3 font-medium text-muted-fg text-xs">{charts('headcount_title')}</p>
+            <BarList
+              rows={(() => {
+                const shares = sharesOf(view.byDepartment.map((d) => String(d.headcount)), locale as Locale);
+                return view.byDepartment.map((d, index) => ({ key: d.departmentCode, label: d.departmentName, value: d.headcount, text: count(d.headcount), share: shares[index] }));
+              })()}
+            />
+          </div>
+        ) : null}
         {view.byDepartment.length > 0 ? (
           <BandTable headings={[x('department'), { label: x('headcount'), numeric: true }]}>
             {view.byDepartment.map((d) => (
@@ -96,6 +117,33 @@ export default async function HrDashboardPage() {
 
       {view.payrollCost && view.payrollCost.length > 0 ? (
         <Band href="/hr/reports?report=payroll" hrefLabel={x('open_register')} title={x('payroll_cost')}>
+          {/* Gross pay and the employer's cost, month by month, from the rows of the table under it. */}
+          {view.payrollCost.length > 1 ? (
+            <div className="border-border border-t px-4 pt-4 pb-2 sm:px-5">
+              <Legend
+                series={[
+                  { label: x('gross'), token: '--chart-series-1' },
+                  { label: x('employer_cost'), token: '--chart-series-2' },
+                ]}
+              />
+              <div className="mt-3" />
+              <AreaTrend
+                height={200}
+                locale={locale}
+                points={view.payrollCost.map((p) => ({
+                  label: monthOf(p.month, 'short'),
+                  title: monthOf(p.month, 'long'),
+                  values: [chartNumber(p.grossIqd), chartNumber(p.employerCostIqd)],
+                  texts: [money(p.grossIqd), money(p.employerCostIqd)],
+                }))}
+                rtl={directionOf(locale) === 'rtl'}
+                series={[
+                  { label: x('gross'), color: 'var(--chart-series-1)' },
+                  { label: x('employer_cost'), color: 'var(--chart-series-2)' },
+                ]}
+              />
+            </div>
+          ) : null}
           <BandTable headings={[x('month'), { label: x('people_paid'), numeric: true }, { label: x('gross'), numeric: true }, { label: x('employer_cost'), numeric: true }]}>
             {view.payrollCost.map((p) => (
               <tr key={p.month}>

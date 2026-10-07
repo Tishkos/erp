@@ -91,13 +91,13 @@ Once a day, in the morning, the system checks the HR records and sends an in-app
 The limits (days) are set on Settings → Administration → HR Settings → **Limits for the morning sweep** (حدود المراجعة الصباحية).
 
 ## Dashboard (لوحة المعلومات)
-Path: HR → Human Resources → Dashboard   |   Arabic: HR ← الموارد البشرية ← لوحة المعلومات
+HR → People & Organisation → Dashboard   |   Arabic: HR ← الموظفون والهيكل التنظيمي ← لوحة المعلومات
 Address: /hr/dashboard
 Needs: `view` on `hr_report` to open it. The Payroll cost band also needs `view` on `payroll_run`; the Advances & Loans band needs `view` on `employee_advance`; "Reviews in progress" counts only with `view` on `performance_review`; "Documents expiring" counts only with `view` on `employee_document`.
 What it is for: A read-only page titled **HR Dashboard** (لوحة الموارد البشرية): the people and what waits for HR today. Nothing is typed here; every figure is a link to the screen that proves it. Figures count only the branches you work in.
 
 ### How to read the bands — Dashboard
-1. Open HR → Human Resources → Dashboard. The subtitle shows today's date.
+HR → People & Organisation → Dashboard. The subtitle shows today's date.
 2. Band **People** (الأشخاص), with the link **Open Employees** (فتح الموظفين):
    - **Headcount** (عدد الموظفين) — employees whose status is Active or Suspended. Click → Employees.
    - **Joined this month** (انضموا هذا الشهر) — hire date from the 1st of this month to today. Click → Reports, Headcount.
@@ -120,13 +120,13 @@ What it is for: A read-only page titled **HR Dashboard** (لوحة الموار�
 - A band is missing — that is not an error: the Payroll cost and Advances bands need their own permissions, and "On leave today" is drawn only when someone is on leave.
 
 ## Employees (الموظفون)
-Path: HR → Human Resources → Employees   |   Arabic: HR ← الموارد البشرية ← الموظفون
+HR → People & Organisation → Employees   |   Arabic: HR ← الموظفون والهيكل التنظيمي ← الموظفون
 Address: /hr/employees   (a record: /hr/employees/<employee number>, for example /hr/employees/EMP-HQ-0001)
 Needs: `view` on `employee` to open the list and a record; `create` on `employee` for New employee. On the record: `edit_draft` on `employee` for Edit details, Move and adding a note; `administer` on `employee` for Suspend, Reinstate, End employment and Link sign-in; `view` on `employee_compensation` to see Compensation and Pay components and `create` on `employee_compensation` to add rows to them; `view` on `leave_request` to see the leave sections and `administer` on `leave_request` for an opening balance or correction; `view` on `attendance` for the month; `view` on `payroll_run` for payslips; `view` on `employee_advance` for advances; `view` on `employee_asset` for equipment, `create` on it to hand out and `edit_draft` on it to take back; `view` on `performance_review`, `employee_document`, `employee_request` and `recruitment` for those sections.
 What it is for: One record per person — who works here, in which branch, department and position, under which manager, with every dated change kept as history. The record is also the place where the person's salary, pay components, leave balances, equipment and everything else HR holds about them is read.
 
 ### How to find an employee — Employees
-1. Open HR → Human Resources → Employees.
+HR → People & Organisation → Employees.
 2. Type part of the number or name in **Search this list** (ابحث في هذه القائمة) and press Enter; **Clear** (مسح) empties it. The search looks in every column of the list.
 3. Or narrow the list: **View** (العرض) → **All** (الكل), **Active** (الفعّالون), **Suspended** (الموقوفون), **Ended** (المنتهون); **Department** (القسم) → one department; then **Filter** (تصفية).
 4. Columns: Reference (المرجع), Name (الاسم), Department (القسم), Position (المنصب), Manager (المدير), Hire date (تاريخ التعيين), Employment (نوع التوظيف), Status (الحالة).
@@ -134,7 +134,7 @@ What it is for: One record per person — who works here, in which branch, depar
 Needs: `view` on `employee`. You see only employees of the branches you work in.
 
 ### How to add an employee — Employees
-1. Open HR → Human Resources → Employees and press **New employee** (موظف جديد).
+1. Open HR → People & Organisation → Employees and press **New employee** (موظف جديد).
 2. Fill **Full name (English)** (required), choose the **Department** (required), the **Hire date** (required, today by default) and the **Employment** kind; the other boxes are optional (see "Fields — Employees").
 3. Press **Create** (إنشاء).
 4. The record opens with **Saved.** The system has given the number (EMP-<branch>-<serial>), set the status to **Active** (فعّال) and written the first history rows. The employee belongs to the branch you are working in.
@@ -149,7 +149,7 @@ Needs: `create` on `employee`. The button is not shown without it.
 Needs: `create` on `app_user` (the Users screen); no HR permission is needed for this.
 
 ### How to open an employee record and what it shows — Employees
-1. Open HR → Human Resources → Employees and click the employee's number.
+1. Open HR → People & Organisation → Employees and click the employee's number.
 2. Top window **Employees** with the number: Reference, Status, Full name (English), Full name (Arabic), National ID, Date of birth, Phone, Branch, Department, Position, Manager, Hire date, **Hired from** (عُيّن من — the application, when the person came through Recruitment), Employment, **Contract ends** (نهاية العقد — when set), End date and End reason (when ended), **Sign-in** (حساب الدخول — the linked user's e-mail or "— not linked —"), Address, Emergency contact.
 3. Under it, the lines **History** (السجل): Effective (من تاريخ), What changed (ما تغيّر), Before (قبل), After (بعد), Reason (السبب), Recorded (سُجّل), By (بواسطة). One row per dated change: Hired, Branch, Department, Position, Manager, Status, Employment, Contract end, Employment ended, "Salary (see compensation)" (that the salary changed — never the figure), "Pay component <code>".
 4. At the foot of that window, the buttons you are allowed: **Edit details** (تعديل البيانات), **Move** (نقل), **Suspend** (إيقاف), **Reinstate** (إعادة), **End employment** (إنهاء الخدمة), **Link sign-in** (ربط حساب الدخول).
@@ -274,13 +274,13 @@ Compensation: **Effective from**, **Base salary (IQD)** — required, a monthly 
 - "Permission denied: 'administer' on 'employee' is not granted to this user." (or another action) — see the Needs line of this screen.
 
 ## Departments (الأقسام)
-Path: HR → Human Resources → Departments   |   Arabic: HR ← الموارد البشرية ← الأقسام
+HR → People & Organisation → Departments   |   Arabic: HR ← الموظفون والهيكل التنظيمي ← الأقسام
 Address: /hr/departments   (a record: /hr/departments/<code>, for example /hr/departments/DEP-0003). The old address /hr/organisation opens this screen.
 Needs: `view` on `org_structure` to open the list and a record. `create` on `department` for New department; on the record `configure` on `department` for Edit and `administer` on `department` for Deactivate and Reactivate.
 What it is for: Every department with its people and its seats (positions). A department here is the company's one department list — the same one the ledger uses for its department dimension and that users are scoped to.
 
 ### How to read the list and open a department — Departments
-1. Open HR → Human Resources → Departments.
+HR → People & Organisation → Departments.
 2. Columns: Code (الرمز), Name (الاسم), **Parent department** (القسم الأعلى), **Manager** (المدير), **Headcount** (عدد الموظفين — people in the department whose employment has not ended), **Seats** (المناصب — active positions of the department), **Vacant** (شاغرة — active positions nobody holds), Status: **Active** (نشط) / **Inactive** (غير نشط).
 3. Search with **Search this list**; filter with **View** (العرض) → All (الكل) / Active (نشط) / Inactive (غير نشط) → **Filter** (تصفية).
 4. Click the code to open the department's record. It shows: Code, Status, Name, Parent department, Manager, Headcount, Seats, Vacant, **Sub-departments** (الأقسام الفرعية); the lines **Seats** (المناصب) — each position in reporting order (a report is indented under the seat it reports to) with **Reports to** (يتبع إلى) and **Held by** (يشغله: the holders' names, or **Vacant** — شاغر); a last line **No position yet** (بلا منصب بعد) names people of the department who have no position; then the window **People** (الموظفون): Reference, Name, Position, Branch, Hire date, Status; then the Audit log.
@@ -289,7 +289,7 @@ The **Manager** shown is the department manager set on the master-data Departmen
 Needs: `view` on `org_structure`.
 
 ### How to add a department — Departments
-1. Open HR → Human Resources → Departments and press **New department** (قسم جديد).
+1. Open HR → People & Organisation → Departments and press **New department** (قسم جديد).
 2. Type the **Name** (الاسم, required). Optionally choose the **Parent department** (القسم الأعلى); "None — top level" (لا شيء — مستوى أعلى) makes it a top-level department.
 3. Press **Create** (إنشاء). The system gives the code (DEP-<serial>) and opens the record.
 Needs: `create` on `department`.
@@ -319,20 +319,20 @@ Needs: `configure` on `department` to edit; `administer` on `department` to deac
 - "Permission denied: 'create' on 'department' is not granted to this user." — department rows are shared with Finance; ask an administrator.
 
 ## Positions (المناصب)
-Path: HR → Human Resources → Positions   |   Arabic: HR ← الموارد البشرية ← المناصب
+HR → People & Organisation → Positions   |   Arabic: HR ← الموظفون والهيكل التنظيمي ← المناصب
 Address: /hr/positions   (a record: /hr/positions/<code>, for example /hr/positions/POS-0004)
 Needs: `view` on `org_structure` to open the list and a record. `configure` on `hr_setting` for New position, Edit, Deactivate and Reactivate.
 What it is for: The seats of the organisation: each position has a title, a department, the position it reports to, and the people who hold it. People are seated in a position on their employee record; a vacancy in Recruitment is always for a position.
 
 ### How to read the list and open a position — Positions
-1. Open HR → Human Resources → Positions.
+HR → People & Organisation → Positions.
 2. Columns: Code (الرمز), **Position** (المنصب — the title), **Department** (القسم), **Reports to** (يتبع إلى), **Held by** (يشغله — how many people hold it), Status Active / Inactive.
 3. Filter with **View** (العرض) → All (الكل), Active (نشط), **Vacant** (شاغر — active and held by nobody), Inactive (غير نشط); and **Department** (القسم); then **Filter** (تصفية). Search with **Search this list**.
 4. Click the code to open the record: Code, Status, Title (English), Title (Arabic), Department (a link), Reports to (a link), Held by; the lines **Held by** (يشغله) — Reference, Name, Branch, Hire date, Status of each person seated in it, or **Vacant** (شاغر); the window **Positions that report to it** (المناصب التابعة له); then the Audit log.
 Needs: `view` on `org_structure`.
 
 ### How to add a position — Positions
-1. Open HR → Human Resources → Positions and press **New position** (منصب جديد).
+1. Open HR → People & Organisation → Positions and press **New position** (منصب جديد).
 2. Type the **Title (English)** (المسمى (إنجليزي), required) and optionally the **Title (Arabic)** (المسمى (عربي)).
 3. Choose the **Department** (القسم, required) and, if it reports to another seat, **Reports to** (يتبع إلى); leave "Nobody — top of the department" (لا أحد — أعلى القسم) for the top seat.
 4. Press **Create** (إنشاء). The system gives the code (POS-<serial>) and opens the record.
@@ -365,13 +365,13 @@ Needs: `configure` on `hr_setting`.
 - "Permission denied: 'configure' on 'hr_setting' is not granted to this user." — creating and changing positions is an HR-settings right.
 
 ## Attendance (الحضور)
-Path: HR → Human Resources → Attendance   |   Arabic: HR ← الموارد البشرية ← الحضور
+HR → Time & Pay → Attendance   |   Arabic: HR ← الدوام والرواتب ← الحضور
 Address: /hr/attendance
 Needs: `view` on `attendance` to open the sheet; `create` on `attendance` to record or correct a day.
 What it is for: The day sheet of one branch: for each person, whether they were present or absent on a day, with optional in and out times. Leave, rest days and public holidays are not typed here — they are read from the leave requests and the working calendar. Payroll reads this sheet for absences.
 
 ### How to record a day's attendance — Attendance
-1. Open HR → Human Resources → Attendance.
+HR → Time & Pay → Attendance.
 2. In the filter line choose the **Branch** (الفرع — only branches you work in), optionally a **Department** (القسم; "All departments" — كل الأقسام), and the **Day** (اليوم — today by default); press **Show** (عرض).
 3. The sheet lists everyone who works in that branch on that day (hired on or before it, employment not ended before it), by department. Its title shows the day and branch and "N of M recorded" (سُجّل N من M).
 4. For each person choose **Recorded** (المسجَّل): **Present** (حاضر) or **Absent** (غائب). Leaving it at "—" leaves that person's day as it was.
@@ -381,7 +381,7 @@ A person on approved leave is shown as **On leave** (في إجازة) with the l
 Needs: `create` on `attendance`. Without it the sheet is read-only.
 
 ### How to correct a day already recorded — Attendance
-1. Open HR → Human Resources → Attendance, choose the same Branch and **Day**, press **Show** (عرض).
+HR → Time & Pay → Attendance, choose the same Branch and **Day**, press **Show** (عرض).
 2. Change the person's **Recorded** value between Present and Absent, or the times or note.
 3. Press **Save the sheet** (حفظ الكشف). The day's audit entry keeps the before and after of each changed person.
 A recorded day can be switched between Present and Absent but cannot be set back to "not recorded". A day that was wrongly marked absent because the person was on leave is fixed by an approved leave request: the leave wins over the sheet.
@@ -424,13 +424,13 @@ Each row of the sheet:
 - "Permission denied: 'create' on 'attendance' is not granted to this user."
 
 ## Leave Management (إدارة الإجازات)
-Path: HR → Human Resources → Leave Management   |   Arabic: HR ← الموارد البشرية ← إدارة الإجازات
+HR → Time & Pay → Leave Management   |   Arabic: HR ← الدوام والرواتب ← إدارة الإجازات
 Address: /hr/leave   (a record: /hr/leave/<request number>, for example /hr/leave/LVE-HQ-2026-000012)
 Needs: `view` on `leave_request` to open the list; `create` on `leave_request` for New leave request. On a record: Edit and Send for decision — the person themself, or `edit_draft` on `leave_request`; Approve and Refuse — the person's manager (through the manager link, no permission needed) or `approve` on `leave_request`, and never whoever entered the request nor the person on leave; Cancel — a draft or waiting request by the person or with `edit_draft`, an approved leave only with `administer` on `leave_request`. Files need `create` on `attachment`; a note needs `edit_draft` on `leave_request`; the printed copy needs `print` (PDF) or `export` (Excel, Word) on `leave_request`. A record page opens for users of the record's branch, the person and the person's manager.
 What it is for: Leave requests: each is counted in working days on the working calendar, checked against the person's balance of that leave type, and decided by the person's manager or an HR manager. An approved request is what makes the days read "On leave" on Attendance and what payroll reads for unpaid leave.
 
 ### How to find leave requests — Leave Management
-1. Open HR → Human Resources → Leave Management.
+HR → Time & Pay → Leave Management.
 2. Search by request number, employee number or name in **Search this list**.
 3. Filter: **View** (العرض) → **Waiting for decision** (بانتظار القرار), **Approved** (موافق عليها), **Draft** (مسودة), **Refused** (مرفوضة), **Cancelled** (ملغاة); **Leave type** (نوع الإجازة) → one type; then **Filter** (تصفية).
 4. Columns: Reference (المرجع), Employee (الموظف), Leave type (نوع الإجازة), From (من), To (إلى), Days (الأيام), Status (الحالة). Requests waiting for a decision come first, then drafts.
@@ -438,7 +438,7 @@ What it is for: Leave requests: each is counted in working days on the working c
 Needs: `view` on `leave_request`.
 
 ### How to enter a leave request — Leave Management
-1. Open HR → Human Resources → Leave Management and press **New leave request** (طلب إجازة جديد).
+1. Open HR → Time & Pay → Leave Management and press **New leave request** (طلب إجازة جديد).
 2. Choose the **Employee** (الموظف — active employees) and the **Leave type** (نوع الإجازة).
 3. Set **From** (من) and **To** (إلى) — both today by default; the same date twice is a one-day leave.
 4. Tick **First day is a half day** (اليوم الأول نصف يوم) and/or **Last day is a half day** (اليوم الأخير نصف يوم) if so. Optionally type the **Reason** (السبب).
@@ -536,13 +536,13 @@ Decision: **Decision note** — optional when approving, required (as the reason
 - "Permission denied: 'administer' on 'leave_request' is not granted to this user." — only an HR manager cancels a leave that was already approved.
 
 ## Payroll (الرواتب)
-Path: HR → Human Resources → Payroll   |   Arabic: HR ← الموارد البشرية ← الرواتب
+HR → Time & Pay → Payroll   |   Arabic: HR ← الدوام والرواتب ← الرواتب
 Address: /hr/payroll   (a run: /hr/payroll/<run number>, for example /hr/payroll/PAY-HQ-2026-0003; a payslip: /hr/payroll/payslips/<payslip number>)
 Needs: `view` on `payroll_run` to open the list and a run. New payroll run: `create` on `payroll_run` and `view` on `employee_compensation`. On a run — Edit, Compute again and the typed figures: `edit_draft` on `payroll_run` and `view` on `employee_compensation`; Send for approval: `submit` on `payroll_run` and `view` on `employee_compensation`; Approve: `approve` on `payroll_run`; Send back: `approve` (a run waiting for approval) or `post` (an approved run); Post: `post`; Pay: `execute`; Reverse: `reverse_cancel`; Cancel: `edit_draft` (draft), `approve` (waiting), `post` (approved). Files: `edit_draft` on `payroll_run` and `create` on `attachment`; a note: `edit_draft` on `payroll_run`; printed copy: `print` / `export` on `payroll_run`. A payslip opens for the payroll's readers and for the person it pays.
 What it is for: One run per branch per month. The run is computed from facts — each person's salary in force, their pay components, the attendance sheet and approved leave, and what their advances have due — then sent, approved by somebody else, posted to the ledger (which issues the payslips) and paid from a bank or cash account. As delivered: the HR Manager prepares and sends, the Accounting Manager or the CEO approves, the Accounting Manager posts, pays and reverses.
 
 ### How to find payroll runs — Payroll
-1. Open HR → Human Resources → Payroll.
+HR → Time & Pay → Payroll.
 2. Search by run number, branch code or month (YYYY-MM) in **Search this list**.
 3. Filter with **View** (العرض): **Pending approval** (بانتظار الموافقة), **Approved** (معتمد), **Draft** (مسودة), **Posted** (مرحّل), **Paid** (مصروف), **Reversed** (معكوس), **Cancelled** (ملغى) → **Filter** (تصفية).
 4. Columns: Reference (المرجع), Branch (الفرع), Month (الشهر), Pay date (تاريخ الصرف), People (الأشخاص), Gross (الإجمالي), Deductions (الاستقطاعات), Net pay (صافي الراتب), Status (الحالة). Runs waiting for approval come first, then approved, then drafts.
@@ -551,7 +551,7 @@ Needs: `view` on `payroll_run`.
 
 ### How to prepare a month's payroll run — Payroll
 1. Before you start: every person to be paid needs a salary row on their employee record (Employees → the person → Compensation), and the month's attendance and leave should be recorded.
-2. Open HR → Human Resources → Payroll and press **New payroll run** (مسير رواتب جديد).
+2. Open HR → Time & Pay → Payroll and press **New payroll run** (مسير رواتب جديد).
 3. Choose the **Branch** (الفرع) and the **Month** (الشهر — this month or one of the eleven before). Optionally set the **Pay date** (تاريخ الصرف; left empty it is the month's last day) and a **Note** (ملاحظة).
 4. Press **Compute the run** (احتساب المسير). The run opens as a **Draft** (مسودة) with its number (PAY-<branch>-<year>-<serial>) and one line per person the branch employed in that month.
 5. Read the notes at the top of the draft: "No salary in force for …" names people without a salary row (record it on the employee, then **Compute again**); "N working days of M people are not on the day sheet; an unrecorded day is paid as worked." tells you the attendance sheet is incomplete.
@@ -677,20 +677,20 @@ Pay dialog: **Pay method** — required; **From account** — required, an activ
 - From the ledger when posting or paying: "No accounting mapping is configured for the '<line>' line of 'hr.payroll_run'…" (ask Accounting to map salary expense, employer cost, withholding, net pay or employee advances), "Cannot post into <period>: the period is closed…", "No accounting period covers <date>…", "<account> … cannot hold less than nothing…" — see "Posting to the ledger — HR".
 
 ## Advances & Loans (السلف والقروض)
-Path: HR → Human Resources → Advances & Loans   |   Arabic: HR ← الموارد البشرية ← السلف والقروض
+HR → Time & Pay → Advances & Loans   |   Arabic: HR ← الدوام والرواتب ← السلف والقروض
 Address: /hr/advances   (a record: /hr/advances/<advance number>, for example /hr/advances/EADV-HQ-2026-00007)
 Needs: `view` on `employee_advance` to open the list; `create` on `employee_advance` for New advance or loan. On a record — Send for endorsement: the person, or `edit_draft` on `employee_advance`; Endorse: the person's manager (the manager link, no permission needed) or `approve` on `employee_advance`; Approve: `post` on `employee_advance`; Refuse: whoever may take the step it waits on; Pay out and Repaid in cash: `execute` on `employee_advance`; Cancel: the person, whoever entered it, or `edit_draft`. Files: `create` on `attachment`; a note: `edit_draft` on `employee_advance`; printed copy: `print` / `export` on `employee_advance`. A record page opens for users of its branch, the person and the person's manager.
 What it is for: Money lent to an employee — a salary advance (comes back in one instalment) or a loan (up to 60 monthly instalments). It is endorsed by the person's manager or an HR manager, approved by Finance, paid out from a bank or cash account, and recovered from the person's pay month by month; it can also be repaid in cash or settled by an expense claim of a trip. (Petty-cash advances are a different screen in Treasury.) As delivered: HR enters, the manager or the HR Manager endorses, the Accounting Manager approves, pays out and records repayments.
 
 ### How to find advances and loans — Advances & Loans
-1. Open HR → Human Resources → Advances & Loans.
+HR → Time & Pay → Advances & Loans.
 2. Search by advance number, employee number or name. Filter with **View** (العرض): **Pending approval** (بانتظار الموافقة — waiting to be endorsed), **Endorsed** (مؤيَّدة), **Approved** (معتمد), **Paid out** (مصروفة), **Settled** (مسوّى), **Draft** (مسودة), **Rejected** (مرفوض), **Cancelled** (ملغى) → **Filter** (تصفية).
 3. Columns: Reference (المرجع), Employee (الموظف), Kind (النوع), Amount (المبلغ), Instalments (الأقساط), First recovery month (شهر الاسترداد الأول), **Recovered** (المسترد), **Still owed** (المتبقي), Status (الحالة). What waits for somebody comes first.
 4. Click the number to open the record.
 Needs: `view` on `employee_advance`.
 
 ### How to enter an advance or a loan — Advances & Loans
-1. Open HR → Human Resources → Advances & Loans and press **New advance or loan** (سلفة أو قرض جديد).
+1. Open HR → Time & Pay → Advances & Loans and press **New advance or loan** (سلفة أو قرض جديد).
 2. Choose the **Employee** (الموظف — active employees) and the **Kind** (النوع): **Salary advance** (سلفة راتب) or **Loan** (قرض).
 3. Type the **Amount** (المبلغ) in whole dinars, the number of **Instalments** (الأقساط — 1 for a salary advance, 2 to 60 for a loan), the **First recovery month** (شهر الاسترداد الأول, as YYYY-MM; next month by default) and the **Reason** (السبب, required).
 4. Press **Create** (إنشاء). The record opens as a **Draft** (مسودة) with its number (EADV-<branch>-<year>-<serial>) and its **Schedule** (الجدول) month by month.
@@ -779,13 +779,13 @@ Pay out / Repaid in cash: **Bank or cash account** — required, an active IQD a
 - From the ledger when paying out or repaying: "No accounting mapping is configured for the 'employee_advance' line…", closed or missing period, "<account> … cannot hold less than nothing…" — see "Posting to the ledger — HR".
 
 ## Recruitment (التوظيف)
-Path: HR → Human Resources → Recruitment   |   Arabic: HR ← الموارد البشرية ← التوظيف
+HR → Talent & Requests → Recruitment   |   Arabic: HR ← المواهب والطلبات ← التوظيف
 Address: /hr/recruitment   (a vacancy: /hr/recruitment/<vacancy number>, for example /hr/recruitment/VAC-HQ-2026-0002; an applicant: /hr/recruitment/applicants/<applicant number>)
 Needs: `view` on `recruitment` to open the list, a vacancy and an applicant. `create` on `recruitment` for New vacancy, Add applicant and attaching files (with `create` on `attachment`). `edit_draft` on `recruitment` to edit or cancel a draft vacancy, to move an applicant on, to edit an applicant and to add notes. `approve` on `recruitment` to Open, Amend and Close a vacancy and to Hire; a hire also needs `create` on `employee`, because it creates the employee record. Printed copies: `print` / `export` on `recruitment`.
 What it is for: Vacancies for positions, the people who applied to each, the stages they pass through, and the hire that turns an applicant into an employee. As delivered: HR officers draft vacancies and work the applicants; the HR Manager opens, amends and closes vacancies and hires.
 
 ### How to find vacancies — Recruitment
-1. Open HR → Human Resources → Recruitment. The register is titled **Vacancies** (الشواغر).
+HR → Talent & Requests → Recruitment. The register is titled **Vacancies** (الشواغر).
 2. Search by vacancy number, position code or title, or words of the description.
 3. Filter with **View** (العرض): **Open** (مفتوح), **Draft** (مسودة), **Filled** (مكتمل), **Closed** (مغلق), **Cancelled** (ملغى) → **Filter** (تصفية).
 4. Columns: Reference (المرجع), Position (المنصب), Department (القسم), Employment kind (نوع التوظيف), **Hired / wanted** (المعيّنون / المطلوب), **Applicants (open / all)** (المتقدمون (المفتوح / الكل)), Opens on (يفتح في), Closes on (يغلق في), Status (الحالة). Open vacancies come first, then drafts.
@@ -793,7 +793,7 @@ What it is for: Vacancies for positions, the people who applied to each, the sta
 Needs: `view` on `recruitment`.
 
 ### How to create and open a vacancy — Recruitment
-1. Open HR → Human Resources → Recruitment and press **New vacancy** (شاغر جديد).
+1. Open HR → Talent & Requests → Recruitment and press **New vacancy** (شاغر جديد).
 2. Choose the **Position** (المنصب — active positions; create the position first on HR → Positions if it does not exist). **Department** (القسم) may be left at "The position's department" (قسم المنصب).
 3. Type the **Headcount** (العدد المطلوب — how many people are wanted, 1 to 500), choose the **Employment kind** (نوع التوظيف), set **Opens on** (يفتح في, today by default) and optionally **Closes on** (يغلق في), and write the **Description** (الوصف, required — what the job is and whom it needs).
 4. Press **Create** (إنشاء). The vacancy opens as a **Draft** (مسودة) with its number (VAC-<branch>-<year>-<serial>), in the branch you are working in.
@@ -880,13 +880,13 @@ Hire: **Hire date** — required; **Employment kind** — required; **Manager** 
 - "Permission denied: 'approve' on 'recruitment' is not granted to this user." — opening, amending, closing and hiring are the HR Manager's. "Permission denied: 'create' on 'employee'…" — the hirer must also be allowed to create employees.
 
 ## Performance (الأداء)
-Path: HR → Human Resources → Performance   |   Arabic: HR ← الموارد البشرية ← الأداء
+HR → Talent & Requests → Performance   |   Arabic: HR ← المواهب والطلبات ← الأداء
 Address: /hr/performance   (a review: /hr/performance/<review number>, for example /hr/performance/REV-HQ-2026-00012). In Arabic the page itself is titled تقييم الأداء.
 Needs: `view` on `performance_review` to open the list; `create` on `performance_review` for Start a cycle's reviews and New review. On a review — set goals (titles, targets, weights): the reviewer, or `edit_draft` on `performance_review`; rate the goals and Finish the rating: the reviewer only (no permission needed); Change reviewer: `edit_draft`; Reopen: the reviewer, or `approve` on `performance_review`; Sign off: `approve`, and never the reviewer nor the person reviewed; Cancel: `approve`; Add my word: the person reviewed. Files: `create` on `attachment`; notes: `edit_draft` on `performance_review`. A review page opens for HR (with the view permission, in the review's branch), for the person and for the reviewer. Review cycles are made, opened and closed on HR Settings (`configure` on `hr_setting`).
 What it is for: Performance reviews by cycle. Each review is one person's, for one cycle, by one reviewer: goals with weights that make 100, a rating of 1 to 5 on each, an overall rating computed from them, a sign-off by HR, and the person's own word.
 
 ### How to find reviews — Performance
-1. Open HR → Human Resources → Performance. The register is titled **Reviews** (التقييمات).
+HR → Talent & Requests → Performance. The register is titled **Reviews** (التقييمات).
 2. Search by review number, employee number or name. Filter with **Cycle** (الدورة — "Every cycle" كل الدورات) and **View** (العرض): **Rated** (مُقيَّم), **Draft** (مسودة), **Signed off** (معتمد), **Cancelled** (ملغى) → **Filter** (تصفية).
 3. Columns: Reference (المرجع), Employee (الموظف), Cycle (الدورة), Reviewer (المقيِّم), **Goals** (الأهداف — how many), **Weight** (الوزن — the goals' total %), **Overall** (الإجمالي), Status (الحالة). Rated reviews (waiting for sign-off) come first.
 4. Click the number to open the review.
@@ -965,13 +965,13 @@ On the review (read-only): Reference, Status, Employee, Cycle, **Period** (ال�
 - "Permission denied: 'approve' on 'performance_review' is not granted to this user." — sign-off and cancelling are the HR Manager's.
 
 ## Employee Requests (طلبات الموظفين)
-Path: HR → Human Resources → Employee Requests   |   Arabic: HR ← الموارد البشرية ← طلبات الموظفين
+HR → Talent & Requests → Employee Requests   |   Arabic: HR ← المواهب والطلبات ← طلبات الموظفين
 Address: /hr/requests   (a record: /hr/requests/<request number> — ECLM-… an expense claim, TRV-… a trip, LTR-… a letter, ERQ-… another request)
 Needs: `view` on `employee_request` to open the list; `create` on `employee_request` for New request. On a record — Edit, Save (a claim's expenses) and Send for approval: the person, whoever entered the request, or `edit_draft` on `employee_request`; Approve and Refuse: the person's manager (the manager link, no permission needed) or `approve` on `employee_request`, never the asker nor the person; Reimburse (a claim): `execute` on `employee_request`, never the person themself; Issue the letter: `edit_draft` on `employee_request`, never the person themself; Open an advance (a trip): `create` on `employee_advance`; Cancel: a draft or waiting request by the person, the asker or `edit_draft`, an approved claim or letter with `approve`. Files: `create` on `attachment`; notes: `edit_draft` on `employee_request`. A record page opens for HR (the view permission, in the record's branch), the person and the person's manager; the person may also print it.
 What it is for: Four kinds of request in one register: an **Expense claim** (مطالبة مصاريف), a **Travel** request (سفر), a **Letter** (خطاب) and an **Other request** (طلب آخر). Each is asked, sent, and approved or refused by the manager or HR. Then a claim is reimbursed by Finance (posting to the ledger), a letter is issued by HR and printed, and an approved trip may open an advance; a trip and an other request end at their approval.
 
 ### How to find requests — Employee Requests
-1. Open HR → Human Resources → Employee Requests.
+HR → Talent & Requests → Employee Requests.
 2. Search by request number, subject, employee number or name.
 3. Filter: **Kind** (النوع — "Every kind" كل الأنواع, Expense claim, Travel, Letter, Other request) and **View** (العرض): **Pending approval** (بانتظار الموافقة), **Approved** (معتمد), **Draft** (مسودة), **Reimbursed** (مُسدَّد), **Issued** (صادر), **Rejected** (مرفوض), **Cancelled** (ملغى) → **Filter** (تصفية).
 4. Columns: Reference (المرجع), Kind (النوع), Employee (الموظف), Subject (الموضوع), Asked on (تاريخ الطلب), Amount (المبلغ — a claim's total, or a trip's estimated cost), Status (الحالة). Requests waiting for a decision come first, then approved ones.
@@ -979,7 +979,7 @@ What it is for: Four kinds of request in one register: an **Expense claim** (م�
 Needs: `view` on `employee_request`.
 
 ### How to enter a request — Employee Requests
-1. Open HR → Human Resources → Employee Requests and press **New request** (طلب جديد).
+1. Open HR → Talent & Requests → Employee Requests and press **New request** (طلب جديد).
 2. Choose the **Kind** (النوع) and the **Employee** (الموظف), type the **Subject** (الموضوع, required) and optionally the **Details** (التفاصيل).
 3. For a trip, fill the part **For a trip** (للسفر): **Destination** (الوجهة), **From** (من), **To** (إلى) — all three are needed for a Travel request — and the **Estimated cost** (الكلفة التقديرية) in dinars if an advance may be wanted.
 4. For a letter, fill the part **For a letter** (للخطاب): the **Letter** type — **Employment letter** (خطاب تأييد عمل), **Experience letter** (شهادة خبرة), **Other letter** (خطاب آخر) — and **Addressed to** (موجّه إلى).
@@ -1087,13 +1087,13 @@ On the record (read-only): Reference, Status, Kind, Employee, Subject, **Total c
 - From the ledger when reimbursing: "No accounting mapping is configured for the 'employee_expense' line of 'hr.expense_claim'…" (the expense category has no expense account of its own and Accounting has not mapped one), closed or missing period, "<account> … cannot hold less than nothing…" — see "Posting to the ledger — HR".
 
 ## Documents (المستندات)
-Path: HR → Human Resources → Documents   |   Arabic: HR ← الموارد البشرية ← المستندات
+HR → Talent & Requests → Documents   |   Arabic: HR ← المواهب والطلبات ← المستندات
 Address: /hr/documents   (a record: /hr/documents/<document number>, for example /hr/documents/EDOC-HQ-00015)
 Needs: `view` on `employee_document` to open the list; `create` on `employee_document` for New document, Renew and attaching the scan (with `create` on `attachment`); `edit_draft` on `employee_document` for Edit, Withdraw and notes. A document page opens for HR (the view permission, in the document's branch) and for the person the document belongs to, who may also print it.
 What it is for: Every person's papers on file — contract, national ID, passport, residence and work permits, certificates, licences, equipment hand-over forms — each with its number, dates and scan. A document is never deleted: it is renewed by a new record or withdrawn with a reason. Documents about to expire are flagged and notified.
 
 ### How to find documents and see what is expiring — Documents
-1. Open HR → Human Resources → Documents. The subtitle says how many days before expiry a document is raised.
+HR → Talent & Requests → Documents. The subtitle says how many days before expiry a document is raised.
 2. Search by document number, title, the paper's own number, employee number or name.
 3. Filter: **Type** (النوع — "Every type" كل الأنواع) and **View** (العرض): **Expiring** (تنتهي قريبًا), **Expired** (منتهية), **Valid** (سارية), **Renewed** (مجدَّدة), **Withdrawn** (مسحوبة) → **Filter** (تصفية).
 4. Columns: Reference (المرجع), Employee (الموظف), Type (النوع), Title (العنوان), Number (الرقم), Issued on (تاريخ الإصدار), Expires on (تاريخ الانتهاء), **Files** (الملفات — how many scans are attached), Status (الحالة). Valid documents with an expiry date come first, the soonest expiry at the top.
@@ -1102,7 +1102,7 @@ What it is for: Every person's papers on file — contract, national ID, passpor
 Needs: `view` on `employee_document`.
 
 ### How to file a document — Documents
-1. Open HR → Human Resources → Documents and press **New document** (مستند جديد).
+1. Open HR → Talent & Requests → Documents and press **New document** (مستند جديد).
 2. Choose the **Employee** (الموظف — active employees) and the **Type** (النوع): Contract (عقد), National ID (البطاقة الوطنية), Passport (جواز السفر), Residence permit (إقامة), Work permit (إجازة عمل), Certificate (شهادة), Licence (رخصة), Equipment hand-over (محضر تسليم معدات), Other (أخرى).
 3. Optionally type the **Title** (العنوان), the paper's own **Number** (الرقم), **Issued on** (تاريخ الإصدار), **Expires on** (تاريخ الانتهاء) and a **Note** (ملاحظة).
 4. Optionally choose the **Scan** (المرفق) — a photograph or PDF of the paper, up to 25MB.
@@ -1155,13 +1155,13 @@ On the record (read-only): Reference, Status, Employee, Type, Title, Number, Iss
 - "Permission denied: 'create' on 'employee_document' is not granted to this user." / "'edit_draft' …".
 
 ## Reports (التقارير)
-Path: HR → Human Resources → Reports   |   Arabic: HR ← الموارد البشرية ← التقارير
+HR → Talent & Requests → Reports   |   Arabic: HR ← المواهب والطلبات ← التقارير
 Address: /hr/reports
 Needs: `view` on `hr_report` to open the screen; that is enough for Headcount and Leave balances. Payroll register also needs `view` on `payroll_run`; Unsettled advances also needs `view` on `employee_advance` — a report you may not read is not in the list. Print / Export needs `print` (PDF) or `export` (Excel, Word) on the same object as the report.
 What it is for: Four read-only reports — headcount, leave balances, the payroll register and unsettled advances — shown on screen and printed or exported exactly as shown. Nothing is typed or saved here. Figures cover the branches you work in.
 
 ### How to run a report and print or export it — Reports
-1. Open HR → Human Resources → Reports.
+HR → Talent & Requests → Reports.
 2. Choose the **Report** (التقرير): **Headcount** (عدد الموظفين), **Leave balances** (أرصدة الإجازات), **Payroll register** (سجل الرواتب) or **Unsettled advances** (السلف غير المسوّاة).
 3. Press **Search** (بحث) once so that the report's own filter boxes appear, set them, and press **Search** again.
 4. The table shows the rows; reports with money or counts end with a **Totals** (الإجماليات) row.
@@ -1201,7 +1201,7 @@ Needs: `view` on `hr_report` and `view` on `employee_advance`.
 Path: Settings → Administration → HR Settings   |   Arabic: الإعدادات ← الإدارة ← إعدادات الموارد البشرية
 Address: /administration/hr-settings
 Needs: `view` on `hr_setting` to open the screen; `configure` on `hr_setting` to add or change anything (as delivered: the HR Manager and the system administrator; the HR Officer and the CEO can only read).
-What it is for: The master data the HR screens read, in five windows on one page: **Pay components** (مكوّنات الراتب), **Leave types** (أنواع الإجازات), **Working calendars** (تقاويم العمل) with their holidays, **Review cycles** (دورات التقييم) and **Limits for the morning sweep** (حدود المراجعة الصباحية). Nothing is deleted here; a row is deactivated. Positions are no longer on this screen — they are under HR → Human Resources → Positions.
+What it is for: The master data the HR screens read, in five windows on one page: **Pay components** (مكوّنات الراتب), **Leave types** (أنواع الإجازات), **Working calendars** (تقاويم العمل) with their holidays, **Review cycles** (دورات التقييم) and **Limits for the morning sweep** (حدود المراجعة الصباحية)HR → People & Organisation → Positions.
 
 ### How to add or change a pay component — HR Settings
 1. Open Settings → Administration → HR Settings, window **Pay components** (مكوّنات الراتب).

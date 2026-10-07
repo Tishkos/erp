@@ -82,12 +82,25 @@ tokens to `dark:`.
   through native `<form action>`. Interactive Intent components are client
   components — pass them serialisable props (and server actions), never
   functions created on the server.
-* **Native controls stay native where a form posts them** (`<input>`,
-  `<select>`, `<textarea>`, `<input type="date">`): they are styled to look
-  like Intent's `Input` / `NativeSelect`, because the server actions read their
-  `name`s and the end-to-end tests drive them (`fill`, `selectOption`). Use
-  Intent's React Aria `Select`/`ComboBox`/`DatePicker` only for a control that
-  does not post through a form (a menu, a filter that navigates).
+* **Dropdowns and dates are Intent's, over the native field the form posts**
+  (2026-10-06, by direction: "drop down, date picker — use the one we
+  downloaded, everything"). `IntentSelect`
+  (`src/components/admin/intent-select.tsx`; searchable over 12 options) and
+  `IntentDateField` (`intent-date-field.tsx`, Intent's DatePicker, Gregorian,
+  in the person's language) draw the control people use; the real `<select>` /
+  `<input type="date">` stays underneath with the same `name`, `id`,
+  `required` and value, so server actions read what they always read and the
+  e2e suite's `selectOption` / `getByLabel(...).fill('yyyy-mm-dd')` keep
+  working. A date field is not a `textbox` to the tests any more — find it with
+  `tests/e2e/support/controls.ts` › `dateField`. The shared `Select` and
+  `Field type="date"` use them; a new dropdown or date uses them too. Inside a
+  modal dialog the list opens in the dialog's own top layer
+  (`intent-control-kit.tsx`). Multi-selects, sized lists and typed
+  "type a name" boxes (`<input list>`) stay native.
+* **Plain text fields stay native** (`<input>`, `<textarea>`), styled as
+  Intent's `Input`. Their outline is `--ui-input` (about 3:1 against the field
+  on every palette), and they keep it under every Border style — None and
+  Subtle soften panels and tables only.
 * **Test hooks**: never change a control's `name`, `id`, label text, role,
   `aria-*`, `data-*` attribute or a heading's text — the e2e suite finds things
   by them. Class names may change.

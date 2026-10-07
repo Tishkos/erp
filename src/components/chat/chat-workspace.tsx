@@ -37,7 +37,8 @@ import {
   searchAction,
 } from '@/app/(app)/chat/actions';
 import { CHAT_MAX_FILES_PER_MESSAGE, CHAT_MESSAGE_MAX_LENGTH, preview as previewOf } from '@domain/chat';
-import type { ConversationRow, MessageView, QuoteView, SearchHit, ThreadView } from '@/server/services/chat-read';
+import type { ConversationRow, MessageView, PersonHit, QuoteView, SearchHit, ThreadView } from '@/server/services/chat-read';
+import { ChatAvatar, presenceOfRow } from './chat-avatar';
 import { ChatDialog } from './chat-dialog';
 import { ConversationInfo } from './chat-info';
 import { MessageRow, PendingRow, SystemRow, type RowEnv } from './chat-message';
@@ -61,7 +62,7 @@ import {
   useChat,
   type ChatSeed,
 } from './chat-store';
-import { AVATAR_CLASS, initials, listStamp } from './format';
+import { listStamp } from './format';
 
 export interface RecordIntent {
   readonly type: string;
@@ -855,16 +856,12 @@ function ConversationItem({
               openConversation(c.id);
             }}
           >
-            <span className={cn(s.avatarSmall, AVATAR_CLASS, 'size-9 text-xs')}>
-              {c.kind === 'group' ? <Users aria-hidden="true" size={14} /> : initials(c.name)}
-            </span>
+            {/* The colleague's status is the dot on their avatar (2026-10-06), as in the drawer and the chat windows. */}
+            <ChatAvatar group={c.kind === 'group'} name={c.name} presence={presenceOfRow(c)} size="list" />
             <strong className={cn('truncate text-sm', selected || c.unread > 0 ? 'font-semibold' : 'font-medium')} title={c.name}>
               <bdi dir="auto">{clip(c.name, 18)}</bdi>
             </strong>
           </a>
-          {c.other && c.other.presence !== 'offline' ? (
-            <PresencePill locale={locale} now={now} person={c.other} showLastSeen={false} timeZone={timeZone} />
-          ) : null}
           {c.muted ? <BellOff aria-label={t('muted')} className="shrink-0 text-muted-fg" size={12} /> : null}
           {c.aboutRecord ? <Link2 aria-label={t('about_record')} className="shrink-0 text-muted-fg" size={12} /> : null}
         </div>
@@ -890,7 +887,7 @@ function ConversationItem({
 /** "Discuss this record": reached with `/chat?record=type:id`, from another module's screen. */
 function RecordStarter({ record }: { readonly record: RecordIntent }) {
   const t = useTranslations('chat');
-  const [chosen, setChosen] = useState<{ userId: string; name: string; email: string }[]>([]);
+  const [chosen, setChosen] = useState<PersonHit[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   return (

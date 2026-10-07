@@ -18,6 +18,7 @@ import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fundBank } from './hr-funds';
 import { ownerPool, rejection } from './setup';
+import { linkItemToSupplier } from './item-supplier';
 import { withScope } from '@/server/db/client';
 import * as ap from '@/server/services/ap-invoice';
 import * as applications from '@/server/services/payment-applications';
@@ -274,6 +275,8 @@ describe('units · two items in two units, split over two containers (2026-10-06
     } finally {
       client.release();
     }
+    // 0408 — the inverter is bought from Jinko, so it is linked to Jinko.
+    await linkItemToSupplier('ITM-INV', world.supplierId);
     const invoice = await withScope(scope(world.clerk), (tx) =>
       ap.create(tx, world.clerk, {
         supplierId: world.supplierId,

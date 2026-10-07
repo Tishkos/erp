@@ -15,6 +15,8 @@ import * as payments from '../services/supplier-payment';
 import * as journals from '../services/journal';
 import * as payroll from '../services/payroll';
 import { daysFrom, showDays } from '../domain/hr-time';
+import { advanceShareOf, invoiceAdvance } from '../domain/payment-applications';
+import { parseQuantity } from '../domain/uom';
 import { average, lineTotal, sumMoney, sumQuantity } from './decimal';
 import type { Messages } from './i18n';
 import type { Column, Fact, PrintModel, Row } from './model';
@@ -211,13 +213,67 @@ export async function purchaseInvoice(ctx: BuildContext, invoiceNo: string): Pro
       warehouse: line.warehouseCode ?? '—',
     },
   }));
+  /*
+   * The advance as the record shows it (2026-10-06): the percentage, and what it
+   * comes to — the payable amount — by the posting's own arithmetic (`advanceOf`
+   * over the lines, truncated as `ap-invoice` values a line), in the agreed
+   * currency when it was not dinars and in dinars.
+   */
+  const linesIqd = lines.reduce(
+    (sum, line) =>
+      sum + (parseQuantity(line.quantity) * parseDecimal(line.unitPrice, 4n)) / 1_000_000n - parseDecimal(line.discountIqd ?? '0', 4n),
+    0n,
+  );
+  const advance = (() => {
+    try {
+      return invoiceAdvance({
+        totalIqd: linesIqd,
+        basis: invoice.advanceBasis,
+        percent: invoice.advancePercent,
+        amount: invoice.advanceAmount,
+        agreedCurrency: invoice.agreedCurrency,
+        agreedRate: invoice.agreedRate,
+      });
+    } catch {
+      return null;
+    }
+  })();
+  // A figure in the currency the invoice was agreed in, and its dinars beside a foreign one.
+  const agreedMoney = (agreedValue: bigint, iqdValue: bigint) =>
+    [
+      advance && advance.currency !== 'IQD' ? formatMoney(toDecimalString(agreedValue, 4n), advance.currency, locale) : null,
+      money(iqdValue, locale),
+    ]
+      .filter(Boolean)
+      .join(' · ');
   const fields: Fact[] = [
     { label: m.column('invoice_no'), value: invoice.invoiceNo, ltr: true },
     { label: m.column('status'), value: m.status(invoice.status) },
     { label: m.column('supplier_code'), value: supplier?.code ?? '—', ltr: true },
     { label: m.column('supplier_name'), value: supplier?.name ?? '—' },
+    // The supplier's own invoice or receipt number; ours stood in when none was typed, and that is not theirs.
+    {
+      label: m.admin('expenses.supplier_receipt_no'),
+      value: invoice.supplierInvoiceNo && invoice.supplierInvoiceNo !== invoice.invoiceNo ? invoice.supplierInvoiceNo : '—',
+    },
     { label: m.column('posting_date'), value: date(invoice.invoiceDate, locale), ltr: true },
-    { label: m.column('due_date'), value: date(invoice.dueDate, locale), ltr: true },
+    // The due date once it was set on purpose; until then the copy says why there is none (2026-10-07).
+    invoice.dueDateSetAt
+      ? { label: m.column('due_date'), value: date(invoice.dueDate, locale), ltr: true }
+      : { label: m.column('due_date'), value: `— ${m.admin('balance_due.waiting')}` },
+    ...(advance
+      ? [
+          {
+            label: m.admin('expenses.advance_basis'),
+            value:
+              advance.basis === 'percent' && invoice.advancePercent
+                ? `${m.admin('expenses.advance_basis_percent')} · ${invoice.advancePercent.replace(/\.?0+$/, '')}%`
+                : `${m.admin('expenses.advance_basis_amount')} · ${m.admin('expenses.share_of_total', { percent: advanceShareOf(advance) })}`,
+          },
+          { label: m.admin('expenses.payable_amount'), value: agreedMoney(advance.agreed, advance.iqd), ltr: true },
+          { label: m.admin('expenses.left_to_pay'), value: agreedMoney(advance.totalAgreed - advance.agreed, linesIqd - advance.iqd), ltr: true },
+        ]
+      : []),
     { label: m.admin('ap_invoices.raised_by'), value: raisedBy ?? '—' },
     { label: m.admin('invoices.statement_account_supplier'), value: account(invoice.payableAccountId) },
     { label: m.admin('invoices.expense_account'), value: account(invoice.expenseAccountId) },

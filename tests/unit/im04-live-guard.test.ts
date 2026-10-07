@@ -43,6 +43,8 @@ const LIVE_USE: Readonly<Record<string, string>> = {
   'scripts/ops/ensure-user-employees.ts': 'makes the employee behind each active user (REQ-FIX-001 FX14); idempotent, dry run unless --apply, run by the deploy',
   'scripts/ops/set-up-people.ts':
     'the people of a live install and their roles (by direction 2026-10-03); idempotent, dry run unless --apply, and it writes nothing but app_user, role and role_grant',
+  'scripts/ops/set-company-appearance.ts':
+    "everyone's default appearance on a live install (0419, by direction 2026-10-07); the service the Appearance drawer calls, as the named person and their configure on the company, audited, dry run unless --apply — it writes nothing but company.ui_defaults",
   'scripts/ops/reset-user-password.ts':
     'a way back into a live install nobody can sign into; writes one credential, revokes the sessions behind it, audited, and prints the password once',
   'scripts/ops/install-cron.sh': 'writes the crontab, not the database',

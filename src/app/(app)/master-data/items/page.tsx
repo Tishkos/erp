@@ -55,11 +55,13 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
   }
   const mayCreate = can(principal, 'create', items.PERMISSION_OBJECT);
 
-  const { rows, accounts, uoms } = await withCurrentUser(async (tx) => ({
+  const { rows, accounts, uoms, suppliers } = await withCurrentUser(async (tx) => ({
     rows: await items.listAll(tx),
     accounts: mayCreate ? await coa.postableAccounts(tx) : [],
     // REQ-FIX-001 FIX-4 — the unit its stock is counted in is chosen, not assumed.
     uoms: mayCreate ? await uomService.listActive(tx) : [],
+    // 0408 — who it is bought from, chosen as it is made (2026-10-06, by direction).
+    suppliers: mayCreate ? await items.selectableSuppliers(tx) : [],
   }));
   const accountOptions = (type: string) =>
     accounts
@@ -129,6 +131,20 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
                   options={accountOptions('expense')}
                   required
                 />
+                {/* Block 1's "Related Supplier(s)" — since 0408 an item is
+                    bought only from a supplier linked to it, so the link can
+                    be made as the item is: one or more, the first its default. */}
+                <Select
+                  hint={t('items.new_suppliers_hint')}
+                  label={t('items.new_suppliers')}
+                  multiple
+                  name="supplierIds"
+                  options={suppliers.map((supplier) => ({
+                    value: supplier.id,
+                    label: `${supplier.code} · ${supplier.name}`,
+                  }))}
+                  size={Math.min(Math.max(suppliers.length, 2), 5)}
+                />
               </Grid>
               <SubmitRow>
                 <Submit label={t('create')} />
@@ -168,7 +184,7 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
                 <th scope="col">{t('items.kind')}</th>
                 <th scope="col">{t('items.base_uom')}</th>
                 <th scope="col">{t('items.on_hand')}</th>
-                <th scope="col">{t('items.suppliers')}</th>
+                <th scope="col">{t('items.supplier')}</th>
                 <th scope="col">{column('active')}</th>
               </tr>
             </thead>
@@ -195,7 +211,10 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
                       '—'
                     )}
                   </td>
-                  <td>{row.supplierCount}</td>
+                  {/* Who it is bought from (0408) — the linked suppliers in use, the default first. */}
+                  <td>
+                    {row.supplierNames ? <bdi dir="auto">{row.supplierNames}</bdi> : <span className="muted">{t('none')}</span>}
+                  </td>
                   <td>
                     <Pill label={row.active ? t('active') : t('inactive')} on={row.active} />
                   </td>

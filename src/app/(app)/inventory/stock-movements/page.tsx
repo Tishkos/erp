@@ -67,6 +67,8 @@ export default async function StockMovementsPage({ searchParams }: { searchParam
     itemSearch: one('item') || null,
     warehouseCode: one('warehouse') || null,
     documentNo: one('document') || null,
+    // The order (2026-10-07): newest first unless the person asks for the oldest.
+    sort: one('sort') === 'oldest' ? ('oldest' as const) : null,
   };
   // A page at a time, and the page says so. The list used to stop at a
   // thousand rows without a word, which at real volume is a ledger with its
@@ -100,6 +102,7 @@ export default async function StockMovementsPage({ searchParams }: { searchParam
       item: filter.itemSearch,
       warehouse: filter.warehouseCode,
       document: filter.documentNo,
+      sort: filter.sort,
     })) {
       if (value) query.set(key, value);
     }
@@ -176,6 +179,16 @@ export default async function StockMovementsPage({ searchParams }: { searchParam
               name="document"
               placeholder={t('stock_movements.document_hint')}
             />
+            {/* The register's order, beside its own date window (2026-10-07). */}
+            <Select
+              defaultValue={filter.sort ?? 'newest'}
+              label={t('register_filter.sort')}
+              name="sort"
+              options={[
+                { value: 'newest', label: t('register_filter.sort_newest') },
+                { value: 'oldest', label: t('register_filter.sort_oldest') },
+              ]}
+            />
             <SubmitRow>
               <Submit label={t('stock_movements.filter')} />
             </SubmitRow>
@@ -186,9 +199,13 @@ export default async function StockMovementsPage({ searchParams }: { searchParam
           {pages > 1 ? (
             <>
               {' · '}
-              {pageNo > 1 ? <Link href={pageHref(pageNo - 1)}>{t('stock_movements.newer')}</Link> : null}
+              {pageNo > 1 ? (
+                <Link href={pageHref(pageNo - 1)}>{t(filter.sort === 'oldest' ? 'stock_movements.older' : 'stock_movements.newer')}</Link>
+              ) : null}
               {pageNo > 1 && pageNo < pages ? ' · ' : null}
-              {pageNo < pages ? <Link href={pageHref(pageNo + 1)}>{t('stock_movements.older')}</Link> : null}
+              {pageNo < pages ? (
+                <Link href={pageHref(pageNo + 1)}>{t(filter.sort === 'oldest' ? 'stock_movements.newer' : 'stock_movements.older')}</Link>
+              ) : null}
             </>
           ) : null}
         </p>

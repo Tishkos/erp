@@ -1709,6 +1709,76 @@
       "when": 1795900000216,
       "tag": "0406_advance_hold_and_papers",
       "breakpoints": true
+    },
+    {
+      "idx": 244,
+      "version": "7",
+      "when": 1795900000217,
+      "tag": "0407_navigation_appearance",
+      "breakpoints": true
+    },
+    {
+      "idx": 245,
+      "version": "7",
+      "when": 1795900000218,
+      "tag": "0408_items_bought_from_linked_suppliers",
+      "breakpoints": true
+    },
+    {
+      "idx": 246,
+      "version": "7",
+      "when": 1795900000219,
+      "tag": "0409_purchase_invoices_numbered_pur",
+      "breakpoints": true
+    },
+    {
+      "idx": 247,
+      "version": "7",
+      "when": 1795900000220,
+      "tag": "0410_chat_presence_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 248,
+      "version": "7",
+      "when": 1795900000221,
+      "tag": "0411_invoice_advance_basis",
+      "breakpoints": true
+    },
+    {
+      "idx": 249,
+      "version": "7",
+      "when": 1795900000222,
+      "tag": "0415_manual_stock_addition",
+      "breakpoints": true
+    },
+    {
+      "idx": 250,
+      "version": "7",
+      "when": 1795900000223,
+      "tag": "0416_manual_stock_addition_department",
+      "breakpoints": true
+    },
+    {
+      "idx": 251,
+      "version": "7",
+      "when": 1795900000224,
+      "tag": "0417_side_panel_groups",
+      "breakpoints": true
+    },
+    {
+      "idx": 252,
+      "version": "7",
+      "when": 1795900000225,
+      "tag": "0418_side_panel_colour",
+      "breakpoints": true
+    },
+    {
+      "idx": 253,
+      "version": "7",
+      "when": 1795900000226,
+      "tag": "0419_company_appearance_defaults",
+      "breakpoints": true
     }
   ]
 }

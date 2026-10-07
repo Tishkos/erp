@@ -233,8 +233,9 @@ export function MessageRow({ message, env, quoteOf }: { readonly message: Messag
           <div className={cn('flex flex-wrap gap-2', message.mine ? 'justify-end' : 'justify-start')}>
             {images.map((file) => (
               <a className="block overflow-hidden rounded-xl border border-border bg-muted" href={`/chat/files/${file.id}?inline=1`} key={file.id} rel="noreferrer" target="_blank">
+                {/* A box of its own while the picture is still on its way, so the message does not jump, and the picture is there to point at. */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img alt={file.fileName} className="block h-auto max-h-64 w-auto max-w-60 object-cover" loading="lazy" src={`/chat/files/${file.id}?inline=1`} width={240} />
+                <img alt={file.fileName} className="block h-auto min-h-16 min-w-16 max-h-64 w-auto max-w-60 object-cover" loading="lazy" src={`/chat/files/${file.id}?inline=1`} width={240} />
               </a>
             ))}
           </div>

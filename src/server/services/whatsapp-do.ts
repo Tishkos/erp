@@ -42,6 +42,7 @@ import {
   STEPS_NEEDING_REASON,
   actionLabel,
   familyOf,
+  numberShapes,
   stepConsequence,
   tidyNumber,
   type ActionName,
@@ -252,7 +253,7 @@ export async function describeDocument(tx: Tx, principal: Principal, raw: string
   if (!no) return 'Which document? Give its number.';
   const family = familyOf(no);
   if (!family) {
-    return `I cannot tell what kind of document ${no} is from its number. The kinds I can look up by number: ${DOCUMENT_FAMILIES.map((one) => `${one.label} (${one.prefix}-…)`).join(', ')}. For a payable (IMP-, PUR-, SVC-…) use payable_status; for a payment application, application_status.`;
+    return `I cannot tell what kind of document ${no} is from its number. The kinds I can look up by number: ${DOCUMENT_FAMILIES.map((one) => `${one.label} (${numberShapes(one)})`).join(', ')}. For a payable (IMP-, LOC-, SVC-…) use payable_status; for a payment application, application_status.`;
   }
   // An internal transfer has no grant of its own: it is read by whoever reads the bank and cash accounts.
   const grant = family.key === 'bank_transfer' ? 'bank_cash_account' : family.key;
@@ -273,7 +274,7 @@ export async function describeDocument(tx: Tx, principal: Principal, raw: string
     .join(NL);
 }
 
-const families = () => DOCUMENT_FAMILIES.map((family) => `${family.label} (${family.prefix}-…: ${family.steps.join(', ')})`).join('; ');
+const families = () => DOCUMENT_FAMILIES.map((family) => `${family.label} (${numberShapes(family)}: ${family.steps.join(', ')})`).join('; ');
 
 /**
  * Resolve and describe, without changing anything.

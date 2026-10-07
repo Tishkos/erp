@@ -1,0 +1,132 @@
+/*
+ * The pop-up notifications (2026-10-07, by direction: "implement notification
+ * toasts (like toastify) please, but matching the rest of the design —
+ * highlight colours and theme"). Where they stand and how they move; their
+ * colours are the theme's, in the component's utilities (toast-region.tsx).
+ *
+ * React Aria puts the region at the end of <body>, outside the shell, so the
+ * shell's highlight (--erp-chosen-*, globals.css › .erp-shell) is declared
+ * again here from the same Intent sidebar tokens — they cannot drift.
+ *
+ *   desktop  the bottom end corner, newest nearest the corner, lifted above
+ *            the chat windows and the bottom bar (--erp-toast-lift, measured)
+ *   phone    the top, under the header (--erp-toast-top, measured): the foot
+ *            of a phone is the keyboard, the bottom bar and the chat heads
+ */
+@layer theme, base, legacy, components, utilities;
+
+@layer legacy {
+  .erp-toasts {
+    --erp-chosen-bg: var(--ui-sidebar-primary);
+    --erp-chosen-fg: var(--ui-sidebar-primary-fg);
+    --erp-chosen-line: color-mix(in oklab, var(--ui-sidebar-primary-fg) 32%, transparent);
+
+    position: fixed;
+    z-index: 95;
+    inset-inline-end: 1rem;
+    inset-block-end: calc(var(--erp-toast-lift, 0px) + 1rem + env(safe-area-inset-bottom, 0px));
+    display: flex;
+    inline-size: min(23rem, calc(100vw - 2rem));
+    flex-direction: column-reverse;
+    gap: 0.5rem;
+    outline: none;
+    /* The gaps between the cards let a press through to the page. */
+    pointer-events: none;
+  }
+
+  .erp-toast {
+    pointer-events: auto;
+    animation: erp-toast-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .erp-toasts[dir="rtl"] .erp-toast {
+    animation-name: erp-toast-in-rtl;
+  }
+
+  /* The time left: a thin line along the foot that empties toward the start. */
+  .erp-toast__time {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-end: 0;
+    block-size: 2px;
+    transform-origin: left center;
+    animation: erp-toast-time linear forwards;
+    opacity: 0.85;
+  }
+
+  .erp-toasts[dir="rtl"] .erp-toast__time {
+    transform-origin: right center;
+  }
+
+  /* Waiting while the pointer or the keyboard is on them, or the tab is away — as their timers do. */
+  .erp-toasts:is([data-hovered], :focus-within, [data-paused]) .erp-toast__time {
+    animation-play-state: paused;
+  }
+
+  @media (max-width: 35rem) {
+    .erp-toasts {
+      inset-block-start: calc(var(--erp-toast-top, 0px) + 0.5rem + env(safe-area-inset-top, 0px));
+      inset-block-end: auto;
+      inset-inline: 0.5rem;
+      inline-size: auto;
+      flex-direction: column;
+    }
+
+    .erp-toast,
+    .erp-toasts[dir="rtl"] .erp-toast {
+      animation-name: erp-toast-down;
+    }
+  }
+
+  /* Reduced motion — the system's or the person's own: a fade, no slide. The
+     timer line is motion too, so it is not drawn; the timers still run. */
+  @media (prefers-reduced-motion: reduce) {
+    .erp-toast,
+    .erp-toasts[dir="rtl"] .erp-toast {
+      animation-name: erp-toast-fade;
+    }
+
+    .erp-toast__time {
+      display: none;
+    }
+  }
+
+  html:has(.erp-root[data-motion="reduced"]) .erp-toast__time {
+    display: none;
+  }
+
+  @media (forced-colors: active) {
+    .erp-toast {
+      border: 1px solid CanvasText;
+    }
+
+    .erp-toast__time {
+      background: Highlight;
+    }
+  }
+
+  @keyframes erp-toast-in {
+    from { opacity: 0; transform: translateX(1.25rem); }
+    to { opacity: 1; transform: none; }
+  }
+
+  @keyframes erp-toast-in-rtl {
+    from { opacity: 0; transform: translateX(-1.25rem); }
+    to { opacity: 1; transform: none; }
+  }
+
+  @keyframes erp-toast-down {
+    from { opacity: 0; transform: translateY(-0.75rem); }
+    to { opacity: 1; transform: none; }
+  }
+
+  @keyframes erp-toast-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes erp-toast-time {
+    from { transform: scaleX(1); }
+    to { transform: scaleX(0); }
+  }
+}

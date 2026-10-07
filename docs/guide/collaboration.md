@@ -24,12 +24,30 @@ New messages arrive by themselves within about two seconds while the conversatio
 
 ### How to use the Messages button in the top bar — Chat
 1. The **Messages** (الرسائل) button is the envelope in the top bar, beside the bell. When you have unread messages the envelope is replaced by their number ("99+" above ninety-nine).
-2. Press it. A panel lists up to six of your conversations, those with unread messages first, each with the start of its last message.
-3. Press a conversation to open it in Chat, or press **Open Chat** (فتح المحادثات) at the bottom to open the screen.
-4. On a phone the button is the **Messages** row at the bottom of the menu drawer, with the number beside it; it opens the same panel.
+2. Press it. A panel lists up to seven of your conversations, those with unread messages first: each with the person's round picture (their initials) and the coloured dot of their status, the time of the last message, its start, and the number unread.
+3. Press a conversation to open it as a **chat window** at the foot of the screen, without leaving the page you are on (see "How to chat in a window at the foot of the screen — Chat"). The small square at the end of the row, **Open in Chat** (فتح في صفحة المحادثات), opens it on the Chat screen instead. **Open Chat** (فتح المحادثات) at the bottom opens the screen.
+4. On a phone the button is the **Messages** row at the bottom of the menu drawer, with the number beside it; it opens the same panel, and a conversation opens full screen.
 - The number is checked about every fifteen seconds on any page, so a new message shows without reloading.
 - A conversation you muted is not counted in the number.
 - A person who has no chat permission still sees the button, with the old empty panel: "No new messages." (لا توجد رسائل جديدة.).
+
+### How to chat in a window at the foot of the screen — Chat
+1. Open a conversation from the Messages panel in the top bar. It opens as a small window at the bottom end of the screen, over whatever page you are on, and the box to write in has the cursor.
+2. The window's top line shows the person's picture with their status dot, their name, and under it their status — or "… is typing..." (… يكتب...) while they write. Its buttons: **Minimise** (تصغير), **Open in Chat** (فتح في صفحة المحادثات) and **Close** (إغلاق).
+3. Write and press **Enter** to send (**Shift+Enter** adds a line). The paperclip **Attach files** (إرفاق ملفات) adds up to five files; the smiling face **Emoji** (رموز تعبيرية) adds an emoji where the cursor is.
+4. Each of your messages shows its time and a tick: a clock while it is being sent, one tick **Sent** (أُرسلت), two ticks **Delivered** (وصلت), two coloured ticks **Seen** (تمت المشاهدة). A message counts as seen when the other person has its window (or the Chat screen) in front and is at its end — exactly as on the Chat screen.
+5. Up to three windows stand open side by side. Opening a fourth folds the oldest into a round **chat head** at the end of the screen: the person's picture with the number unread. Press a head to open its window again; point at it and press the small × to close it.
+6. The windows stay open as you move from screen to screen, and after a reload in the same browser tab. They do not appear on the Chat screen itself, which is the full chat.
+7. On a phone a window takes the whole screen; Close or Open in Chat leaves it.
+
+### How to choose your status — Chat
+1. Press your picture (or your initials) at the end of the top bar. Under **Status** (الحالة) press one of four:
+   - **Available** (متاح) — green while you have the system open and use it; it turns to Away by itself after five idle minutes.
+   - **Busy** (مشغول) — red. Messages and notifications make no sound while you are Busy.
+   - **Away** (بعيد) — amber, however active you are.
+   - **Appear offline** (الظهور كغير متصل) — colleagues see you as Offline, with no "last seen". You still receive every message and notification.
+2. The choice is saved at once and kept until you change it, on every device. It is the small dot at the bottom corner of your picture — bottom right, bottom left in Arabic: green Available, red Busy, amber Away, grey Offline or Appear offline. You see your own on your picture in the top bar and on My profile; colleagues see it, within a few seconds, wherever your picture is shown to them — the Messages panel, the chat windows, the Chat screen, the people search, the Users list and a user's page, and the task lists. A dot is shown only to the people you share a conversation with; to anybody else your picture has none.
+3. The **Busy** button at the top of the Conversations list is the same choice: it sets Busy, and **Clear busy** sets Available.
 
 ### How to start a conversation — Chat
 Needs: `create` on `chat`.
@@ -95,7 +113,7 @@ Needs: `create` on `chat`; only the person who wrote the message.
 ### How to mute a conversation or show yourself as Busy — Chat
 1. **Mute**: in the open conversation press the bell **Mute notifications** (كتم الإشعارات). The conversation no longer raises a notification and is not counted in the Messages button; its own Unread number still counts. A mention still reaches you. Press the crossed bell **Turn notifications back on** (إعادة تشغيل الإشعارات) to undo. Muting is yours alone; nobody else sees it.
 2. **Busy**: at the top of the Conversations list press **Busy** (مشغول) — "Show me as Busy to colleagues". Colleagues you talk to see you as Busy while you have the system open. Press **Clear busy** (إلغاء حالة مشغول) — "Show my usual status again" — to return to normal.
-3. Your status is otherwise worked out by itself: Online (متصل) while the system is open and you used the page in the last five minutes; Away (بعيد) while it is open but untouched for five minutes; Offline (غير متصل) about a minute after you close it, with "last seen …" (آخر ظهور …).
+3. With **Available** chosen (see "How to choose your status — Chat") your status is worked out by itself: Online (متصل) while the system is open and you used the page in the last five minutes; Away (بعيد) while it is open but untouched for five minutes; Offline (غير متصل) about a minute after you close it, with "last seen …" (آخر ظهور …). Busy and Away chosen in your own menu hold while the system is open; Appear offline always shows Offline, without "last seen".
 Messages can be sent to a person in any status; they read them when they return.
 
 ### How to talk about a record — Chat
@@ -427,7 +445,7 @@ Needs: `view` on `cloud_files` to see the panel, `create` to change it; Cloud Fi
 2. Each linked file shows its name, size, "linked by <name>" (ربطه …), when, and **Open in Cloud Files** (فتح في Cloud Files). Press the name to download it; a linked folder opens in the Document Centre.
 3. To add a file from your computer: **Choose files** (اختر ملفات), then **Upload** (رفع). "The file goes into this record's folder in Cloud Files and is linked to the record." The folder is made if it is not there.
 4. **Link a file from Cloud Files** (ربط ملف من Cloud Files) picks a file that is already in the cloud.
-5. **Create the record's folder** (إنشاء مجلد السجل) makes the record's own folder — record folder / kind / number, for example /Qimah/Purchase Invoices/API-HQ-2026-000004 — shares it with the cloud groups of the roles that may open that kind of record, and links it. The button is offered until the record has a folder linked.
+5. **Create the record's folder** (إنشاء مجلد السجل) makes the record's own folder — record folder / kind / number, for example /Qimah/Purchase Invoices/PUR-HQ-2026-000004 — shares it with the cloud groups of the roles that may open that kind of record, and links it. The button is offered until the record has a folder linked.
 6. To end a link type the reason in **Reason for unlinking <name>** (سبب إلغاء ربط <name>) and press **Unlink** (إلغاء الربط). The file stays in the cloud; only the link ends, and the reason is kept in the record's history.
 - "Not available to you in Cloud Files" (غير متاح لك في Cloud Files) — a file is linked, but the cloud does not show it to your account (not shared with you, or deleted there). Its name is not given.
 - "Link your account to see this file" (اربط حسابك لترى هذا الملف) — you have not linked your Cloud Files account.

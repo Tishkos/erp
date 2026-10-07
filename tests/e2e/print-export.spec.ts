@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Browser, type Page } from '@playwright/test';
 import { readPdf, readWord, readWorkbook } from '../support/export-files';
+import { keepEnglish } from './support/locale';
 
 /**
  * Print / Export, in a browser, the way a person uses it.
@@ -30,6 +31,7 @@ let salesNo = '';
 
 async function signIn(page: Page, user: { email: string; password: string }, locale: 'en' | 'ar' = 'en') {
   await page.context().clearCookies();
+  await keepEnglish(page.context());
   await page.context().addCookies([{ name: 'erp-locale', value: locale, url: 'http://localhost:3000' }]);
   await page.goto('/sign-in');
   await page.locator('input[type="email"], input[name="email"]').first().fill(user.email);
@@ -113,6 +115,16 @@ test('a Purchase Invoice is raised, sent for approval, and posted by the CEO', a
     await page.waitForURL(/\/(?:payables\/suppliers|sales\/customers)\/[^/?]+/, { timeout: 60_000 });
     supplierCode = minted(page);
 
+    // 0408 — an item is bought only from a supplier linked to it: the manager
+    // (who may configure items) links the new supplier to the seed item.
+    await page.goto('/master-data/items/ITM-SEED');
+    const link = page.locator('form:has(select[name="supplierId"])').first();
+    await expect(link).toBeVisible({ timeout: 60_000 });
+    const option = await link.locator('select[name="supplierId"] option').filter({ hasText: supplierCode }).first().getAttribute('value');
+    await link.locator('select[name="supplierId"]').selectOption(option!);
+    await link.getByRole('button', { name: 'Link supplier', exact: true }).click();
+    await expect(page.locator('tr').filter({ hasText: supplierCode }).first()).toBeVisible({ timeout: 60_000 });
+
     await page.goto('/payables/invoices/new');
     await page.getByLabel('Supplier Code').fill(supplierCode);
     // The purchase invoice asks no due date since AP17 (the supplier's terms
@@ -140,7 +152,8 @@ test('a Purchase Invoice is raised, sent for approval, and posted by the CEO', a
     await page.goto(`/payables/invoices/${encodeURIComponent(invoiceNo)}`);
     await press(page, 'Approve and post', 'Posted');
   });
-  expect(invoiceNo).toMatch(/^API-/);
+  // Numbered PUR- since 0409 (2026-10-06).
+  expect(invoiceNo).toMatch(/^PUR-/);
 });
 
 test('a Sales Invoice puts something on the customer’s statement', async ({ browser }) => {

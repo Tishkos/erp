@@ -47,10 +47,12 @@ export async function StockFlowRegister({ direction, searchParams }: { direction
   const to = text('to');
   const warehouseCode = text('warehouse');
   const kind = text('kind');
+  // The order (2026-10-07): newest first unless the person asks for the oldest.
+  const sort = text('sort') === 'oldest' ? ('oldest' as const) : null;
   const kinds = direction === 'receipt' ? flows.RECEIPT_KINDS : flows.ISSUE_KINDS;
 
   const { result, warehouses } = await withCurrentUser(async (tx) => ({
-    result: await flows.forScreen(tx, principal, direction, { search: outcome.q, from, to, warehouseCode, kind, page: outcome.page }),
+    result: await flows.forScreen(tx, principal, direction, { search: outcome.q, from, to, warehouseCode, kind, sort, page: outcome.page }),
     warehouses: await flows.warehouses(tx, principal),
   }));
   const query = (p: number) =>
@@ -60,6 +62,7 @@ export async function StockFlowRegister({ direction, searchParams }: { direction
       to ? `to=${to}` : '',
       warehouseCode ? `warehouse=${encodeURIComponent(warehouseCode)}` : '',
       kind ? `kind=${kind}` : '',
+      sort ? `sort=${sort}` : '',
       `page=${p}`,
     ]
       .filter(Boolean)
@@ -77,7 +80,17 @@ export async function StockFlowRegister({ direction, searchParams }: { direction
             <span className={s.sapTitleMeta}>{admin('rows_shown', { count: result.total })}</span>
           </h2>
 
-          <ListToolbar clearHref={route} clearLabel={admin('clear_search')} countLabel={admin('rows_shown', { count: result.total })} placeholder={admin('search_placeholder')} q={outcome.q} searchLabel={admin('search')} />
+          <ListToolbar
+            clearHref={route}
+            clearLabel={admin('clear_search')}
+            countLabel={admin('rows_shown', { count: result.total })}
+            hidden={Object.fromEntries(
+              Object.entries({ from, to, warehouse: warehouseCode, kind, sort }).filter((entry): entry is [string, string] => Boolean(entry[1])),
+            )}
+            placeholder={admin('search_placeholder')}
+            q={outcome.q}
+            searchLabel={admin('search')}
+          />
 
           <form className={s.filterBar} method="get">
             <FilterRow>
@@ -85,6 +98,15 @@ export async function StockFlowRegister({ direction, searchParams }: { direction
               <Field defaultValue={to ?? ''} label={column('to')} name="to" type="date" />
               <Select defaultValue={warehouseCode ?? ''} emptyLabel={t('all_warehouses')} label={column('warehouse')} name="warehouse" options={warehouses.map((w) => ({ value: w.code, label: `${w.code} · ${w.name}` }))} />
               <Select defaultValue={kind ?? ''} emptyLabel={t('all_kinds')} label={t('kind')} name="kind" options={kinds.map((code) => ({ value: code, label: t(`kind_${code}`) }))} />
+              <Select
+                defaultValue={sort ?? 'newest'}
+                label={admin('register_filter.sort')}
+                name="sort"
+                options={[
+                  { value: 'newest', label: admin('register_filter.sort_newest') },
+                  { value: 'oldest', label: admin('register_filter.sort_oldest') },
+                ]}
+              />
               <SubmitRow>
                 <Submit label={t('filter')} />
               </SubmitRow>

@@ -95,6 +95,8 @@ import * as advanceHold from './advance-hold';
 import * as attachments from './attachments';
 import { allocateDocumentNumber } from './numbering';
 import { registerPage, searchOf, type RegisterPaging } from './register-page';
+import { businessDayOf, datesOrder, withinDates } from './register-dates-sql';
+import type { RegisterDates } from '../domain/register-dates';
 import { businessDateOf, businessToday } from '../domain/business-date';
 
 export const PERMISSION_OBJECT = 'payment_application';
@@ -1485,6 +1487,8 @@ export interface RegisterFilter extends RegisterPaging {
   /** The screen's view: the statuses it shows (none or empty — every status). */
   readonly statuses?: readonly string[] | null;
   readonly search?: string | null;
+  /** The Filter: a window of application dates and the order (newest first unless asked). */
+  readonly dates?: RegisterDates | null;
 }
 
 const applicationColumns = {
@@ -1550,8 +1554,11 @@ export async function list(tx: Tx, filter: ListFilter = {}) {
 export async function listForScreen(tx: Tx, filter: RegisterFilter = {}) {
   const asOf = today();
   const statuses = filter.statuses?.length ? filter.statuses : null;
+  // An application's date is set when it is sent; until then the day it was raised stands for it.
+  const day = sql`coalesce(${paymentApplication.applicationDate}, ${businessDayOf(paymentApplication.createdAt)})`;
   const where = and(
     statuses ? inArray(paymentApplication.status, statuses as never[]) : undefined,
+    withinDates(day, filter.dates),
     searchOf(
       [
         paymentApplication.applicationNo,
@@ -1571,8 +1578,6 @@ export async function listForScreen(tx: Tx, filter: RegisterFilter = {}) {
       filter.search,
     ) ?? undefined,
   );
-  const daysWaiting = sql`case when ${paymentApplication.status} = 'sent' and ${paymentApplication.applicationDate} is not null
-                               then ${asOf}::date - ${paymentApplication.applicationDate} else -1 end`;
   return registerPage({
     paging: filter,
     count: async () => {
@@ -1588,8 +1593,10 @@ export async function listForScreen(tx: Tx, filter: RegisterFilter = {}) {
       return row?.n ?? 0;
     },
     rows: async ({ limit, offset }) => {
+      // Newest first (2026-10-07, by direction: "the tables first comes latest ones made for all"),
+      // or oldest first when the Filter asks — no longer the longest waiting first.
       const rows = await applicationQuery(tx, where)
-        .orderBy(sql`${daysWaiting} desc`, desc(paymentApplication.createdAt), desc(paymentApplication.id))
+        .orderBy(...datesOrder(day, filter.dates, paymentApplication.createdAt, paymentApplication.id))
         .limit(limit)
         .offset(offset);
       return rows.map((row) => ({

@@ -1,10 +1,10 @@
-import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { House, MapPinOff } from 'lucide-react';
 // The palettes' `--w-*` tokens, which the Intent theme reads: a missing page
 // may be the first thing a session draws, before any screen has loaded them.
 import '@/components/admin/admin.module.css';
-import styles from './route-states.module.css';
+import { EmptyState, EmptyStatePage } from '@/components/admin/empty-state';
+import { BackButton } from '@/components/states/back-button';
 
 /**
  * An address that is not in the approved tree.
@@ -15,27 +15,28 @@ import styles from './route-states.module.css';
  * the refusal in `Denied` — because telling a reader "not found" when they mean
  * "not allowed" sends them to the wrong person for help.
  *
- * Drawn as Intent UI's empty state (2026-10-06): the icon in a soft circle,
- * the title, the reason, the way on.
+ * It is drawn inside the shell (the catch-all is under the application's
+ * layout), so the header and navigation stay; the ways on are Home and the
+ * page the stale link was followed from.
+ *
+ * Drawn as Intent UI's empty state (`EmptyState`, 2026-10-06). `stateCard` on
+ * the card is what the theme-readability spec and Noah's camera look for.
  */
 export default async function NotFound() {
-  const t = await getTranslations('error');
+  const [t, s] = await Promise.all([getTranslations('error'), getTranslations('states')]);
 
   return (
-    <main className={styles.state}>
-      <div className={styles.stateCard} role="alert">
-        <span aria-hidden="true" className={styles.stateIcon}>
-          <MapPinOff />
-        </span>
-        <h1>{t('not_found_title')}</h1>
-        <p>{t('not_found_body')}</p>
-        <div className={styles.stateActions}>
-          <Link className={styles.stateAction} href="/">
-            <House aria-hidden="true" />
-            <span>{t('not_found_action')}</span>
-          </Link>
-        </div>
-      </div>
-    </main>
+    <EmptyStatePage>
+      <EmptyState
+        action={{ href: '/', label: t('not_found_action'), icon: House }}
+        actions={<BackButton label={s('go_back')} />}
+        className="stateCard"
+        description={t('not_found_body')}
+        headingLevel={1}
+        icon={MapPinOff}
+        role="alert"
+        title={t('not_found_title')}
+      />
+    </EmptyStatePage>
   );
 }

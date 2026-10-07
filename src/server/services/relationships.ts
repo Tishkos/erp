@@ -680,7 +680,10 @@ const partyAgeing: Reader = async (tx, { root, principal, today }) => {
     MONEY_SCALE,
   );
   const overdue = items.filter((item) => item.daysOverdue > 0);
-  const oldest = items.reduce<string | null>((first, item) => (first === null || item.dueDate < first ? item.dueDate : first), null);
+  // A purchase invoice with no due date set yet (an advance's balance) has no date to be the oldest.
+  const oldest = items
+    .filter((item) => item.dueDateSet)
+    .reduce<string | null>((first, item) => (first === null || item.dueDate < first ? item.dueDate : first), null);
   return {
     truncated: false,
     rows: [

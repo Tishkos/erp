@@ -2,7 +2,7 @@
 
 This guide covers what every user needs before any one module: getting in, finding your way, and the parts every screen shares.
 You **sign in** with the account an administrator issued; the first time, with a **temporary password** that must be replaced before anything else opens.
-The **top bar** then carries the module menu, the Active branch, search, notifications, messages, the language button and your own menu (profile, language, appearance, sign out).
+The **top bar** then carries the module menu, search, notifications, messages and your own menu (the Active branch, the language, profile, appearance, sign out).
 The **Dashboard** (Home) is the first screen and shows what is waiting for you; **My Approvals** lists the documents that wait for your decision. Both — with Notifications, Global Search and Saved views — are described in full in the Workspace guide; this guide keeps a short block for each.
 Every module is made of the same two things — a **list** with a search box and filters, and a **record** window with a status chip, action buttons and four icons (print, attachments, notes, history).
 Every action is answered with the same messages: "Saved." or "That could not be saved." followed by the reason.
@@ -108,7 +108,7 @@ The reason is shown in a red line above the button.
 Path: at the top of every screen once you are signed in
 Address: —
 Needs: to be signed in. What it lists depends on your permissions.
-What it is for: Getting to any screen. From left to right (right to left in Arabic): the company's mark and name (press it to go to the Dashboard), the module names, the Active branch, Search, Notifications, Messages, the language button, and your own menu.
+What it is for: Getting to any screen. From left to right (right to left in Arabic): the company's mark and name (press it to go to the Dashboard), the module names, Search, Notifications, Messages, and your own menu — which holds the **Active branch** and the **Language** too. A person who chose the side panel or the bottom bar in Appearance has the module names there instead, and the open module's headings in the bar after the company's name (see "How to use the side panel instead of the top bar — Top bar and module menu").
 
 ### How to open a screen from the menu — Top bar and module menu
 1. Press a module name in the bar. A panel drops down with the module's headings and, under each, its screens.
@@ -118,12 +118,12 @@ The modules, in order, are: Dashboard (الرئيسية), Accounting (المحا
 A few screen names in the panels are drawn in a lighter grey and show "Not yet built" (لم تُنشأ بعد) when you hover over them. Some of these work normally all the same (for example Sales Invoices, Customer Receipts and Sales Returns); the Monitoring screens really are empty.
 
 ### How to move between the screens of one heading — Top bar and module menu
-Most screens show a row of tabs under the bar: the other screens of the same menu heading that you may open. Press a tab to switch; the open one is marked. It is the same list as the heading in the dropdown.
+Most screens show a row of tabs under the bar: the other screens of the same menu heading that you may open. Press a tab to switch; the open one is marked. It is the same list as the heading in the dropdown. With the side panel the tabs are not drawn: the bar's heading menus carry the same screens.
 
 ### How the bar behaves on a narrow window — Top bar and module menu
-1. When the window gets narrower the module names are never shrunk. The bar first gives up, in this order: your name beside your picture, the words "Active branch", the small arrows beside the module names, and the company's name.
+1. When the window gets narrower the module names are never shrunk. The bar first gives up, in this order: your name beside your picture, the company's name, and the small arrows beside the module names.
 2. If that is still not enough, the module names become **icons**. Hover over an icon to read the module's name; press it to open the same dropdown.
-3. On a tablet-width window (about 1,200 pixels or less) the modules leave the bar altogether and a **menu button** (☰, "Open navigation menu" — فتح قائمة التنقل) appears. As the window gets narrower still, the bell, the envelope and the language button — and on a phone (about 560 pixels or less) the branch picker and your picture — leave the bar as well. All of those except your own menu are then inside the menu button — see the next task.
+3. On a tablet-width window (about 1,200 pixels or less) the modules leave the bar altogether and a **menu button** (☰, "Open navigation menu" — فتح قائمة التنقل) appears. As the window gets narrower still, the bell and the envelope — and on a phone (about 560 pixels or less) your picture — leave the bar as well. All of those except your own menu are then inside the menu button — see the next task.
 
 ### How to use the menu on a phone (the drawer) — Top bar and module menu
 1. Press the menu button (☰). A drawer slides in.
@@ -133,27 +133,61 @@ Most screens show a row of tabs under the bar: the other screens of the same men
 5. Close the drawer with ✕, by pressing outside it, or with Esc.
 The drawer has no Sign out and no Profile settings entry. On a phone held upright, where your picture is not in the bar, turn the phone sideways (or use a wider window) to get your own menu back; the profile can also be opened by its address, /profile.
 
+### How to use the side panel instead of the top bar — Top bar and module menu
+Each person chooses where the modules are: your own menu → **Appearance** (المظهر) → **Navigation** (التنقل) → **Menu position** (موضع القائمة): **Top bar** (الشريط العلوي, as described above), **Side panel** (اللوحة الجانبية) or **Bottom bar** (الشريط السفلي). The choice is yours alone and follows you to every device.
+1. With **Side panel** the modules leave the top bar and stand in a panel down the left of the screen (the right in Arabic), each with its icon — the list of the system's parts, as in Odoo. The module you are in is highlighted. The Dashboard stands first, under no heading; the other modules stand under a small heading with the ones related to them: **Finance** (المالية) — Accounting; **Invoicing** (الفوترة) — Receivables, Payables, Transfers & Applications; **Operations** (العمليات) — Logistics, Money Transfer, CRM, Projects, Inventory; **People** (الأفراد) — HR; **Workspace** (مساحة العمل) — Documents, Monitoring, Reports; **System** (النظام) — Settings. A heading appears only over modules you may open. To have one plain list instead, choose **Plain list** (قائمة بسيطة) under **Group modules in the side panel** (تجميع الوحدات في اللوحة الجانبية) in Appearance. On the narrow rail the headings become thin lines, and the first icon of each group names the group when you hover over it.
+2. Press a module in the panel: its first screen opens (Accounting opens Journal Entries, Payables opens Purchase Invoices).
+3. The top bar then shows, after the company's mark and name and a thin line, **that module's menu** — "Accounting menu" (قائمة المحاسبة) for Accounting: each of its headings with a small arrow — for Accounting **General Ledger ▾**, **Treasury & Banking ▾**, **Master Data — Financial ▾** and so on. Press a heading: its screens drop down; press one to open it. The heading of the screen you are on is highlighted, and the open screen is marked in its list. A module with a single heading (Receivables, Inventory, HR, Projects…) shows its screens themselves in the bar instead, as the page's tabs did. When the headings do not all fit, the last ones go behind **More ▾** (المزيد) at the end of the bar, with their count; nothing is shrunk. Esc, or a press outside, closes a heading's list.
+4. To give the screen more height, the page's own row of tabs is not shown in this mode (the bar's menus carry the same screens), and the page's title stands in one row with the back button beside it, its description small under it, its buttons at the end.
+5. Press **Collapse** (طيّ, at the foot of the panel) to make it a narrow rail of icons — or choose **Icons only** (الأيقونات فقط) under **Side panel and bottom bar** (اللوحة الجانبية والشريط السفلي) in Appearance. On the rail, hover over an icon (or reach it with Tab) to read the module's name, and press it to open the module. The button at the foot then reads "Expand side panel" (توسيع اللوحة الجانبية) and brings the names back.
+6. The page takes the rest of the width, and **Content width** still applies to it.
+On a phone (about 560 pixels or less) the side panel, the bar's headings and the compact title are not used: the menu button (☰) and its drawer are the navigation there and the tabs are shown, as with the top bar.
+
+### How to use the bottom bar — Top bar and module menu
+1. With **Bottom bar** (الشريط السفلي) the modules sit in a floating bar at the foot of the window: each module's icon with its name under it. When the names do not fit (or you chose **Icons only**) only the icons are shown; hover over one to read its name.
+2. Press a module: its menu opens upwards, with the same headings and screens as its dropdown. Press a screen, press outside, or press Esc to close it. The module you are in is marked.
+3. The top bar keeps the company's mark and name and shows the open module's headings after them, as with the side panel; the page keeps its own tabs and title. The page leaves room at its foot so nothing stays hidden behind the bar.
+4. On a phone the bar holds the four modules you open most on that device (the module of the open screen always among them) and **More** (المزيد), which opens the menu drawer with every module.
+
 ### How to open your own menu — Top bar and module menu
 1. Press your picture (or your initials) at the end of the bar. The panel shows your name, e-mail and role.
-2. **Profile settings** (إعدادات الملف الشخصي) opens My profile.
-3. **Language** (اللغة) shows the language you would switch to and switches at once.
-4. **Appearance** (المظهر) opens the appearance drawer.
-5. **Sign out** (تسجيل الخروج) ends your session.
+2. **Active branch** (الفرع النشط) with the branch you work in; with several branches, each of them as a button — press another to work in it (see "Active branch").
+3. **Language** (اللغة) with **English** and **العربية** side by side, the one in use marked; press the other to switch at once.
+4. **Status** (الحالة) — for a person who uses Chat: **Available** (متاح), **Busy** (مشغول), **Away** (بعيد) or **Appear offline** (الظهور كغير متصل), each with the coloured dot colleagues will see, the one in use ticked; a line under them says what it means. Press another to change it at once (see "How to choose your status — Chat").
+5. **Sounds** (الأصوات) — the switch for the system's sounds on this browser (see "How to turn sounds on or off — Top bar and module menu"); under it **Pop-up notifications** (الإشعارات المنبثقة) — the switch for the small cards in the corner (see "How pop-up notifications work — Top bar and module menu").
+6. **Profile settings** (إعدادات الملف الشخصي) opens My profile.
+7. **Appearance** (المظهر) opens the appearance drawer.
+8. **Sign out** (تسجيل الخروج) ends your session.
 Under your name the bar shows your role: **System Administrator** (مسؤول النظام) for a Super User, otherwise your role codes, or **ERP user** (مستخدم النظام) when you have no role.
+
+### How to turn sounds on or off — Top bar and module menu
+1. Press your picture (or your initials) at the end of the bar. Near the bottom of the menu, **Sounds** (الأصوات) — "Messages, notifications and the results of forms" — has a switch; it is on unless you turned it off. Press it to change it; turning it on plays a short sound.
+2. The sounds are short and soft: a two-note ding for a message from a colleague, a soft lift when your own message goes, a light chime when the bell gets a new notification, a bright rising sound when a form you sent is saved, submitted, approved or posted, two low notes when it is refused or fails, and a double tap when a required field is still empty.
+3. Nothing sounds before you have pressed or typed something on the page, a message in a conversation you are reading makes no sound, and while your status is **Busy** messages and notifications make no sound. Muted conversations never sound.
+4. The switch is kept in this browser only: another computer or browser keeps its own.
+
+### How pop-up notifications work — Top bar and module menu
+1. A small card pops up in the corner of the screen — at the bottom on the end side (bottom right in English, bottom left in Arabic), above the chat windows and the bottom bar; at the top, under the header, on a phone. At most three show at once; the next waits until one goes.
+2. **After you send a form**: a green tick and the banner's own words ("Saved." or the screen's message) when it is saved, submitted, approved or posted; a red mark with the refusal in its words ("That could not be saved." and the reason) when it is refused. The banner on the screen stays exactly where it always is — the card is only a second place to see it. Opening a page, reloading it, or going back or forward never pops one up again.
+3. **A new notification**: the bell's icon in the accent colour, its title and **Open** (فتح), which opens the record as the bell does. Not for what was already waiting when you opened the page, and not while the bell's list is open.
+4. **A new message**: your colleague's face, the line they wrote and **Reply** (رد), which opens the conversation as a chat window at the foot of the screen. Not on the Chat screen, not for a muted conversation or the one you are reading; a newer message replaces the card, and reading the conversation takes it away.
+5. A card goes by itself after five seconds (a refusal after eight); a thin line along its foot shows the time left. Resting the pointer on it, or moving to it with the keyboard (F6), holds it; **×** (**Dismiss**, إغلاق) closes it at once.
+6. To turn them off: press your picture at the end of the bar; under **Sounds**, **Pop-up notifications** (الإشعارات المنبثقة) — "Saves, notifications and messages — errors always show" — has a switch, on unless you turned it off. Off, nothing pops up for saves, notifications or messages; a refusal still does. While your status is **Busy**, notifications and messages do not pop up. The switch is kept in this browser only.
 
 ### What the footer says — Top bar and module menu
 Every screen ends with a thin footer: the copyright line, the running version (for example v1.2.3) and a health light — **System is healthy** (النظام يعمل بشكل سليم) in green, or **System is degraded** (النظام متعثّر) in red when the database behind the screens is not answering properly. Quote the version when you report a problem.
 
 ## Active branch (الفرع النشط)
-Path: in the top bar, beside the search icon (on a phone: at the top of the drawer)
+Path: your own menu (your picture at the end of the top bar) → Active branch (on a phone: at the top of the drawer)
 Address: —
-Needs: to be assigned to at least one branch by an administrator; the picker appears only when you are assigned to more than one.
+Needs: to be assigned to at least one branch by an administrator; the choices appear only when you are assigned to more than one.
 What it is for: Saying which branch you are working in right now.
 
 ### How to change the Active branch — Active branch
-1. Press the branch code under the words "Active branch" (الفرع النشط) and choose another of your branches.
-2. The screen reloads by itself under the new branch. There is no Save button.
-3. If you are assigned to a single branch, its code is shown as plain text and cannot be changed.
+1. Press your picture (or your initials) at the end of the top bar. Under your name the menu shows **Active branch** (الفرع النشط) and the code of the branch you work in.
+2. Under it, each of your branches is a button, the one in use ticked. Press another.
+3. The screen reloads by itself under the new branch. There is no Save button.
+4. If you are assigned to a single branch, only its code is shown and it cannot be changed. On a phone the same choice is at the top of the menu drawer (☰), as a list.
 
 ### What changing the branch does — Active branch
 - New documents you raise are created in the Active branch, and the things offered on their forms follow it (for example, a new sales invoice offers only that branch's warehouses).
@@ -177,24 +211,24 @@ What it is for: Reading what the system has told you and opening the record each
 Path: the envelope in the top bar (on a phone: Messages at the bottom of the drawer)
 Address: —
 Needs: to be signed in.
-What it is for: The way into the internal chat. While chat messages are unread the envelope is replaced by their number; its panel lists your conversations and leads to the chat screen. Chat itself is described under "Chat".
+What it is for: The way into the internal chat. While chat messages are unread the envelope carries their number; its panel lists your conversations, opens one as a chat window at the foot of the screen, and leads to the chat screen. Chat itself is described under "Chat".
 
 ### How to use it — Messages
-1. Press the envelope. The panel lists up to six of your conversations, those with unread messages first.
-2. Press a conversation to open it in Chat, or press **Open Chat** (فتح المحادثات) to open the chat screen.
+1. Press the envelope. The panel lists up to seven of your conversations, those with unread messages first, each with the colleague's status dot.
+2. Press a conversation to open it as a chat window at the foot of the screen (on a phone, full screen); the small square at the end of its row opens it on the Chat screen instead. **Open Chat** (فتح المحادثات) opens the chat screen.
 3. Press the envelope again, press outside, or press Esc to close the panel.
 For an account without access to Chat the panel only says "No new messages." (لا توجد رسائل جديدة.)
 
 ## Language (اللغة)
-Path: the button showing ع or EN in the top bar; also Language in your own menu and in the phone drawer
+Path: your own menu (your picture at the end of the top bar) → Language; also on My profile, and at the bottom of the phone drawer
 Address: —
 Needs: to be signed in.
 What it is for: Switching the whole interface between English and Arabic.
 
 ### How to switch language — Language
-1. Press the button: it shows **ع** while the screen is in English and **EN** while it is in Arabic — the language you will get.
-2. The page reloads in the other language. In Arabic everything is mirrored right-to-left; numbers, codes and document numbers stay left-to-right.
-3. The same switch is in your own menu (**Language**, with the other language's name under it) and at the bottom of the phone drawer.
+1. Press your picture (or your initials) at the end of the top bar. The menu shows **Language** (اللغة) with **English** and **العربية** side by side; the one in use is ticked.
+2. Press the other one. The page reloads in that language. In Arabic everything is mirrored right-to-left; numbers, codes and document numbers stay left-to-right.
+3. The same choice is on My profile (**Language**), and at the bottom of the phone drawer (the other language's name). The Sign in screen keeps its own language button.
 
 ### What switching language changes — Language
 - Menu names, screen titles, field labels, buttons, statuses and standard messages.
@@ -206,18 +240,35 @@ What it is for: Switching the whole interface between English and Arabic.
 Path: your own menu → Appearance (on a phone: Appearance at the bottom of the drawer)
 Address: —
 Needs: to be signed in.
-What it is for: Changing how the screens look for you only — layout style, spacing and sizes. Colours are chosen on My profile.
+What it is for: Changing how the screens look and read for you only — where the menu is (top bar, side panel or bottom bar), layout style, spacing, text size, motion and table rows. Colours are chosen on My profile.
 
 ### How to change the look — Appearance
 1. Press your picture → **Appearance** (المظهر). A side panel opens, headed "Customize your workspace" (تخصيص مساحة العمل).
-2. Under **Interface style** choose one of the cards: Current / Default (Existing ERP design), Standard (Balanced), Enterprise (Dense and efficient), Minimal (Clean and quiet), Modern (Contemporary), Command (Power user), Studio (Spacious and refined). Each card previews itself. A style sets all the settings below at once.
-3. Or set them one by one under **Layout settings**: **Density** (كثافة العرض) — Comfortable (مريح), Compact (مضغوط), Spacious, Airy; **Corner style** (نمط الزوايا) — Soft (ناعمة), Rounded (مستديرة), Sharp, Subtle, Pill; **Content width** (عرض المحتوى) — Fluid (مرن), Contained (محدود), Wide, Full width.
-4. Open **Advanced appearance** for **Border style** (None, Subtle, Standard, Strong), **Shadow** (None, Subtle, Soft, Elevated) and **Component size** (Small, Medium, Large).
-5. Every choice applies immediately and saves itself: the line at the bottom says "Appearance saved to your account." Close the panel with ✕, a click outside, or Esc.
-On the Arabic screen several of these labels (Interface style, the style names, Layout settings, Advanced appearance, Border style, Shadow, Component size and some option names) currently show question marks instead of Arabic words; the options still work in the same order as listed here.
+2. Under **Navigation** (التنقل) choose where the modules are — **Menu position** (موضع القائمة): Top bar (الشريط العلوي), Side panel (اللوحة الجانبية) or Bottom bar (الشريط السفلي); whether the side panel and the bottom bar show **Icons and names** (الأيقونات والأسماء) or **Icons only** (الأيقونات فقط); whether the side panel lists the modules **Grouped** (مجمّعة) under headings such as Invoicing or as a **Plain list** (قائمة بسيطة); the **Side panel colour** (لون اللوحة الجانبية); and whether the **Top bar when scrolling** (الشريط العلوي عند التمرير) **Stays in view** (يبقى ظاهراً) or **Scrolls away** (يختفي مع التمرير). See "How to use the side panel instead of the top bar — Top bar and module menu".
+3. Under **Interface style** (نمط الواجهة) choose one of the cards: Current / Default (الحالي / الافتراضي — Existing ERP design), Standard (قياسي — Balanced), Enterprise (مؤسسي — Dense and efficient), Minimal (بسيط — Clean and quiet), Modern (عصري — Contemporary), Command (قيادة — Power user), Studio (استوديو — Spacious and refined). Each card previews itself. A style sets Density, Corner style, Content width, Border style, Shadow and Component size at once; it never changes Navigation, Text size, Animations or Table rows.
+4. Or set them one by one: under **Layout settings** (إعدادات التخطيط) **Corner style** and **Content width**; under **Text and density** (النص والكثافة) **Text size**, **Density** and **Animations**; under **Tables** (الجداول) **Table rows**.
+5. Open **Advanced appearance** (مظهر متقدم) for **Border style**, **Shadow** and **Component size**.
+6. Every choice applies immediately and saves itself: the line at the bottom says "Saving appearance…" (جارٍ حفظ المظهر…) and then "Appearance saved to your account." (تم حفظ المظهر في حسابك.). Close the panel with ✕, a click outside, or Esc.
+7. Until you change something, you see **everyone's default**: the appearance the company chose for people who have not chosen their own (or the built-in one, when it chose none). Once you change a setting, the whole appearance is yours and stays yours.
+8. Whoever may configure the company (the Company Setup permission) sees **Everyone's default** (الافتراضي للجميع) at the bottom of the panel: **Make my appearance everyone's default** (اجعل مظهري الافتراضي للجميع) makes your palette, accent colour, layout and navigation what everyone without their own sees; **Reset everyone's default to the built-in** (أعد الافتراضي للجميع إلى المظهر الأصلي) puts the built-in one back. Each asks you to confirm first, and is kept in the audit trail. People who chose their own appearance keep it either way.
+
+### Fields — Appearance
+- **Menu position** (موضع القائمة) — Top bar (the default), Side panel, Bottom bar.
+- **Side panel and bottom bar** (اللوحة الجانبية والشريط السفلي) — Icons and names (the default), Icons only. The side panel's Collapse button changes the same setting.
+- **Group modules in the side panel** (تجميع الوحدات في اللوحة الجانبية) — Grouped (مجمّعة, the default: related modules under headings such as **Invoicing** — الفوترة — over Receivables and Payables), Plain list (قائمة بسيطة). The top bar and the bottom bar are not grouped.
+- **Side panel colour** (لون اللوحة الجانبية) — Default (افتراضي, the page's own surface), Highlight (مظلَّلة باللون المميز: a soft wash of your accent colour — a light wash on a light palette, a deep tint on a dark one — with the module you are in a stronger step of the same colour), Accent (اللون المميز: the panel is a deeper step of your accent colour — for blue, the royal blue of the logo — with white names and icons, black on gold). It colours the whole panel and the narrow rail, headings and the Collapse row included; the top bar keeps its colour. It follows your palette and accent colour as you change them.
+Every chosen option in the panel, and the chosen style card, is highlighted exactly as the side panel highlights the module you are in.
+- **Top bar when scrolling** (الشريط العلوي عند التمرير) — Stays in view (the default), Scrolls away (more room on a short screen).
+- **Corner style** (نمط الزوايا) — Soft (ناعمة), Rounded (مستديرة), Sharp (حادّ), Subtle (خفيف), Pill (دائري).
+- **Content width** (عرض المحتوى) — Fluid (مرن), Contained (محدود), Wide (عريض), Full width (عرض كامل).
+- **Text size** (حجم النص) — Smaller (أصغر), Default (افتراضي), Larger (أكبر). Everything on the screen grows or shrinks with the text, as with the browser's zoom.
+- **Density** (كثافة العرض) — Comfortable (مريح), Compact (مضغوط), Spacious (واسع), Airy (رحب).
+- **Animations** (الحركة) — On (مفعّلة), Reduced (مخفّفة): menus, panels and highlights appear at once instead of sliding or fading.
+- **Table rows** (صفوف الجداول) — Striped (مخطّطة, every other row lightly tinted — the default), Plain (عادية). It applies to every list and to the styles that tint rows.
+- **Border style** (نمط الحدود) — None (بلا), Subtle, Standard (قياسي), Strong (قوي). **Shadow** (الظل) — None, Subtle, Soft, Elevated (مرتفع). **Component size** (حجم العناصر) — Small (صغير), Medium (متوسط), Large (كبير).
 
 ### After you save — Appearance
-The look is saved on your account and follows you to any device you sign in on. It changes nothing for other users and nothing in the data. "Could not save. Check your connection and try again." means the choice applied on screen but was not stored; pick it again when the connection is back.
+The look is saved on your account and follows you to any device you sign in on. It changes nothing for other users and nothing in the data. "Could not save. Check your connection and try again." (تعذّر الحفظ. تحقّق من الاتصال وحاول مرة أخرى.) means the choice applied on screen but was not stored; pick it again when the connection is back. When Noah shows you a live picture of a screen, the picture is drawn with the top bar whichever Menu position you chose — the module, heading and screen names are the same in the side panel and the bottom bar.
 
 ## My Dashboard (لوحة معلوماتي)
 Path: Dashboard → Home → My Dashboard   |   Arabic: الرئيسية ← الرئيسية ← لوحة معلوماتي
@@ -235,7 +286,7 @@ What it is for: One list of the documents waiting for your decision, then what y
 Path: your own menu (your picture in the top bar) → Profile settings (إعدادات الملف الشخصي)
 Address: /profile
 Needs: to be signed in. No other permission: the page only ever shows and changes your own account.
-What it is for: Your own account: your picture, display name, colours, password, and the facts of the account (roles, branches, departments).
+What it is for: Your own account: your picture, display name, language, colours, password, and the facts of the account (roles, branches, departments).
 
 ### How to change your display name — My profile
 1. Open your menu → **Profile settings**.
@@ -257,6 +308,10 @@ What it is for: Your own account: your picture, display name, colours, password,
 2. Pick the highlight colour — "the buttons, the selected row, the mark under a title": Gold (ذهبي), Red (أحمر), Blue (أزرق), Green (أخضر) or Purple (بنفسجي).
 3. Press **Update** (تحديث). The colours are saved to your account and follow you across devices; each user chooses independently.
 Layout style, spacing and sizes are set in the Appearance panel of your own menu instead.
+
+### How to choose your language — My profile
+1. In the **Language** (اللغة) panel press **English** or **العربية**; the one in use is ticked.
+2. The page reloads in that language at once — there is no Save button. The choice is kept on this device, as with the Language choice in your own menu.
 
 ### Fields — My profile
 - **Display name** (الاسم المعروض) — required, at most 120 characters. The name shown in the top bar, on documents you raise or approve, and in audit logs.
@@ -432,7 +487,7 @@ The history cannot be edited by anyone. "Nothing has been recorded for this reco
 When you ask for help, quote the reason exactly as shown.
 
 ### The "Coming soon" screen — Messages concepts
-**Coming soon** (قريباً) on an otherwise empty screen means the screen is in the menu but has not been built yet: there is no data in it and nothing can be entered. The three Monitoring screens (List of customers, History, Reports) are like this. It is not an error and not a permission problem; use the working screen that covers the same need (for customers: Receivables → Sales & Receivables → Customers).
+**Coming soon** (قريباً) on an otherwise empty screen means the screen is in the menu but has not been built yet: there is no data in it and nothing can be entered. The three Monitoring screens (List of customers, History, Reports) are like this. It is not an error and not a permission problem; use the working screen that covers the same need (for customers: Accounting → Master Data — Financial → Customers).
 
 ### The access-denied screen — Messages concepts
 **Not available to you** (غير متاح لك) — "You do not have permission to open this screen." (لا تملك صلاحية فتح هذه الشاشة.) followed by "Ask an administrator to grant you access to <screen name>, quoting this page." The screen exists but your roles do not include viewing it. Nothing is wrong with the system; ask an administrator for access and name the screen shown in the message. The screen deliberately does not say what the page contains.

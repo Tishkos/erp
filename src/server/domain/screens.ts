@@ -143,6 +143,8 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   // 5 — Inventory (IMPROVEMENT-002: the twelve screens)
   availability: 'workspace',
   opening_stock: 'document',
+  // A sheet, a record and a register (2026-10-06).
+  manual_stock_additions: 'document',
   stock_receipts: 'list',
   stock_issues: 'list',
   stock_movements: 'document',
@@ -478,6 +480,8 @@ const DELIVERED: ReadonlySet<string> = new Set([
   // Transfer, Opening Stock, Item Reconciliation, Stock Movement.
   '/inventory/transfers',
   '/inventory/opening-stock',
+  // Manual Stock Additions (2026-10-06).
+  '/inventory/manual-additions',
   '/inventory/stock-reconciliation',
   '/inventory/stock-movements',
   // The Stock Ledger — the movements with a running balance (2026-09-27).

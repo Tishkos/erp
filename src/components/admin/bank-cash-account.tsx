@@ -44,6 +44,8 @@ import {
 } from '@/app/(app)/master-data/bank-accounts/actions';
 import { businessToday } from '@/server/domain/business-date';
 import { ProfileLink } from './profile-link';
+import { BalanceTrend } from '@/components/charts/balance-trend';
+import * as trialBalance from '@/server/services/trial-balance';
 
 /**
  * Bank accounts and cash accounts — Phase 2 requirements 5 and 6.
@@ -307,6 +309,11 @@ export async function AccountRecord({
          * for one account. An account with no G/L account linked has no
          * position to state, and says so rather than showing nought.
          */
+        // The same G/L lines the position adds up (posted and reversed, every branch the reader may see), for the
+        // balance over time drawn beside it. Read first: the position's own read is the one allowed to fail quietly.
+        ledgerLines: row.glAccountCode
+          ? await trialBalance.accountActivity(tx, row.glAccountCode, { from: '0001-01-01', to: window.to, allPermittedBranches: true })
+          : [],
         position: (
           await treasury
             .positions(
@@ -324,7 +331,7 @@ export async function AccountRecord({
     }
   });
   if (!data) notFound();
-  const { row, gl, people, moneys, position, bankRows, reserved } = data;
+  const { row, gl, people, moneys, position, bankRows, reserved, ledgerLines } = data;
   const money = (amount: string) => formatMoney(amount, row.currency, locale as Locale);
   // The address is the truth about which list this belongs on; a cash account
   // reached through the bank route is the wrong page for it.
@@ -577,6 +584,16 @@ export async function AccountRecord({
                 </div>
               </div>
             </Panel>
+          ) : null}
+
+          {/* The balance at each month's end, from the lines the figures above add up — in dinars, as the ledger
+              holds them (said so when the account is kept in another currency). */}
+          {position ? (
+            <BalanceTrend
+              asOf={window.to}
+              inDinars={row.currency !== 'IQD'}
+              lines={ledgerLines.map((line) => ({ postingDate: line.postingDate, debit: line.debitIqd, credit: line.creditIqd }))}
+            />
           ) : null}
 
           {mayEdit ? (

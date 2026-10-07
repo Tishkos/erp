@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Browser, type Page } from '@playwright/test';
 import { startNextcloudStub, type NextcloudStub } from '../support/nextcloud-stub';
+import { keepEnglish } from './support/locale';
 
 /**
  * Platform phase, Agent 4 — the Document Center, against a small Nextcloud.
@@ -63,7 +64,7 @@ async function photograph(page: Page, route: string, name: string, ready: (page:
   const width = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(width, `${name}: no horizontal scroll at 390px`).toBeLessThanOrEqual(390);
   await page.screenshot({ path: `${SHOTS}/${name}-mobile-ar.png`, fullPage: true });
-  await page.context().clearCookies({ name: 'erp-locale' });
+  await keepEnglish(page.context());
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(route);
 }
@@ -296,7 +297,7 @@ test.describe('Document Center · QS Cloud Files', () => {
     await expect(page.getByRole('dialog').getByRole('heading', { name: 'QS Cloud Files' })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth), 'no horizontal scroll at 390px').toBeLessThanOrEqual(390);
     await page.screenshot({ path: `${SHOTS}/record-paperclip-mobile-ar.png` });
-    await page.context().clearCookies({ name: 'erp-locale' });
+    await keepEnglish(page.context());
     await page.setViewportSize({ width: 1280, height: 800 });
 
     // From the record: "Link a file from Cloud Files" brings the Document Center in link mode.

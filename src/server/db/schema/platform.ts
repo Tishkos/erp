@@ -113,6 +113,17 @@ export const appUser = pgTable(
     uiBorderStyle: text('ui_border_style'),
     uiShadow: text('ui_shadow'),
     uiComponentSize: text('ui_component_size'),
+    /** Where the modules are and how the screens read — no preset changes these. 0407. */
+    uiNavigation: text('ui_navigation'),
+    uiSidebar: text('ui_sidebar'),
+    /** The side panel's group headings, or one plain list. 0417. */
+    uiSidebarGroups: text('ui_sidebar_groups'),
+    /** The side panel's colour: the surface, a wash of the accent, or the accent. 0418. */
+    uiSidebarColour: text('ui_sidebar_colour'),
+    uiTextSize: text('ui_text_size'),
+    uiHeader: text('ui_header'),
+    uiMotion: text('ui_motion'),
+    uiTableStripes: text('ui_table_stripes'),
     /** Deactivation, never deletion — §1.1 "No deletion of saved or posted records." */
     isActive: boolean('is_active').notNull().default(true),
 
@@ -167,6 +178,14 @@ export const appUser = pgTable(
       'app_user_ui_component_size_known',
       sql`${t.uiComponentSize} is null or ${t.uiComponentSize} in ('small', 'medium', 'large')`,
     ),
+    check('app_user_ui_navigation_known', sql`${t.uiNavigation} is null or ${t.uiNavigation} in ('top', 'side', 'bottom')`),
+    check('app_user_ui_sidebar_known', sql`${t.uiSidebar} is null or ${t.uiSidebar} in ('full', 'icons')`),
+    check('app_user_ui_sidebar_groups_known', sql`${t.uiSidebarGroups} is null or ${t.uiSidebarGroups} in ('grouped', 'plain')`),
+    check('app_user_ui_sidebar_colour_known', sql`${t.uiSidebarColour} is null or ${t.uiSidebarColour} in ('default', 'highlight', 'accent')`),
+    check('app_user_ui_text_size_known', sql`${t.uiTextSize} is null or ${t.uiTextSize} in ('smaller', 'default', 'larger')`),
+    check('app_user_ui_header_known', sql`${t.uiHeader} is null or ${t.uiHeader} in ('sticky', 'static')`),
+    check('app_user_ui_motion_known', sql`${t.uiMotion} is null or ${t.uiMotion} in ('full', 'reduced')`),
+    check('app_user_ui_table_stripes_known', sql`${t.uiTableStripes} is null or ${t.uiTableStripes} in ('on', 'off')`),
   ],
 );
 

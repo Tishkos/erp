@@ -27,6 +27,7 @@ import {
   compareHits,
   DEFAULT_GROUP_LIMIT,
   planQuery,
+  withRetiredPrefixes,
   type QueryPlan,
   type SeriesInfo,
 } from '../domain/search';
@@ -84,13 +85,19 @@ export function mayAmount(principal: Principal, type: SearchType): boolean {
   return can(principal, grant.verb ?? 'view', grant.object);
 }
 
-/** The numbering series — prefix and key — the phrase is read against. Small, indexed by key. */
+/**
+ * The numbering series — prefix and key — the phrase is read against. Small,
+ * indexed by key. A series that changed its prefix is read under the old one
+ * too (`RETIRED_PREFIXES`: purchase invoices were API- until 0409 made them PUR-).
+ */
 export async function loadSeries(tx: Tx): Promise<SeriesInfo[]> {
   const result = await tx.execute(sql`select key, prefix from doc_sequence`);
-  return (result.rows as unknown as { key: string; prefix: string }[]).map((row) => ({
-    key: row.key,
-    prefix: row.prefix,
-  }));
+  return withRetiredPrefixes(
+    (result.rows as unknown as { key: string; prefix: string }[]).map((row) => ({
+      key: row.key,
+      prefix: row.prefix,
+    })),
+  );
 }
 
 /** The database's own message (drizzle wraps it as the `cause` of a "Failed query"). */

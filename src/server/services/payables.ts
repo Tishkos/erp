@@ -62,6 +62,9 @@ import * as rateService from './exchange-rates';
 import { allocateDocumentNumber } from './numbering';
 import * as execution from './project-execution';
 import * as units from './item-units';
+import { knownPayableDueSql, payableDueWaitsSql } from './known-due-date';
+import { datesOrder, withinDates } from './register-dates-sql';
+import type { RegisterDates } from '../domain/register-dates';
 
 export const PERMISSION_OBJECT = 'payable';
 export const SETTINGS_OBJECT = 'payables_settings';
@@ -1521,15 +1524,25 @@ export interface WorkbenchFilter {
   readonly includeCancelled?: boolean;
   readonly page?: number;
   readonly pageSize?: number;
+  /**
+   * The screen's Filter: a window of the import's date and the order. Given,
+   * the list is the newest first (or the oldest) — 2026-10-07, by direction:
+   * "the tables first comes latest ones made for all". Left out (Home's rail,
+   * the WhatsApp answer), the triage order below stands.
+   */
+  readonly dates?: RegisterDates | null;
 }
 
 /**
  * The one list for everything owed. Stopped-without-reason first, then days
- * stopped, then due date (§21.2) — the sort is the triage order.
+ * stopped, then due date (§21.2) — the sort is the triage order, for the
+ * callers that ask without a Filter; the screen asks with one.
  */
 export async function workbench(tx: Tx, filter: WorkbenchFilter = {}) {
   const page = Math.max(1, filter.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, filter.pageSize ?? 25));
+  // The import's date: its document's.
+  const day = payable.documentDate;
 
   const needsReason = sql<boolean>`exists (
     select 1 from payable_hold h
@@ -1544,6 +1557,7 @@ export async function workbench(tx: Tx, filter: WorkbenchFilter = {}) {
     filter.stopped === 'no' ? eq(payable.onHold, false) : undefined,
     filter.stopped === 'needs_reason' ? needsReason : undefined,
     filter.includeCancelled ? undefined : isNull(payable.cancelledAt),
+    withinDates(day, filter.dates),
     filter.search
       ? or(
           ilike(payable.supplierReference, `%${filter.search}%`),
@@ -1583,7 +1597,10 @@ export async function workbench(tx: Tx, filter: WorkbenchFilter = {}) {
       stageSince: payable.stageSince,
       onHold: payable.onHold,
       needsReason,
-      dueDate: payable.dueDate,
+      // None until an invoice of it had its due date set on purpose — an
+      // advance's balance waits for its SWIFT (2026-10-07).
+      dueDate: knownPayableDueSql(payable.id, payable.dueDate),
+      dueDateWaiting: payableDueWaitsSql(payable.id),
       documentDate: payable.documentDate,
       branchCode: payable.branchCode,
       cancelledAt: payable.cancelledAt,
@@ -1618,11 +1635,15 @@ export async function workbench(tx: Tx, filter: WorkbenchFilter = {}) {
     )
     .where(where)
     .orderBy(
-      desc(needsReason),
-      sql`case when ${payable.onHold} then 0 else 1 end`,
-      asc(payableHold.startedAt),
-      asc(payable.dueDate),
-      desc(payable.createdAt),
+      ...(filter.dates
+        ? datesOrder(day, filter.dates, payable.createdAt, payable.id)
+        : [
+            desc(needsReason),
+            sql`case when ${payable.onHold} then 0 else 1 end`,
+            asc(payableHold.startedAt),
+            asc(payable.dueDate),
+            desc(payable.createdAt),
+          ]),
     )
     .limit(pageSize)
     .offset((page - 1) * pageSize);
@@ -1690,6 +1711,9 @@ export async function view(tx: Tx, payableNo: string) {
       invoiceDate: apInvoice.invoiceDate,
       totalIqd: apInvoice.totalIqd,
       settledAmountIqd: apInvoice.settledAmountIqd,
+      // The import's due date is known once one of these was set on purpose (2026-10-07).
+      dueDate: apInvoice.dueDate,
+      dueDateSetAt: apInvoice.dueDateSetAt,
     })
     .from(apInvoice)
     .where(eq(apInvoice.payableId, row.id))

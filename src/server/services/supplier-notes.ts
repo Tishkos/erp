@@ -58,6 +58,7 @@ import * as journal from './journal';
 import * as posting from './posting';
 import * as statuses from './statuses';
 import { allocateDocumentNumber } from './numbering';
+import { knownInvoiceDueSql } from './known-due-date';
 
 export const PERMISSION_OBJECT = 'supplier_credit_memo';
 export const DOCUMENT_TYPE = 'supplier_credit_memo';
@@ -732,7 +733,8 @@ export async function applicableInvoices(tx: Tx, memo: { supplierId: string; bra
     .select({
       id: apInvoice.id,
       invoiceNo: apInvoice.invoiceNo,
-      dueDate: apInvoice.dueDate,
+      // None until set on purpose — an advance's balance waits for its SWIFT (2026-10-07).
+      dueDate: knownInvoiceDueSql(apInvoice.dueDate, apInvoice.dueDateSetAt),
       outstandingIqd: sql<string>`(${apInvoice.totalIqd} - ${apInvoice.settledAmountIqd})::text`,
     })
     .from(apInvoice)

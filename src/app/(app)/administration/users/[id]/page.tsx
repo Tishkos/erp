@@ -26,7 +26,9 @@ import { can, isCeo } from '@domain/permissions';
 import { FLASH_COOKIE } from '@/server/admin-action';
 import { AdminNotFoundError } from '@/server/services/administration';
 import { requireContext, withCurrentUser } from '@/server/session';
+import { UserAvatar } from '@/components/chat/chat-avatar';
 import * as branches from '@/server/services/branches';
+import * as chatRead from '@/server/services/chat-read';
 import * as departments from '@/server/services/departments';
 import * as employees from '@/server/services/employees';
 import * as roles from '@/server/services/roles';
@@ -89,6 +91,8 @@ export default async function UserPage({
         allBranches: mayEdit ? await branches.listAll(tx) : [],
         allDepartments: mayEdit ? await departments.listAll(tx) : [],
         employee: await employees.ofUser(tx, id),
+        // The status dot: known only when the viewer chats with this person (the presence policy).
+        presence: (await chatRead.presenceOfUsers(tx, [id]))[id] ?? null,
       };
     } catch (error) {
       if (error instanceof AdminNotFoundError) return null;
@@ -133,11 +137,13 @@ export default async function UserPage({
         <div className={s.profileStack}>
           <Panel>
             <div className={`${s.profileCard} border-0 bg-transparent px-1 pb-1 pt-2 shadow-none`}>
-              {user.image ? (
-                <img alt="" className={`${s.avatarLarge} ${s.profileAvatar} size-20 rounded-full border-0`} src={user.image} />
-              ) : (
-                <span className={`${s.avatarLarge} ${s.profileAvatar} size-20 rounded-full border-0 bg-primary-subtle text-2xl font-semibold text-primary-subtle-fg`}>{initials}</span>
-              )}
+              <UserAvatar
+                className={`${s.avatarLarge} ${s.profileAvatar} grid size-20 place-items-center overflow-hidden rounded-full border-0 bg-primary-subtle text-2xl font-semibold text-primary-subtle-fg [&_img]:size-full [&_img]:object-cover`}
+                dotClassName="bottom-1 end-1 size-4 ring-[3px]"
+                image={user.image}
+                initials={initials}
+                presence={data.presence}
+              />
               <h2>{user.displayName}</h2>
               <p>{user.email}</p>
               <span className="flex flex-wrap justify-center gap-1.5">

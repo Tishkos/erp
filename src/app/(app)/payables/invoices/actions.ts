@@ -19,6 +19,9 @@ import * as ap from '@/server/services/ap-invoice';
 import * as inventory from '@/server/services/inventory';
 import * as expenses from '@/server/services/expenses';
 import * as rates from '@/server/services/exchange-rates';
+import * as trialBalance from '@/server/services/trial-balance';
+import { can } from '@domain/permissions';
+import type { AccountBalanceAsk, AccountBalanceView } from '@/components/admin/account-balance-note';
 import { LINE_ROWS } from './lines';
 
 const LIST = '/payables/invoices';
@@ -127,11 +130,12 @@ export async function createApInvoice(formData: FormData): Promise<void> {
     const typedNote = text(formData, 'note').trim();
     const made = await ap.create(tx, ctx, {
       supplierId: text(formData, 'supplier_id'),
-      // Block 4's header is the invoice number, the two dates and the
-      // supplier. The supplier's own number is not among them, and the column
-      // is not nullable — so the service takes our number for it, which is
-      // unique per supplier and keeps §15's duplicate control meaningful.
-      supplierInvoiceNo: '',
+      // The supplier's own invoice or receipt number (2026-10-06, by
+      // direction: "they usually give us a receipt and we need their receipt
+      // number too"). Optional: left empty, the service takes our number for
+      // it, as it always did — the column is not nullable, and §15's control
+      // (one number per supplier) refuses a number this supplier has billed.
+      supplierInvoiceNo: text(formData, 'supplier_invoice_no').trim(),
       purchaseOrderId: null,
       branchCode: ctx.branchCode,
       invoiceDate: text(formData, 'invoice_date'),
@@ -149,11 +153,14 @@ export async function createApInvoice(formData: FormData): Promise<void> {
       ...(currency === 'IQD' ? {} : { importCurrency: currency }),
       // §24.3 — ticked Import and naming an open import: the invoice joins it.
       payableId: text(formData, 'is_import') === '1' ? text(formData, 'payable_id').trim() || null : null,
-      // §15.3 — what the supplier is paid in front, as a percentage of this
-      // invoice, and where it leaves from: with all three the payment
-      // application is raised and approved when the invoice posts
-      // (2026-10-06, by direction: "automatically 20% … payment application").
+      // §15.3 — what the supplier is paid in front and where it leaves from:
+      // with the account and the method the payment application is raised
+      // when the invoice posts (2026-10-06). 0411 — "Payable in advance": no
+      // upfront payment, by percentage or by amount, and the one box beside it
+      // (only the chosen box is on the form, so only it is sent).
+      advanceBasis: text(formData, 'advance_basis').trim() || null,
       advancePercent: text(formData, 'advance_percent').trim() || null,
+      advanceAmount: text(formData, 'advance_amount').trim() || null,
       advancePaidFromAccountId: text(formData, 'advance_paid_from').trim() || null,
       advancePaymentMethodCode: text(formData, 'advance_payment_method').trim() || null,
       // Where the dinars came from (0272): an invoice agreed in dollars says
@@ -283,6 +290,59 @@ export async function submitApInvoice(formData: FormData): Promise<void> {
     (tx, ctx) => ap.submit(tx, ctx, text(formData, 'id')),
     record(invoiceNo),
   );
+}
+
+/**
+ * A super user's own draft, approved and posted in one press (2026-10-06, by
+ * direction: "send for approval not needed when super user raises the
+ * invoice"). `held` comes back when an automation rule reviews submitted
+ * invoices: the invoice waits at Submitted for it, and the page says so.
+ */
+export async function approveApInvoiceDraft(formData: FormData): Promise<void> {
+  const invoiceNo = text(formData, 'invoice_no');
+  await runAdminAndReturn(
+    (tx, ctx) => ap.approveDraft(tx, ctx, text(formData, 'id')),
+    (value) => {
+      const outcome = value as { held?: boolean } | null | undefined;
+      return outcome?.held ? `${record(invoiceNo)}?held=1` : record(invoiceNo);
+    },
+  );
+}
+
+/** The supplier's own invoice or receipt number, corrected on a draft. */
+export async function saveApInvoiceSupplierNo(formData: FormData): Promise<void> {
+  const invoiceNo = text(formData, 'invoice_no');
+  await runAdminAndReturn(
+    (tx, ctx) => ap.setSupplierInvoiceNo(tx, ctx, text(formData, 'id'), text(formData, 'supplier_invoice_no')),
+    record(invoiceNo),
+  );
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The balance of the account a purchase invoice names, from the general ledger
+ * (2026-10-06, by direction: "i want to know the balance for each account we
+ * select … directly from the chart of accounts").
+ *
+ * Read as the signed-in person, under the grant the ledger's own screens ask —
+ * `view` on the chart of accounts (whose profile shows the balance) or on the
+ * G/L inquiry. Without either the answer is nothing, and nothing is drawn: a
+ * figure a person may not read is not shown to them under a form.
+ */
+export async function accountBalanceAction(ask: AccountBalanceAsk): Promise<AccountBalanceView | null> {
+  const outcome = await runAdmin(async (tx, ctx) => {
+    if (!can(ctx.principal, 'view', 'chart_of_account') && !can(ctx.principal, 'view', 'gl_inquiry')) return null;
+    const bankCashId = ask.bankCashAccountId?.trim() ?? '';
+    let accountId = ask.accountId?.trim() ?? '';
+    if (!accountId && UUID.test(bankCashId)) accountId = (await trialBalance.glAccountOfBankCash(tx, bankCashId)) ?? '';
+    if (!UUID.test(accountId)) return null;
+    const balance = await trialBalance.accountBalance(tx, accountId);
+    return balance
+      ? { code: balance.code, name: balance.name, currency: balance.currency, balanceIqd: balance.balanceIqd, balanceTxn: balance.balanceTxn }
+      : null;
+  });
+  return outcome.ok ? (outcome.value ?? null) : null;
 }
 
 /**

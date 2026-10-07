@@ -13,6 +13,8 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as ar from '@/server/services/ar-invoice';
 import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
 import { savedViewsFor } from '@/server/saved-views-gate';
+import { RegisterFilter } from '@/components/admin/register-filter';
+import { applyRegisterDates, registerDatesOf, registerDatesParams } from '@/server/domain/register-dates';
 
 /**
  * Sales Invoices — Operations build, block 5.
@@ -49,7 +51,14 @@ export default async function ArInvoicesPage({ searchParams }: { searchParams: S
   // The person's saved views of this screen — and, on a bare arrival, their default one.
   const saved = await savedViewsFor('sales.invoices', searchParams);
   const rows = await withCurrentUser((tx) => ar.list(tx));
-  const shown = rows.filter((row) => matches(row, outcome.q));
+  // The Filter's window of invoice dates and the order, over the whole register — newest first unless asked.
+  const dates = registerDatesOf(await searchParams);
+  const shown = applyRegisterDates(
+    rows.filter((row) => matches(row, outcome.q)),
+    (row) => row.invoiceDate,
+    dates,
+    (row) => row.invoiceNo,
+  );
 
   return (
     <AdminPage
@@ -84,10 +93,12 @@ export default async function ArInvoicesPage({ searchParams }: { searchParams: S
             clearHref="/sales/ar-invoices"
             clearLabel={t('clear_search')}
             countLabel={t('rows_shown', { count: shown.length })}
+            hidden={registerDatesParams(dates)}
             placeholder={t('search_placeholder')}
             q={outcome.q}
             searchLabel={t('search')}
           >
+            <RegisterFilter dates={dates} keep={{ q: outcome.q }} path="/sales/ar-invoices" />
             <SavedViewsMenu state={saved} />
           </ListToolbar>
 

@@ -18,6 +18,7 @@ import * as ps from '@/server/services/project-system';
 import * as closing from '@/server/services/project-close';
 import { chipOf } from '../chip';
 import { approveHours, approveMeasurement, approveMilestone, bookHours, cancelHours, measureProgress, postLabour, reachMilestone } from './actions';
+import { IntentDateField } from '@/components/admin/intent-date-field';
 
 /**
  * Progress — REQ-PM-001 §10, §13. Copies the WBS workspace: one window with
@@ -386,7 +387,7 @@ export default async function ProgressPage({ searchParams }: { searchParams: Sea
                             <Hidden name="project_code" value={view.project.code} />
                             <Hidden name="as_of" value={asOf} />
                             <Hidden name="activity_code" value={m.code} />
-                            <input aria-label={x('reached_on')} defaultValue={today} name="reached_on" required type="date" />
+                            <IntentDateField aria-label={x('reached_on')} defaultValue={today} name="reached_on" required />
                             <Submit label={x('reach')} small tone="secondary" />
                           </Form>
                         ) : null}

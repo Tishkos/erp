@@ -3,6 +3,7 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, admin as s } from './index';
 import { ReportFilter, ReportWindow, currencyFrom } from './report-filter';
 import { ProfileLink } from './profile-link';
+import { DueDateText } from './due-date-text';
 import { SectionTabs } from './section-tabs';
 import type { SearchParams } from './params';
 import { Denied } from '@/components/denied';
@@ -17,6 +18,8 @@ import * as partners from '@/server/services/partners';
 import * as statement from '@/server/services/partner-statement';
 import { businessToday } from '@/server/domain/business-date';
 
+import { IntentSelect } from '@/components/admin/intent-select';
+import { INTENT_INPUT } from '@/components/admin/intent-field-classes';
 /**
  * The Account Statement — Operations build, blocks 2 and 3.
  *
@@ -221,6 +224,7 @@ export async function AccountStatement({
               <input
                 aria-label={t(`partners.role_${side}`)}
                 autoComplete="off"
+                className={INTENT_INPUT}
                 defaultValue={asked}
                 list={`${side}-statement-parties`}
                 name="code"
@@ -235,13 +239,13 @@ export async function AccountStatement({
             </label>
             <label className={s.sapFilterField}>
               <span className={s.sapLabel}>{t('open_items.show')}</span>
-              <select defaultValue={view} name="due">
+              <IntentSelect defaultValue={view} name="due">
                 <option value="all">{t('statement_outstanding.show_all')}</option>
                 <option value="soon">{t('statement_outstanding.due_soon')}</option>
                 <option value="overdue">{t('open_items.show_overdue')}</option>
                 <option value="unpaid">{t('statement_outstanding.show_unpaid')}</option>
                 <option value="part_paid">{t('statement_outstanding.show_part_paid')}</option>
-              </select>
+              </IntentSelect>
             </label>
           </ReportFilter>
         }
@@ -346,9 +350,12 @@ export async function AccountStatement({
                         )}
                       </td>
                       <td>
-                        <bdi dir="ltr">
-                          {line.document?.dueDate ? day(line.document.dueDate) : '—'}
-                        </bdi>
+                        {/* A purchase invoice's only once set on purpose — an advance's balance waits for its SWIFT (2026-10-07). */}
+                        <DueDateText
+                          date={line.document?.dueDate ?? null}
+                          locale={locale}
+                          waiting={line.document?.dueDateWaiting ? t('balance_due.waiting') : null}
+                        />
                       </td>
                       <td>
                         {/* How old the document is as at the statement's own
@@ -501,7 +508,7 @@ export async function AccountStatement({
                         </Link>
                       </td>
                       <td><bdi dir="ltr">{day(item.invoiceDate)}</bdi></td>
-                      <td><bdi dir="ltr">{day(item.dueDate)}</bdi></td>
+                      <td><DueDateText date={item.dueDateSet ? item.dueDate : null} locale={locale} waiting={t('balance_due.waiting')} /></td>
                       <td><bdi dir="auto">{item.paymentTermsName ?? item.paymentTermsCode ?? '—'}</bdi></td>
                       <td className={s.sapNum}><bdi dir="ltr">{money(item.totalIqd)}</bdi></td>
                       <td className={s.sapNum}><bdi dir="ltr">{money(item.paidIqd)}</bdi></td>
@@ -517,6 +524,8 @@ export async function AccountStatement({
                           <span className="muted">{t('open_items.settled')}</span>
                         ) : item.daysOverdue > 0 ? (
                           <span className={s.sapWarn}>{t('open_items.overdue_by', { days: item.daysOverdue })}</span>
+                        ) : !item.dueDateSet ? (
+                          <span className="muted">{t('balance_due.waiting')}</span>
                         ) : (
                           <span>{t('open_items.due_in', { days: item.daysUntilDue })}</span>
                         )}

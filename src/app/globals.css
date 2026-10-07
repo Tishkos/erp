@@ -23,7 +23,14 @@
 :root {
   color-scheme: light;
 
-  --font-sans: var(--font-inter), "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  /* Arabic words on an English page (the company's name, a supplier's) take the
+     Arabic face (2026-10-06, by direction: "the Arabic font looks good … in
+     English mode, everywhere"). Inter has no Arabic, so the browser reaches the
+     next family for those letters only. Inter is named here, not through
+     `--font-inter`, because that variable also carries next/font's "Inter
+     Fallback" — local Arial, which HAS Arabic letters and so drew every Arabic
+     word before Noto Sans Arabic was ever asked. */
+  --font-sans: Inter, var(--font-arabic-loaded), "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-arabic: var(--font-arabic-loaded), Tahoma, "Segoe UI", Arial, sans-serif;
   --font-mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
 
@@ -812,6 +819,15 @@ table.list a {
   --erp-pop-line: color-mix(in oklab, var(--ui-muted-fg) 24%, transparent);
   /* The module and utility names at rest: the bar's ink, a step quieter. */
   --erp-nav-ink: color-mix(in oklab, var(--ui-navbar-fg) 80%, var(--ui-navbar));
+  /* What is chosen or current wears one highlight everywhere (2026-10-07, by
+     direction: "in appearance [the options] should also match the side panel
+     by highlight colour"): the side panel's current module, the bar's current
+     heading, the Appearance drawer's chosen options and style, the account
+     menu's branch and language. Intent's sidebar tokens, so they cannot drift. */
+  --erp-chosen-bg: var(--ui-sidebar-primary);
+  --erp-chosen-fg: var(--ui-sidebar-primary-fg);
+  --erp-chosen-line: color-mix(in oklab, var(--ui-sidebar-primary-fg) 32%, transparent);
+  --erp-chosen-bg-strong: color-mix(in oklab, var(--ui-primary) 22%, transparent);
 
   display: flex;
   min-block-size: 100vh;
@@ -865,7 +881,9 @@ html:has(.erp-root:is([data-palette='midnight'], [data-palette='carbon'], [data-
   position: sticky;
   inset-block-start: 0;
   z-index: 50;
-  block-size: 3.4rem;
+  /* A style may make the bar taller or shorter (the presets below); the side
+     panel hangs from wherever it ends. */
+  block-size: var(--erp-header-h, 3.4rem);
   color: var(--ui-navbar-fg);
   background: var(--ui-navbar);
   border-block-end: 1px solid var(--ui-border);
@@ -1039,7 +1057,6 @@ html[lang="ar"] .erp-brand__wordmark strong {
 }
 
 .erp-icon-button,
-.erp-locale-toggle,
 .erp-mobile-trigger {
   position: relative;
   display: inline-grid;
@@ -1058,7 +1075,6 @@ html[lang="ar"] .erp-brand__wordmark strong {
 }
 
 .erp-icon-button svg,
-.erp-locale-toggle svg,
 .erp-mobile-trigger svg {
   inline-size: 1.1rem;
   block-size: 1.1rem;
@@ -1066,23 +1082,11 @@ html[lang="ar"] .erp-brand__wordmark strong {
 }
 
 .erp-icon-button:hover,
-.erp-locale-toggle:hover,
 .erp-mobile-trigger:hover,
 .erp-icon-button[aria-expanded="true"],
 .erp-mobile-trigger[aria-expanded="true"] {
   color: var(--ui-fg);
   background: var(--ui-secondary);
-}
-
-/* The language button carries two characters beside its icon. */
-.erp-locale-toggle {
-  display: inline-flex;
-  inline-size: auto;
-  min-inline-size: 2.1rem;
-  gap: 0.25rem;
-  padding-inline: 0.4rem;
-  font-size: 0.74rem;
-  font-weight: 600;
 }
 
 /* A count waiting on the bell or the messages: a small badge on the icon. */
@@ -1318,12 +1322,10 @@ html[lang="ar"] .erp-brand__wordmark strong {
   .erp-brand,
   .erp-nav__trigger,
   .erp-icon-button,
-  .erp-locale-toggle,
   .erp-mobile-trigger,
   .erp-search-trigger,
   .erp-user-trigger,
   .erp-branch__select,
-  .erp-search__close,
   .erp-mobile-action,
   .erp-mobile-module__summary,
   .erp-preference__option,
@@ -1503,221 +1505,8 @@ html[lang="ar"] .erp-brand__wordmark strong {
   font-weight: 600;
 }
 
-/* The bell's filter row: Unread / All as a segmented pair, the category, and
-   "Mark all as read" at the end. (Specific enough to win over the chart of
-   accounts' button rules, which come later in this file.) */
-.erp-utility-popover .actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem;
-  margin: 0 0 0.4rem;
-  padding-inline: 0.15rem;
-}
-
-.erp-utility-popover .actions .coa-button {
-  min-block-size: 1.95rem;
-  gap: 0.35rem;
-  padding-inline: 0.65rem;
-  border: 1px solid var(--ui-border);
-  border-radius: var(--erp-radius);
-  color: var(--ui-fg);
-  background: transparent;
-  box-shadow: none;
-  font-size: 0.76rem;
-  font-weight: 500;
-  transform: none;
-}
-
-.erp-utility-popover .actions .coa-button:hover:not(:disabled) {
-  border-color: var(--ui-border);
-  color: var(--ui-secondary-fg);
-  background: var(--ui-secondary);
-}
-
-.erp-utility-popover .actions .coa-button.coa-button--active,
-.erp-utility-popover .actions .coa-button.coa-button--active:hover {
-  position: relative;
-  z-index: 1;
-  border-color: color-mix(in oklab, var(--ui-primary) 40%, transparent);
-  color: var(--ui-primary-subtle-fg);
-  background: var(--ui-primary-subtle);
-}
-
-.erp-utility-popover .actions .coa-button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.erp-utility-popover .actions .coa-button--secondary {
-  margin-inline-start: auto;
-}
-
-/* Unread | All: one segmented control. */
-.erp-utility-popover .actions .coa-button--filter:has(+ .coa-button--filter) {
-  border-start-end-radius: 0;
-  border-end-end-radius: 0;
-}
-
-.erp-utility-popover .actions .coa-button--filter + .coa-button--filter {
-  margin-inline-start: calc(-0.35rem - 1px);
-  border-start-start-radius: 0;
-  border-end-start-radius: 0;
-}
-
 .erp-notifications {
   inline-size: min(26rem, calc(100vw - 1.5rem));
-}
-
-.erp-utility-popover .actions select {
-  min-block-size: 1.95rem;
-  max-inline-size: 9.5rem;
-  padding-block: 0;
-  padding-inline: 0.55rem 0.4rem;
-  border: 1px solid var(--ui-input);
-  border-radius: var(--erp-radius);
-  color: var(--ui-fg);
-  background: var(--ui-overlay);
-  font-size: 0.76rem;
-}
-
-.erp-utility-popover .actions select:focus-visible,
-.erp-utility-popover .actions .coa-button:focus-visible {
-  outline: 2px solid var(--ui-ring);
-  outline-offset: 1px;
-}
-
-.erp-notifications__list {
-  display: grid;
-  gap: 0.1rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  max-block-size: 22rem;
-  overflow-y: auto;
-}
-
-.erp-notifications__list li {
-  position: relative;
-  padding: 0.55rem 0.6rem;
-  padding-inline-start: 1.45rem;
-  border-radius: var(--erp-radius);
-  color: var(--ui-fg);
-  background: transparent;
-  font-size: 0.82rem;
-  line-height: 1.4;
-  transition: background-color 120ms ease;
-}
-
-.erp-notifications__list li:hover {
-  background: var(--ui-muted);
-}
-
-.erp-notifications__list li strong {
-  font-weight: 500;
-}
-
-.erp-notifications__list li a {
-  display: block;
-  border-radius: calc(var(--erp-radius) * 0.6);
-  color: inherit;
-  text-decoration: none;
-}
-
-.erp-notifications__list li a:hover strong {
-  text-decoration: underline;
-  text-underline-offset: 0.15em;
-}
-
-.erp-notifications__list li a:focus-visible {
-  outline: 2px solid var(--ui-ring);
-  outline-offset: 2px;
-}
-
-.erp-notifications__list li p {
-  margin: 0.15rem 0 0.3rem;
-  color: var(--ui-muted-fg);
-  font-size: 0.78rem;
-}
-
-.erp-notifications__list li time {
-  color: var(--ui-muted-fg);
-  font-size: 0.72rem;
-}
-
-/* Unread: a dot at the start and a stronger title. */
-.erp-notifications__unread::before {
-  position: absolute;
-  inset-block-start: 0.95rem;
-  inset-inline-start: 0.6rem;
-  inline-size: 0.45rem;
-  block-size: 0.45rem;
-  border-radius: 999px;
-  background: var(--ui-primary);
-  content: "";
-}
-
-.erp-notifications__list li.erp-notifications__unread strong {
-  font-weight: 600;
-}
-
-.erp-notifications__list .coa-compact-button {
-  min-block-size: 1.5rem;
-  padding-inline: 0.45rem;
-  border: 0;
-  border-radius: calc(var(--erp-radius) * 0.8);
-  color: var(--ui-muted-fg);
-  background: transparent;
-  font-size: 0.72rem;
-  font-weight: 500;
-}
-
-.erp-notifications__list .coa-compact-button:hover {
-  color: var(--ui-fg);
-  background: var(--ui-secondary);
-}
-
-.erp-notifications__list .coa-compact-button:focus-visible {
-  outline: 2px solid var(--ui-ring);
-  outline-offset: 1px;
-}
-
-.erp-notifications__list .coa-count-badge {
-  display: inline-grid;
-  min-inline-size: 1.15rem;
-  min-block-size: 1.15rem;
-  place-items: center;
-  padding-inline: 0.3rem;
-  border-radius: 999px;
-  color: var(--ui-primary-fg);
-  background: var(--ui-primary);
-  font-size: 0.62rem;
-  font-weight: 600;
-  vertical-align: 0.05em;
-}
-
-/* "See all" / "Open chat": the popover's footer. */
-.erp-utility-popover__link {
-  display: block;
-  margin: 0.4rem -0.4rem -0.4rem;
-  padding: 0.65rem 0.75rem;
-  border-block-start: 1px solid var(--ui-border);
-  color: var(--ui-primary-subtle-fg);
-  background: transparent;
-  font-size: 0.8rem;
-  font-weight: 500;
-  text-align: center;
-  text-decoration: none;
-  transition: background-color 120ms ease;
-}
-
-.erp-utility-popover__link:hover {
-  background: var(--ui-muted);
-}
-
-.erp-utility-popover__link:focus-visible {
-  outline: 2px solid var(--ui-ring);
-  outline-offset: -2px;
 }
 
 .erp-utility-popover__empty {
@@ -1861,6 +1650,107 @@ html[lang="ar"] .erp-brand__wordmark strong {
 
 .erp-user-panel__item--danger:hover {
   background: var(--ui-danger-subtle);
+}
+
+/* The Active branch and the language (2026-10-06, by direction: "move active
+   branch into profile drop down menu … make more spaces"; "the language
+   selection should be in profile settings"): a caption with the value in use,
+   then the choices as one segmented row, the chosen one tinted and ticked. */
+.erp-user-panel__part {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.55rem 0.6rem 0.65rem;
+  border-block-start: 1px solid var(--ui-border);
+}
+
+.erp-user-panel__caption {
+  display: flex;
+  min-inline-size: 0;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0;
+  color: var(--ui-muted-fg);
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.erp-user-panel__caption > svg {
+  inline-size: 1rem;
+  block-size: 1rem;
+  flex: 0 0 auto;
+}
+
+.erp-user-panel__value {
+  margin-inline-start: auto;
+  color: var(--ui-fg);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.erp-user-panel__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0;
+}
+
+.erp-user-panel__choices > .erp-user-panel__choice {
+  flex: 1 1 4.5rem;
+}
+
+.erp-user-panel__choice {
+  display: inline-flex;
+  min-inline-size: 0;
+  min-block-size: 2rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--ui-border);
+  border-radius: calc(var(--erp-radius) - 0.1rem);
+  color: var(--ui-fg);
+  background: transparent;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.erp-user-panel__choice:hover:not(:disabled, [data-selected="true"]) {
+  background: var(--ui-secondary);
+}
+
+.erp-user-panel__choice[data-selected="true"] {
+  border-color: var(--erp-chosen-line);
+  color: var(--erp-chosen-fg);
+  background: var(--erp-chosen-bg);
+  cursor: default;
+}
+
+.erp-user-panel__choice:disabled {
+  opacity: 1;
+}
+
+.erp-user-panel__choice > svg {
+  inline-size: 0.85rem;
+  block-size: 0.85rem;
+  flex: 0 0 auto;
+  stroke-width: 2.4;
+}
+
+.erp-user-panel__choice:focus-visible {
+  outline: 2px solid var(--ui-ring);
+  outline-offset: 1px;
+}
+
+/* The same choice on My profile. */
+.erp-profile-language {
+  max-inline-size: 22rem;
+}
+
+.erp-profile-language > .erp-user-panel__choice {
+  min-block-size: 2.25rem;
+  font-size: 0.875rem;
 }
 
 /* ── Sheets: the mobile drawer and Appearance ─────────────────────────────── */
@@ -2182,11 +2072,16 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
   border-color: color-mix(in oklab, var(--ui-muted-fg) 45%, transparent);
 }
 
-/* Selected: Intent's ring-2 in the primary colour. */
+/* Selected: the side panel's highlight — its tint, its ink, its line (--erp-chosen-*). */
 .erp-appearance-card[aria-checked="true"],
 .erp-appearance-card[aria-checked="true"]:hover {
-  border-color: var(--ui-primary);
-  box-shadow: 0 0 0 1px var(--ui-primary), var(--erp-shadow-xs);
+  border-color: var(--erp-chosen-line);
+  background: var(--erp-chosen-bg);
+  box-shadow: 0 0 0 1px var(--erp-chosen-line), var(--erp-shadow-xs);
+}
+
+.erp-appearance-card[aria-checked="true"] .erp-appearance-card__heading {
+  color: var(--erp-chosen-fg);
 }
 
 .erp-appearance-card:focus-visible {
@@ -2207,15 +2102,13 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
   font-weight: 600;
 }
 
+/* The tick: the same as a chosen option's. */
 .erp-appearance-card__heading svg {
-  inline-size: 1.1rem;
-  block-size: 1.1rem;
+  inline-size: 0.95rem;
+  block-size: 0.95rem;
   flex: 0 0 auto;
-  padding: 0.18rem;
-  border-radius: 999px;
-  color: var(--ui-primary-fg);
-  background: var(--ui-primary);
-  stroke-width: 3;
+  color: var(--erp-chosen-fg);
+  stroke-width: 2.4;
 }
 
 .erp-appearance-card__description {
@@ -2355,11 +2248,12 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
   background: var(--ui-secondary);
 }
 
+/* Chosen: the side panel's highlight (--erp-chosen-*), the icon and the tick in its ink. */
 .erp-preference__option[data-selected="true"],
 .erp-preference__option[data-selected="true"]:hover {
-  border-color: color-mix(in oklab, var(--ui-primary) 45%, transparent);
-  color: var(--ui-primary-subtle-fg);
-  background: var(--ui-primary-subtle);
+  border-color: var(--erp-chosen-line);
+  color: var(--erp-chosen-fg);
+  background: var(--erp-chosen-bg);
 }
 
 .erp-preference__option > span {
@@ -2378,6 +2272,73 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
 /* Advanced settings: a disclosure with its own chevron. */
 .erp-advanced-appearance {
   border-block-start: 1px solid var(--ui-border);
+}
+
+/* Everyone's default (0419): two buttons, each with a confirm in place. */
+.erp-appearance-company {
+  padding-block-start: 0.75rem;
+  border-block-start: 1px solid var(--ui-border);
+}
+
+.erp-appearance-company__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.erp-appearance-company__confirm > p {
+  margin: 0 0 0.6rem;
+  color: var(--ui-fg);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.erp-appearance-company__button {
+  display: inline-flex;
+  min-block-size: 2.2rem;
+  align-items: center;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--erp-radius);
+  color: var(--ui-fg);
+  background: transparent;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.erp-appearance-company__button:hover:not(:disabled) {
+  background: var(--ui-secondary);
+}
+
+.erp-appearance-company__button--primary {
+  border-color: var(--ui-primary);
+  color: var(--ui-primary-fg);
+  background: var(--ui-primary);
+}
+
+.erp-appearance-company__button--primary:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--ui-primary) 88%, var(--ui-fg));
+}
+
+.erp-appearance-company__button:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.erp-appearance-company__button:focus-visible {
+  outline: 2px solid var(--ui-ring);
+  outline-offset: 2px;
+}
+
+.erp-appearance-company__state:empty {
+  display: none;
+}
+
+.erp-appearance-company__state {
+  margin: 0.5rem 0 0;
+  color: var(--ui-muted-fg);
+  font-size: 0.78rem;
 }
 
 .erp-advanced-appearance > summary {
@@ -2428,184 +2389,6 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
   min-block-size: 1rem;
   margin: 0;
   color: var(--ui-muted-fg);
-  font-size: 0.72rem;
-}
-
-/* ── The search palette (Ctrl/⌘ K): Intent's command menu ────────────────── */
-
-.erp-search {
-  position: fixed;
-  inset: 0;
-  z-index: 90;
-  display: grid;
-  place-items: start center;
-  padding: 10vh 1rem 1rem;
-}
-
-.erp-search__scrim {
-  position: absolute;
-  inset: 0;
-  background: var(--erp-scrim);
-  backdrop-filter: blur(1px);
-  animation: erp-fade-in 160ms ease-out;
-}
-
-.erp-search__panel {
-  position: relative;
-  inline-size: min(40rem, calc(100vw - 2rem));
-  overflow: hidden;
-  border: 1px solid var(--erp-pop-line);
-  border-radius: var(--erp-radius-pop);
-  color: var(--ui-overlay-fg);
-  background: var(--ui-overlay);
-  box-shadow: var(--erp-shadow-xl);
-  animation: erp-pop-in 160ms ease-out;
-}
-
-.erp-search__bar {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding-block: 0.45rem;
-  padding-inline: 0.95rem 0.6rem;
-  border-block-end: 1px solid var(--ui-border);
-  background: transparent;
-}
-
-.erp-search__bar > svg {
-  inline-size: 1.15rem;
-  block-size: 1.15rem;
-  flex: 0 0 auto;
-  color: var(--ui-muted-fg);
-}
-
-.erp-search__bar input {
-  flex: 1;
-  min-inline-size: 0;
-  block-size: 2.4rem;
-  padding: 0;
-  border: 0;
-  color: var(--ui-fg);
-  background: transparent;
-  box-shadow: none;
-  font-size: 0.95rem;
-  outline: none;
-  appearance: none;
-}
-
-.erp-search__bar input::placeholder {
-  color: var(--ui-muted-fg);
-}
-
-.erp-search__bar input::-webkit-search-cancel-button {
-  display: none;
-}
-
-.erp-search__close {
-  display: grid;
-  inline-size: 1.9rem;
-  block-size: 1.9rem;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 0;
-  border-radius: var(--erp-radius);
-  color: var(--ui-muted-fg);
-  background: transparent;
-  cursor: pointer;
-}
-
-.erp-search__close:hover {
-  color: var(--ui-fg);
-  background: var(--ui-secondary);
-}
-
-.erp-search__close svg {
-  inline-size: 1rem;
-  block-size: 1rem;
-}
-
-.erp-search__results {
-  max-block-size: min(28rem, 55vh);
-  overflow: auto;
-  margin: 0;
-  padding: 0.35rem;
-  list-style: none;
-}
-
-/* A group's heading: what kind of thing the rows below it are. */
-.erp-search__group {
-  padding: 0.65rem 0.65rem 0.3rem;
-  color: var(--ui-muted-fg);
-  font-size: 0.72rem;
-  font-weight: 500;
-}
-
-.erp-search__group:first-child {
-  padding-block-start: 0.35rem;
-}
-
-.erp-search__item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.5rem 0.65rem;
-  border-radius: calc(var(--erp-radius) - 0.1rem);
-  color: var(--ui-fg);
-  cursor: pointer;
-}
-
-.erp-search__item--active {
-  color: var(--ui-accent-fg);
-  background: var(--ui-accent);
-}
-
-.erp-search__item > svg {
-  inline-size: 0.95rem;
-  block-size: 0.95rem;
-  flex: 0 0 auto;
-  color: var(--ui-muted-fg);
-  opacity: 0;
-}
-
-.erp-search__item--active > svg {
-  color: currentColor;
-  opacity: 1;
-}
-
-.erp-search__text {
-  display: grid;
-  min-inline-size: 0;
-  gap: 0.05rem;
-}
-
-.erp-search__text strong {
-  overflow: hidden;
-  color: inherit;
-  font-size: 0.86rem;
-  font-weight: 500;
-  text-overflow: ellipsis;
-}
-
-.erp-search__text small {
-  color: var(--ui-muted-fg);
-  font-size: 0.74rem;
-}
-
-.erp-search__empty {
-  margin: 0;
-  padding: 1.25rem 1rem;
-  color: var(--ui-muted-fg);
-  font-size: 0.82rem;
-  text-align: center;
-}
-
-.erp-search__hint {
-  margin: 0;
-  padding: 0.55rem 1rem;
-  border-block-start: 1px solid var(--ui-border);
-  color: var(--ui-muted-fg);
-  background: var(--ui-muted);
   font-size: 0.72rem;
 }
 
@@ -2768,10 +2551,6 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
   padding-inline-end: 0.2rem;
 }
 
-.erp-header__bar[data-squeeze~="branch"] .erp-branch__label {
-  display: none;
-}
-
 .erp-header__bar[data-squeeze~="name"] .erp-brand__wordmark {
   display: none;
 }
@@ -2811,14 +2590,10 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
   display: none;
 }
 
-/* Language leaves the header only when it is genuinely narrow; the user menu
-   carries it too. Appearance is not in the header at all (by direction,
-   2026-10-04): the user menu and the mobile drawer open it. */
-@media (max-width: 60rem) {
-  .erp-header__utilities > .erp-locale-toggle {
-    display: none;
-  }
-}
+/* The Active branch and the language are not in the header (by direction,
+   2026-10-06): the account menu carries both, and the mobile drawer on a
+   phone. Appearance is not in it either (2026-10-04): the account menu and
+   the mobile drawer open it. */
 
 @media (max-width: 76rem) {
   .erp-header__bar {
@@ -2866,6 +2641,35 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
     inset-inline: 0.5rem;
     inline-size: auto;
   }
+
+  /* The bell's and the messages' panels on a phone: Intent's bottom sheet,
+     risen from the foot of the screen over a dimmed page (each panel brings
+     its own header and scrolls its own list — notifications/utility-panel.ts). */
+  .erp-utility-popover:is(.erp-notifications, .erp-messages) {
+    position: fixed;
+    inset-block: auto 0;
+    inset-inline: 0;
+    max-block-size: min(85vh, 85dvh);
+    padding-block-end: env(safe-area-inset-bottom, 0px);
+    border-block-end: 0;
+    border-end-start-radius: 0;
+    border-end-end-radius: 0;
+    transform-origin: bottom;
+    animation: erp-sheet-up 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .erp-header:has(.erp-utility-popover:is(.erp-notifications, .erp-messages)) .erp-popover-scrim {
+    position: fixed;
+    inset: 0;
+    block-size: auto;
+    background: var(--erp-scrim);
+    animation: erp-fade-in 200ms ease-out;
+  }
+}
+
+@keyframes erp-sheet-up {
+  from { opacity: 0.4; transform: translateY(100%); }
+  to { opacity: 1; transform: none; }
 }
 
 @media (max-width: 36rem) {
@@ -2882,9 +2686,9 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
 @media (prefers-reduced-motion: reduce) {
   .erp-module-popover,
   .erp-utility-popover,
+  .erp-utility-popover:is(.erp-notifications, .erp-messages),
   .erp-mobile-drawer,
-  .erp-appearance-drawer,
-  .erp-search__panel {
+  .erp-appearance-drawer {
     animation: none;
   }
 }
@@ -2892,12 +2696,949 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
 /* Forced colours paint over the tints: what is chosen keeps an outline. */
 @media (forced-colors: active) {
   .erp-nav__trigger[data-active="true"],
+  .erp-sidebar__trigger[data-active="true"],
+  .erp-dock__trigger[data-active="true"],
   .erp-menu-item--link[aria-current="page"],
-  .erp-search__item--active,
+  .erp-sections__trigger[data-current="true"],
+  .erp-user-panel__choice[data-selected="true"],
   .erp-preference__option[data-selected="true"],
   .erp-appearance-card[aria-checked="true"] {
     outline: 2px solid Highlight;
     outline-offset: -2px;
+  }
+}
+
+/* ── Navigation and reading (2026-10-06) ──────────────────────────────────
+   By direction: "in settings, make sure you can move the navbar to a side
+   panel, with icons, nicely … user side view / top view, a lot of
+   customization", then "navbar in bottom … make customization so good". Each
+   person's own (app_user.ui_*, 0407), carried on .erp-root as data-* by the
+   layout and set live by the Appearance drawer (erp-shell.tsx ›
+   PREFERENCE_ATTRIBUTE). In the top bar nothing here applies: fitNav, the
+   squeeze and the chevrons are exactly as they were. On a phone (≤ 35rem)
+   the menu button and its drawer stay the navigation in every layout; the
+   bottom bar adds its own short bar there. */
+
+.erp-root {
+  --erp-side-full: 16rem;
+  --erp-side-rail: 3.9rem;
+  --erp-side-w: 0rem;
+  /* What the bottom bar takes from the foot of the page. */
+  --erp-dock-room: calc(5.4rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* Text size: the root is the one dial (everything is in rem); 90% stays the default. */
+html:has(.erp-root[data-text-size="smaller"]) {
+  font-size: 85%;
+}
+
+html:has(.erp-root[data-text-size="larger"]) {
+  font-size: 100%;
+}
+
+/* The top bar scrolls away with the page. */
+.erp-root[data-header="static"] .erp-header {
+  position: relative;
+}
+
+/* Table rows: Plain — the application's stripes (admin.module.css, --ui-row-stripe) off. */
+.erp-root[data-table-stripes="off"] {
+  --ui-row-stripe: transparent;
+}
+
+/* Animations: Reduced — menus, sheets and highlights appear at once, as with
+   the system's own reduced-motion setting. The overlays React Aria puts on
+   <body> are covered too, hence the root. */
+html:has(.erp-root[data-motion="reduced"]) {
+  scroll-behavior: auto;
+}
+
+html:has(.erp-root[data-motion="reduced"]) *,
+html:has(.erp-root[data-motion="reduced"]) *::before,
+html:has(.erp-root[data-motion="reduced"]) *::after {
+  animation-duration: 0.01ms !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  transition-delay: 0s !important;
+}
+
+/* The panel icons point the way the panel opens. */
+html[dir="rtl"] .erp-mirror-rtl {
+  transform: scaleX(-1);
+}
+
+/* Appearance: the menu position is the first thing asked — three tiles across
+   the drawer, the picture of each layout above its name; text size on one row. */
+.erp-preference--navigation,
+.erp-preference--sidebarColour {
+  grid-column: 1 / -1;
+}
+
+.erp-preference__options--navigation,
+.erp-preference__options--sidebarColour,
+.erp-preference__options--textSize {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.erp-preference__options--navigation .erp-preference__option {
+  position: relative;
+  min-block-size: 3.9rem;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.erp-preference__options--navigation .erp-preference__option > .erp-preference__icon {
+  inline-size: 1.4rem;
+  block-size: 1.4rem;
+  stroke-width: 1.6;
+}
+
+.erp-preference__options--navigation .erp-preference__check {
+  position: absolute;
+  inset-block-start: 0.4rem;
+  inset-inline-end: 0.45rem;
+}
+
+.erp-preference__option > .erp-preference__icon {
+  inline-size: 0.95rem;
+  block-size: 0.95rem;
+  stroke-width: 2;
+}
+
+/* ── The side panel and the bottom bar share the slim top bar ──────────────
+   The modules leave the bar; the brand and the utilities stay, and the bar
+   keeps them on one line at every width the panel is shown at (the bell and
+   the envelope no longer go into the drawer, because there is no drawer). */
+@media (min-width: 35.0625rem) {
+  .erp-root:is([data-navigation="side"], [data-navigation="bottom"]) .erp-header__utilities {
+    grid-column: 3;
+  }
+}
+
+@media (min-width: 35.0625rem) and (max-width: 76rem) {
+  .erp-root:is([data-navigation="side"], [data-navigation="bottom"]) .erp-header__utilities .erp-icon-button:nth-of-type(-n + 2) {
+    display: inline-grid;
+  }
+
+  .erp-root:is([data-navigation="side"], [data-navigation="bottom"]) .erp-mobile-trigger {
+    display: none;
+  }
+
+  /* Brand, the open module's headings, the utilities: one row at every width the panel is shown at. */
+  .erp-root:is([data-navigation="side"], [data-navigation="bottom"]) .erp-header__bar {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    column-gap: 0.6rem;
+  }
+
+  .erp-root:is([data-navigation="side"], [data-navigation="bottom"]) .erp-header__identity {
+    flex: none;
+  }
+}
+
+/* ── The open module's headings in the bar (side panel, bottom bar) ───────
+   By direction, 2026-10-06: "first add a line before the navbar parts — the
+   logo and name — and then tabs should be on the right side of it … like
+   Odoo" (erp-section-bar.tsx). Beside the full side panel the brand is as
+   wide as the panel, so the line stands over the panel's own edge. */
+.erp-sections {
+  position: relative;
+  display: flex;
+  min-inline-size: 0;
+  align-items: stretch;
+}
+
+.erp-sections::before {
+  align-self: center;
+  flex: 0 0 auto;
+  inline-size: 1px;
+  block-size: 1.6rem;
+  margin-inline-end: 0.55rem;
+  background: var(--ui-border);
+  content: "";
+}
+
+.erp-sections__list {
+  display: flex;
+  min-inline-size: 0;
+  align-items: stretch;
+  gap: 0.1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.erp-sections__item {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.erp-sections__trigger {
+  display: inline-flex;
+  min-block-size: 2.15rem;
+  align-items: center;
+  gap: 0.3rem;
+  padding-inline: 0.6rem;
+  border: 0;
+  border-radius: var(--erp-radius);
+  color: var(--erp-nav-ink);
+  background: transparent;
+  /* A heading's name is never drawn smaller to fit: what does not fit goes behind More. */
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1.25;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.erp-sections__trigger:hover,
+.erp-sections__trigger[aria-expanded="true"] {
+  color: var(--ui-secondary-fg);
+  background: var(--ui-secondary);
+}
+
+/* The heading (or screen) that holds the open screen: the side panel's highlight. */
+.erp-sections__trigger[data-current="true"] {
+  color: var(--erp-chosen-fg);
+  background: var(--erp-chosen-bg);
+  box-shadow: inset 0 0 0 1px var(--erp-chosen-line);
+}
+
+.erp-sections__trigger[data-current="true"]:hover,
+.erp-sections__trigger[data-current="true"][aria-expanded="true"] {
+  background: color-mix(in oklab, var(--ui-primary) 22%, transparent);
+}
+
+.erp-sections__trigger:focus-visible {
+  outline: 2px solid var(--ui-ring);
+  outline-offset: 2px;
+}
+
+.erp-sections__chevron {
+  inline-size: 0.7rem;
+  block-size: 0.7rem;
+  flex: 0 0 auto;
+  opacity: 0.6;
+  stroke-width: 2.4;
+  transition: transform 150ms ease;
+}
+
+.erp-sections__trigger[aria-expanded="true"] > .erp-sections__chevron {
+  transform: rotate(180deg);
+}
+
+.erp-sections__count {
+  display: inline-grid;
+  min-inline-size: 1.15rem;
+  block-size: 1.15rem;
+  place-items: center;
+  padding-inline: 0.28rem;
+  border-radius: 999px;
+  color: var(--ui-muted-fg);
+  background: var(--ui-secondary);
+  font-size: 0.66rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A heading's screens drop down under it, as the top bar's module menus do. */
+.erp-sections__menu {
+  min-inline-size: 14rem;
+}
+
+.erp-sections__item--more .erp-sections__menu {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+}
+
+/* The ruler: every entry as the bar draws it, measured and never seen. */
+.erp-sections__ruler {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  display: flex;
+  inline-size: max-content;
+  block-size: 0;
+  gap: 0.1rem;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.erp-sections__ruler > * {
+  flex: none;
+}
+
+@media (min-width: 35.0625rem) {
+  /* Beside the full panel the brand fills the panel's width: the line is the panel's edge carried up. */
+  .erp-root[data-navigation="side"]:not([data-side-panel="icons"]) .erp-header__identity {
+    min-inline-size: calc(var(--erp-side-w) - (var(--erp-side-rail) - 2.4rem) / 2 - 0.6rem);
+  }
+
+  .erp-root[data-navigation="side"]:not([data-side-panel="icons"]) .erp-sections::before {
+    margin-inline-start: -1px;
+  }
+}
+
+@media (max-width: 35rem) {
+  .erp-sections {
+    display: none;
+  }
+}
+
+/* ── The side panel ──────────────────────────────────────────────────────── */
+
+@media (min-width: 35.0625rem) {
+  .erp-root[data-navigation="side"] {
+    --erp-side-w: var(--erp-side-full);
+  }
+
+  .erp-root[data-navigation="side"][data-side-panel="icons"] {
+    --erp-side-w: var(--erp-side-rail);
+  }
+
+  /* The page and its footer move over; the top bar keeps the whole width. */
+  .erp-root[data-navigation="side"] .erp-shell {
+    padding-inline-start: var(--erp-side-w);
+    transition: padding-inline-start 160ms ease;
+  }
+
+  .erp-root[data-navigation="side"] .erp-header {
+    margin-inline-start: calc(-1 * var(--erp-side-w));
+    transition: margin-inline-start 160ms ease;
+  }
+
+  /* The mark sits over the rail's icons. */
+  .erp-root[data-navigation="side"] .erp-header__bar {
+    padding-inline-start: calc((var(--erp-side-rail) - 2.4rem) / 2);
+  }
+
+  /* The page starts closer under the bar: its header is one tight row (admin.module.css, the end). */
+  .erp-root[data-navigation="side"] .erp-main {
+    padding-block-start: min(var(--erp-main-padding-block), 1rem);
+  }
+}
+
+.erp-sidebar {
+  position: fixed;
+  inset-block: var(--erp-header-h, 3.4rem) 0;
+  inset-inline-start: 0;
+  z-index: 48;
+  display: flex;
+  inline-size: var(--erp-side-w);
+  flex-direction: column;
+  border-inline-end: 1px solid var(--ui-border);
+  color: var(--ui-navbar-fg);
+  background: var(--ui-navbar);
+  transition: inline-size 160ms ease;
+}
+
+.erp-sidebar__nav {
+  position: relative;
+  min-block-size: 0;
+  flex: 1;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.6rem 0.5rem;
+}
+
+.erp-sidebar__list {
+  display: grid;
+  gap: 0.1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A module: its icon and name, a link to its first screen (Odoo's app list);
+   its headings are then the top bar's section menus. */
+.erp-sidebar__trigger {
+  display: grid;
+  inline-size: 100%;
+  min-block-size: 2.3rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.65rem;
+  padding-inline: 0.65rem;
+  border: 0;
+  border-radius: var(--erp-radius);
+  color: var(--erp-nav-ink);
+  background: transparent;
+  font-size: 0.86rem;
+  font-weight: 500;
+  line-height: 1.25;
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.erp-sidebar__trigger:hover {
+  color: var(--ui-secondary-fg);
+  background: var(--ui-secondary);
+}
+
+.erp-sidebar__icon {
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+  flex: 0 0 auto;
+  color: var(--ui-muted-fg);
+  stroke-width: 1.8;
+}
+
+/* A module's name is never cut or drawn smaller: a long one takes a second line. */
+.erp-sidebar__label {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.erp-sidebar__trigger {
+  padding-block: 0.35rem;
+}
+
+/* The module you are in: THE highlight (--erp-chosen-*), which the Appearance
+   drawer's chosen options and the bar's current heading wear too. */
+.erp-sidebar__trigger[data-active="true"],
+.erp-sidebar__trigger[data-active="true"] .erp-sidebar__icon {
+  color: var(--erp-chosen-fg);
+}
+
+.erp-sidebar__trigger[data-active="true"] {
+  background: var(--erp-chosen-bg);
+  box-shadow: inset 0 0 0 1px var(--erp-chosen-line);
+}
+
+.erp-sidebar__trigger[data-active="true"]:hover {
+  background: var(--erp-chosen-bg-strong);
+}
+
+/* A group of related modules under its heading (2026-10-07: "for payable and
+   receivable there should be 'Invoicing', a text on top of them"): Intent's
+   sidebar section label — small, muted, never upper-cased. */
+.erp-sidebar__groups {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.erp-sidebar__group-label {
+  margin: 0;
+  padding: 0.75rem 0.65rem 0.3rem;
+  color: var(--ui-muted-fg);
+  font-size: 0.7rem;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0;
+}
+
+.erp-sidebar__group:first-child .erp-sidebar__group-label {
+  padding-block-start: 0.15rem;
+}
+
+/* The Dashboard stands under no heading; the first heading after it keeps its room. */
+.erp-sidebar__group[data-group=""] + .erp-sidebar__group {
+  margin-block-start: 0.1rem;
+}
+
+/* The rail: a thin line between groups; the name is read out and shown in the first icon's tip. */
+.erp-sidebar[data-style="icons"] .erp-sidebar__group-label {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  margin: -1px;
+  padding: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.erp-sidebar[data-style="icons"] .erp-sidebar__group + .erp-sidebar__group {
+  margin-block-start: 0.35rem;
+  padding-block-start: 0.4rem;
+  border-block-start: 1px solid var(--ui-border);
+}
+
+.erp-tip__caption {
+  display: block;
+  margin-block-end: 0.05rem;
+  color: color-mix(in oklab, var(--ui-bg) 70%, transparent);
+  font-size: 0.66rem;
+  font-weight: 500;
+}
+
+/* The panel's foot and the page's footer are one band in side mode: the same
+   height, line included, so their top lines run on as one (2026-10-07, by
+   direction: "footer … in left panel should match the height of the collapse,
+   the line"). */
+.erp-root {
+  --erp-foot-h: 3.25rem;
+}
+
+.erp-sidebar__foot {
+  display: flex;
+  box-sizing: border-box;
+  block-size: var(--erp-foot-h);
+  align-items: center;
+  padding: 0 0.5rem;
+  border-block-start: 1px solid var(--ui-border);
+}
+
+@media (min-width: 35rem) {
+  .erp-root[data-navigation="side"] .erp-footer {
+    box-sizing: border-box;
+    min-block-size: var(--erp-foot-h);
+  }
+
+  .erp-root[data-navigation="side"] .erp-footer__inner {
+    box-sizing: border-box;
+    min-block-size: calc(var(--erp-foot-h) - 1px);
+    padding-block: 0;
+  }
+}
+
+.erp-sidebar__collapse {
+  display: flex;
+  inline-size: 100%;
+  min-block-size: 2.2rem;
+  align-items: center;
+  gap: 0.65rem;
+  padding-inline: 0.65rem;
+  border: 0;
+  border-radius: var(--erp-radius);
+  color: var(--ui-muted-fg);
+  background: transparent;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.erp-sidebar__collapse:hover {
+  color: var(--ui-fg);
+  background: var(--ui-secondary);
+}
+
+.erp-sidebar__collapse > svg {
+  inline-size: 1.05rem;
+  block-size: 1.05rem;
+  flex: 0 0 auto;
+  stroke-width: 1.8;
+}
+
+/* The rail: icons alone, each naming itself on hover and focus (erp-tip). */
+.erp-sidebar[data-style="icons"] .erp-sidebar__nav {
+  padding-inline: 0.45rem;
+  scrollbar-width: none;
+}
+
+.erp-sidebar[data-style="icons"] .erp-sidebar__trigger {
+  min-block-size: 2.5rem;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  padding-inline: 0;
+}
+
+.erp-sidebar[data-style="icons"] .erp-sidebar__icon {
+  inline-size: 1.2rem;
+  block-size: 1.2rem;
+}
+
+.erp-sidebar[data-style="icons"] .erp-sidebar__trigger .erp-sidebar__label {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  margin: -1px;
+  padding: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.erp-sidebar[data-style="icons"] .erp-sidebar__collapse .erp-sidebar__label {
+  display: none;
+}
+
+.erp-sidebar[data-style="icons"] .erp-sidebar__foot {
+  padding-inline: 0.45rem;
+}
+
+.erp-sidebar[data-style="icons"] .erp-sidebar__collapse {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+/* The side panel's colour (Appearance › Side panel colour, 0418; 2026-10-07,
+   by direction: "left panel colour change to highlight colour … dynamic for
+   theme, dark mode and white modes"). Every value is mixed from the palette's
+   and the accent's own tokens, so a change of palette or accent restyles the
+   panel at once, light or dark:
+
+   · highlight — the accent washed into the page's background: a light wash
+     on a light palette, a deep tint on a dark one; ink in the highlight's
+     own text colour (--erp-chosen-fg), the module you are in a stronger step
+     of the same hue;
+   · accent — a deeper step of the accent (--erp-panel-accent, the panel's
+     own), white ink (black where the step stays light); the module you are
+     in is that step moved away from its ink (darker under white ink), so its
+     name reads better, not worse.
+
+   The full panel and the rail, group headings, foot and Collapse included;
+   the top bar is not touched. Measured over all 90 palette/accent pairs:
+   text 4.5:1 or more, icons 3:1 or more (tests/e2e/navigation-layouts.spec.ts). */
+.erp-root[data-side-colour="highlight"] .erp-sidebar {
+  --erp-side-bg: color-mix(in oklab, var(--ui-primary) 14%, var(--ui-bg));
+  --erp-side-ink: var(--erp-chosen-fg);
+  --erp-side-hover: color-mix(in oklab, var(--ui-primary) 22%, var(--ui-bg));
+  --erp-side-current: color-mix(in oklab, var(--ui-primary) 36%, var(--ui-bg));
+  --erp-side-current-ink: color-mix(in oklab, var(--erp-chosen-fg) 55%, var(--ui-fg));
+  --erp-side-line: color-mix(in oklab, var(--ui-primary) 28%, var(--ui-border));
+  --erp-side-ring: var(--ui-ring);
+}
+
+.erp-root[data-side-colour="accent"] .erp-sidebar {
+  /* The panel's accent is a DEEPER step of the accent, for the side panel only
+     (2026-10-07, by direction: "too light, too much blue — a little bit more
+     like the icon logo colour"; blue lands near the logo's royal blue): the
+     accent mixed 70/30 toward a dark of its own hue. The accent everywhere
+     else is untouched. Tune it here, in this one token. */
+  --erp-panel-accent: color-mix(in oklab, var(--ui-primary) 70%, oklch(from var(--ui-primary) 0.16 calc(c * 0.25) h));
+  /* Its ink: white, or black where the step stays light (gold) — whichever
+     reads better, so names are 4.5:1 or more on every accent. */
+  --erp-panel-accent-ink: oklch(from var(--erp-panel-accent) clamp(0, calc((0.564 - l) * 1000), 1) 0 0);
+  --erp-side-away: oklch(from var(--erp-panel-accent-ink) calc(1 - l) 0 0);
+  --erp-side-bg: var(--erp-panel-accent);
+  --erp-side-ink: var(--erp-panel-accent-ink);
+  --erp-side-hover: color-mix(in oklab, var(--erp-panel-accent) 86%, var(--erp-side-away));
+  --erp-side-current: color-mix(in oklab, var(--erp-panel-accent) 70%, var(--erp-side-away));
+  --erp-side-current-ink: var(--erp-panel-accent-ink);
+  --erp-side-line: color-mix(in oklab, var(--erp-panel-accent-ink) 28%, var(--erp-panel-accent));
+  --erp-side-ring: var(--erp-panel-accent-ink);
+}
+
+.erp-root:is([data-side-colour="highlight"], [data-side-colour="accent"]) .erp-sidebar {
+  border-inline-end-color: var(--erp-side-line);
+  color: var(--erp-side-ink);
+  background: var(--erp-side-bg);
+}
+
+.erp-root:is([data-side-colour="highlight"], [data-side-colour="accent"])
+  .erp-sidebar
+  :is(.erp-sidebar__trigger, .erp-sidebar__icon, .erp-sidebar__group-label, .erp-sidebar__collapse) {
+  color: var(--erp-side-ink);
+}
+
+.erp-root:is([data-side-colour="highlight"], [data-side-colour="accent"])
+  .erp-sidebar
+  :is(.erp-sidebar__trigger, .erp-sidebar__collapse):hover {
+  color: var(--erp-side-ink);
+  background: var(--erp-side-hover);
+}
+
+.erp-root:is([data-side-colour="highlight"], [data-side-colour="accent"]) .erp-sidebar__trigger[data-active="true"],
+.erp-root:is([data-side-colour="highlight"], [data-side-colour="accent"]) .erp-sidebar__trigger[data-active="true"]:hover {
+  background: var(--erp-side-current);
+  box-shadow: inset 0 0 0 1px var(--erp-side-line);
+  font-weight: 600;
+}
+
+.erp-root:is([data-side-colour="highlight"], [data-side-colour="accent"]) .erp-sidebar__trigger[data-active="true"],
+.erp-root:is([data-side-colour="highlight"], [data-side-colour="accent"]) .erp-sidebar__trigger[data-active="true"] .erp-sidebar__icon {
+  color: var(--erp-side-current-ink);
+}
+
+.erp-root:is([data-side-colour="highlight"], [data-side-colour="accent"]) .erp-sidebar__group-label {
+  font-weight: 600;
+}
+
+.erp-root:is([data-side-colour="highlight"], [data-side-colour="accent"]) :is(.erp-sidebar__foot, .erp-sidebar__group + .erp-sidebar__group) {
+  border-color: var(--erp-side-line);
+}
+
+.erp-root:is([data-side-colour="highlight"], [data-side-colour="accent"])
+  .erp-sidebar
+  :is(.erp-sidebar__trigger, .erp-sidebar__collapse):focus-visible {
+  outline-color: var(--erp-side-ring);
+}
+
+@media (max-width: 35rem) {
+  .erp-sidebar {
+    display: none;
+  }
+}
+
+/* ── The bottom bar: Intent's floating dock ─────────────────────────────── */
+
+/* The room the dock needs is the footer's own, so the page ends in one band
+   with the dock floating on it — not the footer and then a bare strip of the
+   canvas under it (2026-10-07, by direction: "in bottom bar the footer looks
+   weird"). A page without the footer keeps the room on the shell. */
+.erp-root[data-navigation="bottom"] .erp-shell:not(:has(.erp-footer)) {
+  padding-block-end: var(--erp-dock-room);
+}
+
+.erp-root[data-navigation="bottom"] .erp-footer {
+  padding-block-end: var(--erp-dock-room);
+}
+
+/* The blur is on a layer of its own: a backdrop filter on the bar itself would
+   become the frame its menus are placed in, and they would open inside it. */
+.erp-dock {
+  position: fixed;
+  inset-block-end: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  inset-inline: 0;
+  z-index: 48;
+  inline-size: max-content;
+  max-inline-size: calc(100vw - 1.5rem);
+  margin-inline: auto;
+  padding: 0.35rem;
+  border: 1px solid var(--erp-pop-line);
+  border-radius: calc(var(--erp-radius-pop) * 1.4);
+  color: var(--ui-overlay-fg);
+  box-shadow: var(--erp-shadow-xl);
+  isolation: isolate;
+}
+
+.erp-dock::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: color-mix(in oklab, var(--ui-overlay) 82%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.6);
+  backdrop-filter: blur(14px) saturate(1.6);
+  content: "";
+}
+
+.erp-dock__list {
+  display: flex;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.erp-dock__item {
+  position: relative;
+  display: flex;
+}
+
+.erp-dock__item--more {
+  display: none;
+}
+
+.erp-dock__trigger {
+  display: grid;
+  min-inline-size: 3.7rem;
+  min-block-size: 3.15rem;
+  align-content: center;
+  justify-items: center;
+  gap: 0.2rem;
+  padding: 0.35rem 0.4rem;
+  border: 0;
+  border-radius: var(--erp-radius-pop);
+  color: color-mix(in oklab, var(--ui-overlay-fg) 80%, var(--ui-overlay));
+  background: transparent;
+  font-size: 0.68rem;
+  font-weight: 500;
+  line-height: 1.15;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.erp-dock__trigger:hover,
+.erp-dock__trigger[aria-expanded="true"] {
+  color: var(--ui-secondary-fg);
+  background: var(--ui-secondary);
+}
+
+.erp-dock__trigger[data-active="true"] {
+  color: var(--ui-primary-subtle-fg);
+  background: var(--ui-primary-subtle);
+}
+
+.erp-dock__trigger[data-active="true"]:hover,
+.erp-dock__trigger[data-active="true"][aria-expanded="true"] {
+  background: color-mix(in oklab, var(--ui-primary) 22%, transparent);
+}
+
+.erp-dock__icon {
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  stroke-width: 1.8;
+}
+
+/* A name keeps all its words: two short lines under the icon, never smaller. */
+.erp-dock__label {
+  display: -webkit-box;
+  max-inline-size: 6.2rem;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.erp-dock[data-fit="icons"] .erp-dock__trigger {
+  min-inline-size: 2.65rem;
+  min-block-size: 2.65rem;
+  padding: 0;
+}
+
+.erp-dock[data-fit="icons"] .erp-dock__label {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  margin: -1px;
+  padding: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* A phone: the four modules this person opens most, and More (the drawer). */
+@media (max-width: 35rem) {
+  .erp-root[data-navigation="bottom"] {
+    --erp-dock-room: calc(4.9rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .erp-dock {
+    inset-block-end: calc(0.5rem + env(safe-area-inset-bottom, 0px));
+    inset-inline: 0.5rem;
+    inline-size: auto;
+    max-inline-size: none;
+    margin-inline: 0;
+  }
+
+  .erp-dock__item[data-phone="hidden"] {
+    display: none;
+  }
+
+  .erp-dock__item,
+  .erp-dock__item--more {
+    display: flex;
+    min-inline-size: 0;
+    flex: 1 1 0;
+  }
+
+  .erp-dock__trigger {
+    inline-size: 100%;
+    min-inline-size: 0;
+  }
+
+  .erp-dock__label {
+    max-inline-size: 100%;
+  }
+}
+
+/* ── A module's menu beside the rail or above the bar, and an icon's name ── */
+
+.erp-flyout {
+  position: fixed;
+  z-index: 60;
+  inline-size: max-content;
+  max-inline-size: min(46rem, calc(100vw - 1rem));
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 0.4rem;
+  border: 1px solid var(--erp-pop-line);
+  border-radius: var(--erp-radius-pop);
+  color: var(--ui-overlay-fg);
+  background: var(--ui-overlay);
+  box-shadow: var(--erp-shadow-lg);
+  animation: erp-pop-in 140ms ease-out;
+}
+
+.erp-flyout[data-placement="above"] {
+  animation-name: erp-pop-up;
+}
+
+@keyframes erp-pop-up {
+  from { opacity: 0; transform: translateY(0.25rem) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+.erp-flyout__title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.25rem;
+  padding: 0.45rem 0.65rem 0.5rem;
+  border-block-end: 1px solid var(--ui-border);
+  color: var(--ui-fg);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.erp-flyout__title > svg {
+  inline-size: 1rem;
+  block-size: 1rem;
+  flex: 0 0 auto;
+  color: var(--ui-primary-subtle-fg);
+}
+
+/* Intent's inverse tooltip. */
+.erp-tip {
+  position: fixed;
+  z-index: 61;
+  padding: 0.3rem 0.55rem;
+  border-radius: calc(var(--erp-radius) * 0.9);
+  color: var(--ui-bg);
+  background: var(--ui-fg);
+  box-shadow: var(--erp-shadow-lg);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: erp-fade-in 120ms ease-out;
+}
+
+.erp-tip[data-placement="side"] {
+  transform: translateY(-50%);
+}
+
+.erp-tip[data-placement="above"] {
+  transform: translateX(-50%);
+}
+
+:is(.erp-sidebar__trigger, .erp-sidebar__collapse, .erp-dock__trigger):focus-visible {
+  outline: 2px solid var(--ui-ring);
+  outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .erp-flyout,
+  .erp-tip {
+    animation: none;
+  }
+
+  .erp-sidebar,
+  .erp-root[data-navigation="side"] :is(.erp-shell, .erp-header) {
+    transition: none;
+  }
+}
+
+@media print {
+  .erp-sidebar,
+  .erp-dock {
+    display: none;
+  }
+
+  .erp-root:is([data-navigation="side"], [data-navigation="bottom"]) .erp-shell {
+    padding: 0;
+  }
+
+  .erp-root[data-navigation="side"] .erp-header {
+    margin-inline-start: 0;
   }
 }
 
@@ -2912,111 +3653,23 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
  * preview toast and warnings, the detail and balance cards — had nothing left
  * that drew them and are gone.
  *
- * What stays below is the button and count family the shell still wears: the
- * notification popover's filter, "mark all read" and per-row buttons and the
- * count badges (`.erp-utility-popover`, `.erp-notifications__list` restyle
- * them), and the search palette's direction-aware arrow.
+ * What stays below is the count badge the shell still wears — the bell's
+ * and the messages' unread counts (`.erp-icon-button__badge`) and the phone
+ * drawer's (`.erp-mobile-action`) restyle it. The button family that sat
+ * beside it had nothing left that drew it and is gone too (2026-10-06).
  */
 
-.coa-button,
-.coa-compact-button,
-.coa-icon-button,
-.coa-search-submit,
-.coa-page-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  text-decoration: none;
-  cursor: pointer;
-  transition: color 150ms ease, border-color 150ms ease, background 150ms ease,
-    box-shadow 150ms ease, transform 150ms ease;
-}
-
-.coa-button {
-  min-block-size: var(--control-height);
-  gap: 0.48rem;
-  padding-inline: 0.9rem;
-  font-size: 0.73rem;
-  font-weight: 750;
-  white-space: nowrap;
-}
-
-.coa-button > svg,
-.coa-compact-button > svg {
-  inline-size: 0.96rem;
-  block-size: 0.96rem;
-  stroke-width: 2;
-}
-
-.coa-button--secondary,
-.coa-button--filter,
-.coa-button--ghost {
-  border-color: var(--border-strong);
-  color: var(--accent);
-  background: var(--surface);
-}
-
-.coa-button--secondary:hover,
-.coa-button--filter:hover,
-.coa-button--filter.coa-button--active,
-.coa-button--ghost:hover {
-  border-color: var(--accent-border);
-  background: var(--accent-soft);
-}
-
-.coa-filter-count,
 .coa-count-badge {
   display: inline-grid;
   min-inline-size: 1.3rem;
-  min-block-size: 1.3rem;
+  min-block-size: 1.25rem;
   place-items: center;
   padding-inline: 0.35rem;
   border-radius: 999px;
-  color: var(--accent);
-  background: var(--accent-soft);
-  font-size: 0.62rem;
-  font-weight: 800;
-}
-
-.coa-count-badge {
-  min-block-size: 1.25rem;
   color: var(--text-soft);
   background: var(--surface-muted);
-}
-
-.coa-compact-button {
-  min-block-size: 2rem;
-  gap: 0.35rem;
-  padding-inline: 0.65rem;
-  border-color: var(--border);
-  color: var(--text-soft);
-  background: var(--surface);
   font-size: 0.62rem;
-  font-weight: 700;
-}
-
-.coa-compact-button:hover {
-  border-color: var(--accent-border);
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-
-html[dir="rtl"] .coa-directional-icon {
-  transform: scaleX(-1);
-}
-
-@media (max-width: 46rem) {
-  .coa-button {
-    padding-inline: 0.65rem;
-  }
-}
-
-@media (max-width: 32rem) {
-  .coa-compact-button {
-    flex: 1;
-  }
+  font-weight: 800;
 }
 
 /*
@@ -3287,14 +3940,15 @@ html:has([data-palette]) body {
   --erp-border-color: transparent;
 }
 
+/* A field keeps its border whatever Border style says (2026-10-06): a text box,
+   a select or a text area with no outline cannot be told from the page, so
+   None and Subtle soften panels and tables only. The outline itself is
+   `--ui-input` (intent-theme.css). */
 :is(.erp-root, .erp-appearance-preview)[data-border-style="none"] :is(
   .panel,
   section[class*="_panel_"],
   .table-wrap,
   [class*="_tableWrap_"],
-  input:not([type="checkbox"]),
-  select,
-  textarea,
   .erp-preference__option
 ) {
   border-color: transparent;
@@ -3310,9 +3964,6 @@ html:has([data-palette]) body {
   section[class*="_panel_"],
   .table-wrap,
   [class*="_tableWrap_"],
-  input:not([type="checkbox"]),
-  select,
-  textarea,
   .erp-preference__option
 ) {
   border-color: color-mix(in srgb, var(--border) 68%, transparent);
@@ -3328,12 +3979,20 @@ html:has([data-palette]) body {
   section[class*="_panel_"],
   .table-wrap,
   [class*="_tableWrap_"],
-  input:not([type="checkbox"]),
-  select,
-  textarea,
   .erp-preference__option
 ) {
   border-color: var(--border-strong);
+  border-width: 2px;
+}
+
+/* Strong fields are thicker in the field's own outline colour, never lighter
+   than a Standard field's. */
+:is(.erp-root, .erp-appearance-preview)[data-border-style="strong"] :is(
+  input:not([type="checkbox"], [type="radio"], [type="hidden"]),
+  select,
+  textarea
+) {
+  border-color: var(--ui-input);
   border-width: 2px;
 }
 
@@ -3380,8 +4039,8 @@ html:has([data-palette]) body {
   --erp-main-padding-inline: clamp(0.7rem, 1.2vw, 1.2rem);
 }
 
-.erp-root[data-appearance="enterprise"] .erp-header {
-  block-size: 3rem;
+.erp-root[data-appearance="enterprise"] {
+  --erp-header-h: 3rem;
 }
 
 .erp-root[data-appearance="enterprise"] :is(.page__header, header[class*="_pageHeader_"]) {
@@ -3398,7 +4057,9 @@ html:has([data-palette]) body {
   padding-inline: 0.55rem;
 }
 
-.erp-root[data-appearance="enterprise"] table tbody tr:nth-child(even) td {
+/* Odd rows, as the whole application stripes them (2026-10-06); "Table rows:
+   Plain" turns a style's stripes off as well. */
+.erp-root[data-appearance="enterprise"]:not([data-table-stripes="off"]) table tbody tr:nth-child(odd) td {
   background: var(--surface-muted);
 }
 
@@ -3447,8 +4108,8 @@ html:has([data-palette]) body {
   margin-block-end: 1.65rem;
 }
 
-.erp-root[data-appearance="modern"] .erp-header {
-  block-size: 3.8rem;
+.erp-root[data-appearance="modern"] {
+  --erp-header-h: 3.8rem;
 }
 
 :is(.erp-root, .erp-appearance-preview)[data-appearance="command"] {
@@ -3456,8 +4117,8 @@ html:has([data-palette]) body {
   --erp-main-padding-inline: 0.65rem;
 }
 
-.erp-root[data-appearance="command"] .erp-header {
-  block-size: 2.9rem;
+.erp-root[data-appearance="command"] {
+  --erp-header-h: 2.9rem;
 }
 
 .erp-root[data-appearance="command"] :is(.page__header, header[class*="_pageHeader_"]) {
@@ -3474,7 +4135,7 @@ html:has([data-palette]) body {
   letter-spacing: 0.015em;
 }
 
-.erp-root[data-appearance="command"] table tbody tr:nth-child(even) td {
+.erp-root[data-appearance="command"]:not([data-table-stripes="off"]) table tbody tr:nth-child(odd) td {
   background: color-mix(in srgb, var(--accent-soft) 48%, var(--surface));
 }
 
@@ -3483,8 +4144,8 @@ html:has([data-palette]) body {
   --erp-main-padding-inline: clamp(1.5rem, 4vw, 4rem);
 }
 
-.erp-root[data-appearance="studio"] .erp-header {
-  block-size: 4rem;
+.erp-root[data-appearance="studio"] {
+  --erp-header-h: 4rem;
 }
 
 .erp-root[data-appearance="studio"] :is(.page__header, header[class*="_pageHeader_"]) {
@@ -3510,7 +4171,7 @@ html:has([data-palette]) body {
   border-radius: 0;
 }
 
-.erp-appearance-preview[data-appearance="enterprise"] .erp-appearance-preview__table tr:nth-child(even) td {
+.erp-appearance-preview[data-appearance="enterprise"] .erp-appearance-preview__table tr:nth-child(odd) td {
   background: var(--surface-muted);
 }
 

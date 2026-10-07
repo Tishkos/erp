@@ -220,7 +220,16 @@ export const itemSupplier = pgTable(
     isDefault: boolean('is_default').notNull().default(false),
     purchasePriceIqd: numeric('purchase_price_iqd', { precision: 19, scale: 4 }),
 
+    /**
+     * 0408 — an item is bought only from the suppliers linked to it, so a link
+     * is the permission to buy: taken out of use with its reason, by whom and
+     * when, and never deleted.
+     */
     active: boolean('active').notNull().default(true),
+    deactivatedReason: text('deactivated_reason'),
+    deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
+    deactivatedBy: uuid('deactivated_by').references(() => appUser.id),
+    createdBy: uuid('created_by').references(() => appUser.id),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -231,6 +240,10 @@ export const itemSupplier = pgTable(
     check(
       'item_supplier_purchase_price_non_negative',
       sql`${t.purchasePriceIqd} is null or ${t.purchasePriceIqd} >= 0`,
+    ),
+    check(
+      'item_supplier_deactivated_has_reason',
+      sql`${t.active} or coalesce(btrim(${t.deactivatedReason}), '') <> ''`,
     ),
   ],
 );

@@ -24,6 +24,7 @@ import * as audit from './audit';
 import { allocateDocumentNumber } from './numbering';
 import { countOf, registerPage, whereOf, type RegisterPage, type RegisterPaging } from './register-page';
 import * as execution from './project-execution';
+import * as items from './items';
 
 export const PERMISSION_OBJECT = 'purchase_order';
 const SEQUENCE_KEY = 'PURCHASE_ORDER';
@@ -144,6 +145,8 @@ export async function create(
   }
 
   await assertSupplierUsable(tx, input.supplierId);
+  // 0408 — every item ordered is one this supplier is linked to (by direction, 2026-10-06).
+  await items.assertBoughtFrom(tx, input.supplierId, input.lines.map((line) => line.itemCode ?? null));
   // REQ-PM-001 §8 — checked before the number is spent.
   const assignment = await execution.checkAssignment(tx, input);
 

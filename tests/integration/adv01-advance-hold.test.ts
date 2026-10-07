@@ -280,3 +280,82 @@ describe('ADV3 · what moves nothing, and an import with no advance', () => {
     expect(await held(IN_PROCESS)).toBe('100.000000'); // ADV3-0002 went straight there
   });
 });
+
+/*
+ * 0411 (2026-10-06, by direction): "choose percentage select or amount …
+ * automatically it should make the payment application; when that payment
+ * application is completed, automatically from On Process it goes into In
+ * Process". Both ways of agreeing the advance, end to end: the application is
+ * raised for exactly the payable amount, and the paid paper releases the goods.
+ */
+describe('ADV4 · by percentage or by amount, the application is the payable amount and paid releases the goods', () => {
+  const settle = async (payableId: string, appId: string, ref: string) => {
+    await withScope(scope(world.clerk), (tx) => applications.submit(tx, world.clerk, appId));
+    await withScope(scope(approver), (tx) => applications.approve(tx, approver, appId));
+    await validatePd(payableId, `${ref}-PD`);
+    await addPaper(world.manager, appId, { kind: 'sent_to_bank', date: '2026-09-10' });
+    await addPaper(world.manager, appId, { kind: 'paid', date: '2026-09-12', reference: `MT103-${ref}` });
+  };
+
+  it('by percentage: 35% of IQD 1,000,000 is IQD 350,000; held, then In Process on paid', async () => {
+    const { invoiceId, payableId } = await importInvoice('ADV4-PCT', {
+      advanceBasis: 'percent',
+      advancePercent: '35',
+      advancePaymentMethodCode: SWIFT,
+      advancePaidFromAccountId: world.bankAccountId,
+    });
+    expect((await ownerPool.query(`select advance_basis, advance_percent, advance_amount from ap_invoice where id = $1`, [invoiceId])).rows[0]).toEqual({
+      advance_basis: 'percent',
+      advance_percent: '35.0000',
+      advance_amount: null,
+    });
+    await post(invoiceId);
+    expect(await held(HOLD)).toBe('100.000000');
+    const app = (await applicationOf(invoiceId))!;
+    expect(app).toMatchObject({ status: 'draft', amount_txn: '350000.0000' });
+    await settle(payableId, app.id, 'ADV4P');
+    expect(await statusOf(app.id)).toBe('confirmed');
+    expect(await held(HOLD)).toBe('0.000000');
+    expect(await held(IN_PROCESS)).toBe('100.000000');
+  });
+
+  it('by amount: exactly IQD 250,000 asked of the bank; held, then In Process on paid', async () => {
+    const { invoiceId, payableId } = await importInvoice('ADV4-AMT', {
+      advanceBasis: 'amount',
+      advanceAmount: '250000',
+      advancePaymentMethodCode: SWIFT,
+      advancePaidFromAccountId: world.bankAccountId,
+    });
+    expect((await ownerPool.query(`select advance_basis, advance_percent, advance_amount from ap_invoice where id = $1`, [invoiceId])).rows[0]).toEqual({
+      advance_basis: 'amount',
+      advance_percent: null,
+      advance_amount: '250000.0000',
+    });
+    await post(invoiceId);
+    expect(await held(HOLD)).toBe('100.000000');
+    const app = (await applicationOf(invoiceId))!;
+    expect(app).toMatchObject({ status: 'draft', amount_txn: '250000.0000' });
+    expect((await log(payableId)).find((row) => row.event_code === 'ADVANCE_RAISED')!.summary).toMatch(/drafted for 250,000 IQD on /);
+    await settle(payableId, app.id, 'ADV4A');
+    expect(await statusOf(app.id)).toBe('confirmed');
+    expect(await held(HOLD)).toBe('0.000000');
+    expect(await held(IN_PROCESS)).toBe('100.000000');
+  });
+
+  it('never more than the invoice: above 100%, above the total, or nought is refused at entry; a draft line cannot shrink the total under the amount', async () => {
+    expect(await rejection(importInvoice('ADV4-OVER-P', { advanceBasis: 'percent', advancePercent: '100.5' }))).toMatch(/more than 100% of the invoice/);
+    expect(await rejection(importInvoice('ADV4-OVER-A', { advanceBasis: 'amount', advanceAmount: '1000000.0001' }))).toMatch(/cannot be more than the invoice/);
+    expect(await rejection(importInvoice('ADV4-ZERO', { advanceBasis: 'amount', advanceAmount: '0' }))).toMatch(/more than nought/);
+    expect(await rejection(importInvoice('ADV4-BAD', { advanceBasis: 'sometimes', advancePercent: '10' }))).toMatch(/not a way to agree an advance/);
+    // The whole invoice is allowed.
+    const all = await importInvoice('ADV4-ALL', { advanceBasis: 'amount', advanceAmount: '1000000' });
+    expect((await ownerPool.query(`select advance_amount from ap_invoice where id = $1`, [all.invoiceId])).rows[0].advance_amount).toBe('1000000.0000');
+    // No upfront payment: nothing kept.
+    const none = await importInvoice('ADV4-NONE', { advanceBasis: 'none', advancePercent: '25', advancePaidFromAccountId: world.bankAccountId });
+    expect((await ownerPool.query(`select advance_basis, advance_percent, advance_paid_from_account_id from ap_invoice where id = $1`, [none.invoiceId])).rows[0]).toEqual({
+      advance_basis: null,
+      advance_percent: null,
+      advance_paid_from_account_id: null,
+    });
+  });
+});

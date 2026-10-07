@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Browser, type Page } from '@playwright/test';
+import { keepEnglish } from './support/locale';
 
 /**
  * Shared doors and profiles (2026-10-04) — the progress certificate, the
@@ -100,7 +101,7 @@ async function photograph(page: Page, record: string, name: string, doors = 4) {
   expect(width, 'no horizontal scroll at 390px').toBeLessThanOrEqual(390);
   await expect(page.locator('[class*="sapTitleActions"]').first().locator(':scope > button, :scope > a')).toHaveCount(doors);
   await page.screenshot({ path: `${SHOTS}/${name}-mobile-ar.png`, fullPage: true });
-  await page.context().clearCookies({ name: 'erp-locale' });
+  await keepEnglish(page.context());
   await page.setViewportSize({ width: 1280, height: 720 });
 }
 

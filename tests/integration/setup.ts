@@ -779,6 +779,13 @@ export async function resetTestData(): Promise<void> {
       delete from opening_stock;
     `);
 
+    // A Manual Stock Addition (0415): its lines name their movements, the
+    // header its journal; never deleted in production, lifted here only.
+    await client.query(`
+      delete from manual_stock_addition_line;
+      delete from manual_stock_addition;
+    `);
+
     // Inventory next: a movement references the journal that posted it, and the
     // ledger is append-only in production (§9.9), so the guards are lifted here
     // only — exactly as they are for the journal and the audit trail.
@@ -960,6 +967,8 @@ export async function resetTestData(): Promise<void> {
                          -- Phase 00, seeded by migration 0160.
                          'INVOICE',
                          'JOURNAL_ENTRY', 'WAREHOUSE_TRANSFER', 'OPENING_STOCK', 'STOCK_COUNT',
+                         -- Manual Stock Addition, migration 0415.
+                         'MANUAL_STOCK_ADDITION',
                          'PURCHASE_ORDER', 'GOODS_RECEIPT', 'SERVICE_RECEIPT', 'AP_INVOICE',
                          'SUPPLIER_ADVANCE',
                          -- REQ-AP-001 Stage 1, migration 0225 — one per payable type.

@@ -43,7 +43,7 @@ Every receivables record (sales invoice, receipt, credit / debit note, credit me
 The customer's own profile page is different: it has an **Account statement** button and an **Audit log** button instead of the four icons.
 
 ### Branch — Receivables concepts
-A new invoice, receipt or note is raised in your Active branch (the picker in the top bar). On a new sales invoice only that branch's warehouses are offered. The registers (Sales Invoices, Customer Receipts, Credit Notes / Debit Notes, Sales Returns) list the documents of every branch you are allowed to see. Customer Credits & Advances, the open balances under Customer Statements and the By customer table of Customer Reconciliation read your Active branch; Receivables Ageing has its own Branch filter. To look at another branch, change the Active branch first.
+A new invoice, receipt or note is raised in your Active branch (in your own menu, behind your picture in the top bar). On a new sales invoice only that branch's warehouses are offered. The registers (Sales Invoices, Customer Receipts, Credit Notes / Debit Notes, Sales Returns) list the documents of every branch you are allowed to see. Customer Credits & Advances, the open balances under Customer Statements and the By customer table of Customer Reconciliation read your Active branch; Receivables Ageing has its own Branch filter. To look at another branch, change the Active branch first.
 
 ### Searching a register — Receivables concepts
 Every register has a search box, **Search this list** (ابحث في هذه القائمة). Type and press Enter or the magnifier: the list keeps the rows where any value contains what you typed — number, customer code or name, a date typed as 2026-10-04, an amount, or the status word in English (draft, approved, posted, settled, reversed). **Clear** (مسح) removes the search. The count beside it ("12 records") is the number of rows shown.
@@ -60,15 +60,15 @@ After an action the page shows **Saved.** (تم الحفظ.) or **That could not
 - "A note says something. Write what is happening with this record." / "A note is at most 2,000 characters. Attach a longer text as a file." — note refusals.
 
 ## Customers (العملاء)
-Path: Receivables → Sales & Receivables → Customers   |   Arabic: الذمم المدينة ← المبيعات والذمم المدينة ← العملاء
+Path: Accounting → Master Data — Financial → Customers   |   Arabic: المحاسبة ← البيانات الرئيسية — المالية ← العملاء
 Address: /sales/customers (list) · /sales/customers/<customer code>?role=customer (profile)
 Needs: `view` on `business_partner` to open; `create` to add a customer; `edit_draft` to see the Update form and the Grant / Remove role buttons; `approve` to approve a prospect and to save the Update form; `administer` to deactivate or reactivate.
 What it is for: The customer master — who the company sells to. A customer and a supplier are the same record with two roles, so a company that both buys and sells appears on both lists. A customer must be Active (approved and in use) before it can be chosen on an invoice, a receipt or a note.
 
 ### How to add a customer — Customers
-1. Open Receivables → Sales & Receivables → Customers.
+1. Open Accounting → Master Data — Financial → Customers (the customer master moved there on 2026-10-06; the address is still /sales/customers).
 2. Press **New customer** (عميل جديد) at the top. A dialog opens.
-3. Type the **Legal name** (الاسم القانوني). Optionally fill **Email** (البريد الإلكتروني), **Phone** (الهاتف), choose **Payment terms** (شروط الدفع) and type the **Address** (العنوان).
+3. Type the **Legal name** (الاسم القانوني). Optionally fill **Email** (البريد الإلكتروني), **Phone** (الهاتف) and the **Address** (العنوان). The New customer form does not ask for payment terms (since 2026-10-06): a customer is created with none, so its sales invoices fall due on the invoice date. Terms can still be set later on the profile's **Update** form if a customer ever needs them.
 4. Press **Create** (إنشاء). The system gives the customer its code; you cannot type it.
 5. The customer's profile opens with "Saved.". If you hold the approval permission the customer is **Active** (نشط) at once; otherwise it is a **Prospect** (محتمل) and shows "awaiting approval" (بانتظار الاعتماد) until somebody approves it.
 If the name you type is exactly the legal name of an existing supplier, no second record is made: that supplier is given the customer role and its profile opens.
@@ -105,7 +105,7 @@ Type in **Search this list** (ابحث في هذه القائمة) and press Ent
 - **Legal name** (الاسم القانوني) — the company's registered name. Required. It is the name shown on every document and statement.
 - **Email** (البريد الإلكتروني) — optional; must look like an e-mail address.
 - **Phone** (الهاتف) — optional.
-- **Payment terms** (شروط الدفع) — optional; chosen from the active payment terms, or **No terms set** (بلا شروط). It decides the due date proposed on this customer's sales invoices and debit notes ("When their invoices fall due."). With no terms the due date is the invoice date.
+- **Payment terms** (شروط الدفع) — not on the New customer form; optional on the profile's Update form, chosen from the active payment terms, or **No terms set** (بلا شروط). It decides the due date proposed on this customer's sales invoices and debit notes ("When their invoices fall due."). With no terms — every customer created since 2026-10-06 — the due date is the invoice date.
 - **Address** (العنوان) — optional, free text.
 - **Code** (الرمز) — given by the system on saving; never typed, never changed.
 - **Status** (الحالة) — Prospect (محتمل), Active (نشط), On hold (موقوف مؤقتًا), Blocked (محظور), Inactive (غير نشط). Only an Active customer that is also in use can be chosen on documents. The screen sets Prospect or Active on creation and Active on approval; it has no button for On hold or Blocked.
@@ -127,13 +127,13 @@ A new customer is Active when its maker may approve partners, otherwise a Prospe
 - "reason: is required to deactivate a partner" — type why.
 
 ## Sales Invoices (فواتير المبيعات)
-Path: Receivables → Sales & Receivables → Sales Invoices   |   Arabic: الذمم المدينة ← المبيعات والذمم المدينة ← فواتير المبيعات
+Receivables → Sales & Invoices → Sales Invoices   |   Arabic: الذمم المدينة ← المبيعات والفواتير ← فواتير المبيعات
 Address: /sales/ar-invoices (list) · /sales/ar-invoices/new · /sales/ar-invoices/<invoice number>
 Needs: `view` on `ar_invoice` to open; `create` to raise; `edit_draft` to change a draft's lines or accounts and to add a note; `approve` to approve; `post` to post, together with `execute` on `inventory_movement` because posting moves the stock; `approve` + `edit_draft` to return an approved invoice to draft; `reverse_cancel` on `ar_invoice`, `inventory_movement` and `journal_entry` to reverse; `print` / `export` for copies; `create` on `attachment` to attach a file.
 What it is for: Billing a customer for goods sold from a warehouse. Posting the invoice creates the customer's debt, books the revenue and takes the goods out of stock at their cost.
 
 ### How to raise a sales invoice — Sales Invoices
-1. Open Receivables → Sales & Receivables → Sales Invoices and press **New invoice** (فاتورة جديدة).
+1. Open Receivables → Sales & Invoices → Sales Invoices and press **New invoice** (فاتورة جديدة).
 2. In the header type the **Customer Code** (رمز العميل) or the **Customer Name** (اسم العميل) and pick the customer from the suggestions — either box fills the other. Only active, approved customers are offered.
 3. Check the **Invoice Date** (تاريخ الفاتورة) — it opens on today.
 4. The **Due Date** (تاريخ الاستحقاق) fills itself from the customer's payment terms as soon as the customer and the date are known. Overtype it if this invoice has a different due date.
@@ -226,13 +226,13 @@ Lines:
 - Period, permission and mapping refusals: see "Messages and common refusals — Receivables concepts".
 
 ## Customer Receipts (مقبوضات العملاء)
-Path: Receivables → Sales & Receivables → Customer Receipts   |   Arabic: الذمم المدينة ← المبيعات والذمم المدينة ← مقبوضات العملاء
+Receivables → Customer Receipts & Credits → Customer Receipts   |   Arabic: الذمم المدينة ← مقبوضات العملاء وأرصدتهم الدائنة ← مقبوضات العملاء
 Address: /sales/customer-receipts (list, titled Receipts — المقبوضات) · /sales/customer-receipts/new · /sales/customer-receipts/<receipt number>
 Needs: `view` on `customer_receipt` to open; `create` to record a receipt; `approve` to approve; `post` to post; `execute` to allocate it to invoices; `edit_draft` to add a note; `print` / `export` for copies; `create` on `attachment` to attach a file.
 What it is for: Recording money received from a customer into a bank or cash account, and saying which invoices it pays. Partial payment is normal: one receipt can pay several invoices, and one invoice can be paid by several receipts.
 
 ### How to record a receipt — Customer Receipts
-1. Open Receivables → Sales & Receivables → Customer Receipts and press **New receipt** (مقبوض جديد).
+1. Open Receivables → Customer Receipts & Credits → Customer Receipts and press **New receipt** (مقبوض جديد).
 2. Type the **Customer Code** or **Customer Name** and pick the customer.
 3. Type the **Bank/Cash Code** (رمز البنك/الصندوق) or **Bank/Cash Name** (اسم البنك/الصندوق) and pick the account the money went into; the name shows the account's currency.
 4. Check the **Invoice Date** (تاريخ الفاتورة), type the **Amount (IQD)** (المبلغ (د.ع)), optionally choose the **Payment method** (طريقة الدفع) and type a **Reference** (المرجع).
@@ -289,13 +289,13 @@ What it is for: Recording money received from a customer into a bank or cash acc
 - "Nothing outstanding for this customer." (لا يوجد متبقٍ لهذا العميل.) — not a refusal: the customer has no open invoice, so there is nothing to allocate to.
 
 ## Customer Credits & Advances (الأرصدة الدائنة للعملاء والدفعات المقدمة)
-Path: Receivables → Sales & Receivables → Customer Credits & Advances   |   Arabic: الذمم المدينة ← المبيعات والذمم المدينة ← الأرصدة الدائنة للعملاء والدفعات المقدمة
+Receivables → Customer Receipts & Credits → Customer Credits & Advances   |   Arabic: الذمم المدينة ← مقبوضات العملاء وأرصدتهم الدائنة ← الأرصدة الدائنة للعملاء والدفعات المقدمة
 Address: /sales/customer-credits
 Needs: `view` on `customer_receipt` to open; to apply a credit, `execute` on `customer_receipt` (a receipt's remainder) or `execute` on `customer_credit_memo` (a credit note's or credit memo's remainder); `view` on `ar_invoice` for the outstanding figures in the By customer table.
 What it is for: Shows what every customer holds with the company — advances, unapplied receipts and overpayments, credit note and credit memo balances — and lets you put a credit against an invoice or a debit note. No invoice is invented for an advance; the credit simply waits.
 
 ### How to see what credit a customer holds — Customer Credits & Advances
-1. Open Receivables → Sales & Receivables → Customer Credits & Advances.
+Receivables → Customer Receipts & Credits → Customer Credits & Advances.
 2. The first table, **Credits & advances** (الأرصدة الدائنة والدفعات المقدمة), lists each credit: Reference (a link to the receipt or note), **Kind** (النوع), Date, Customer Code, Customer Name, **Source invoice** (الفاتورة المصدر), Amount, **Applied** (المخصص), **Unapplied** (غير المخصص), Status, and an **Apply** (تخصيص) link when something is left. The last row totals **Unapplied credits** (الأرصدة الدائنة غير المخصصة).
 3. Filter with **Customer Name** (choose one, or **All customers** — جميع العملاء) and **Show** (عرض): **With something left to apply** (ما تبقى منه رصيد للتخصيص — the default) or **All, including fully applied** (الكل، بما فيها المخصصة بالكامل); press **Filter** (تصفية). The search box searches the rows.
 4. The **By customer** (حسب العميل) table at the bottom shows, per customer as at today: **Outstanding invoices & debit notes** (الفواتير والإشعارات المدينة المستحقة), **Received** (المقبوض), **Applied receipts** (المقبوضات المخصصة), **Unapplied** and **Net position** (صافي المركز = outstanding minus unapplied credit), with links **Ageing** (الأعمار) and **Statement** (كشف الحساب).
@@ -328,13 +328,13 @@ Applying posts no journal — the credit and the debt are already in the ledger.
 - No amount box in the Apply table — you do not hold the permission to apply that kind of credit.
 
 ## Customer Statements (كشوف حسابات العملاء)
-Path: Receivables → Sales & Receivables → Customer Statements   |   Arabic: الذمم المدينة ← المبيعات والذمم المدينة ← كشوف حسابات العملاء
+Receivables → Customer Balances → Customer Statements   |   Arabic: الذمم المدينة ← أرصدة العملاء ← كشوف حسابات العملاء
 Address: /sales/customer-statements
 Needs: `view` on `business_partner` to open; `view` on `ar_invoice` for the Invoice Balances part; `print` on `business_partner` for the PDF copy, `export` for Excel and Word.
 What it is for: A read-only account statement: every posting on a customer's account in a period with a running balance, and under it what is still owed. With no customer chosen it lists every customer's position, which answers "who owes us money". Sales are Debit; receipts and credits are Credit.
 
 ### How to run a customer's statement — Customer Statements
-1. Open Receivables → Sales & Receivables → Customer Statements (or press **Account statement** on a customer's profile).
+Receivables → Customer Balances → Customer Statements (or press **Account statement** on a customer's profile).
 2. In **Customer** (عميل) type the code or the name and pick from the list.
 3. Set **From** (من) and **To** (إلى) — they open on the first and last day of this year — and the **Report currency** (عملة التقرير), IQD or USD.
 4. Optionally set **Show** (العرض) to narrow the open invoices listed underneath.
@@ -374,13 +374,13 @@ Nothing is saved; the screen only reads. It reads the same postings the ledger h
 - "This export has N rows; a file may carry at most M. Narrow the filters…" — shorten the period and export again.
 
 ## Receivables Ageing (أعمار الذمم المدينة)
-Path: Receivables → Sales & Receivables → Receivables Ageing   |   Arabic: الذمم المدينة ← المبيعات والذمم المدينة ← أعمار الذمم المدينة
+Receivables → Customer Balances → Receivables Ageing   |   Arabic: الذمم المدينة ← أرصدة العملاء ← أعمار الذمم المدينة
 Address: /sales/receivables
 Needs: `view` on `ar_invoice` to open; `print` on `ar_invoice` for the PDF copy, `export` for Excel and Word.
 What it is for: A read-only report of what customers owe, invoice by invoice and debit note by debit note, and how late each is, as at a date. Lateness is counted from the due date, not the invoice date.
 
 ### How to read the ageing — Receivables Ageing
-1. Open Receivables → Sales & Receivables → Receivables Ageing. It opens as at today for your Active branch.
+Receivables → Customer Balances → Receivables Ageing. It opens as at today for your Active branch.
 2. Five figures at the top: **Gross receivables** (إجمالي الذمم المدينة — everything still owed on invoices and debit notes), **Not yet due** (غير مستحقة بعد), **Overdue** (متأخرة), **Unapplied credits** (الأرصدة الدائنة غير المخصصة — what customers hold with us) and **Net position** (صافي المركز — what is owed less what is held, equal to the ledger balance).
 3. The **Invoice Balances** (أرصدة الفواتير) table lists each document: Customer Name, Invoice Number (with each receipt and credit applied listed under it as date · amount · number, each a link), Invoice Date, Due Date, Payment terms, Total Price, Allocated Payments, Credits / Returns Applied, Other Adjustments Applied, **Outstanding**, Status, and **Status against terms** ("Due in 6 days", "11 days overdue", "Paid 3 days late", "Paid on time"). A debit note is marked **Debit note** (إشعار مدين) under its number. The last row totals the columns.
 4. Under it, when they have rows: **Customer Credits / Advances** (customer, **On account since** — الرصيد قائم منذ —, **Credit / advance balance**, link **Credits & advances**) and **Other Non-invoice Debits**.
@@ -424,13 +424,13 @@ Nothing is saved; the report only reads. It uses the same figures as the invoice
 - A draft or merely approved invoice is not listed: only posted documents are debts.
 
 ## Credit Notes / Debit Notes (الإشعارات الدائنة / الإشعارات المدينة)
-Path: Receivables → Sales & Receivables → Credit Notes / Debit Notes   |   Arabic: الذمم المدينة ← المبيعات والذمم المدينة ← الإشعارات الدائنة / الإشعارات المدينة
+Receivables → Sales & Invoices → Credit Notes / Debit Notes   |   Arabic: الذمم المدينة ← المبيعات والفواتير ← الإشعارات الدائنة / الإشعارات المدينة
 Address: /sales/credit-notes (list) · /sales/credit-notes/new?kind=credit · /sales/credit-notes/new?kind=debit · /sales/credit-notes/<note number>
 Needs: `view` on `customer_credit_memo` to open; `create` to raise a note; `approve` to approve; `post` to post; `edit_draft` to cancel a draft and to add a note; `reverse_cancel` on `customer_credit_memo` and on `journal_entry` to reverse; `execute` to apply a credit note's remainder; `print` / `export` for copies; `create` on `attachment` to attach a file.
 What it is for: Adjusting a customer's account without goods moving. A **credit note** reduces what the customer owes (a price allowance, a correction). A **debit note** increases it (a charge the invoice missed). The register also lists the **credit memos** that sales returns create; those open read-only.
 
 ### How to raise a credit note — Credit Notes / Debit Notes
-1. Open Receivables → Sales & Receivables → Credit Notes / Debit Notes and press **New credit note** (إشعار دائن جديد).
+1. Open Receivables → Sales & Invoices → Credit Notes / Debit Notes and press **New credit note** (إشعار دائن جديد).
 2. In **Customer Name** type the customer's code or name ("Customer code or name") and press **Choose** (اختر). The rest of the form appears with that customer's invoices.
 3. Check the **Invoice Date** (تاريخ الفاتورة).
 4. In **Invoice Number** (رقم الفاتورة) choose the invoice being corrected, or leave **No invoice — on the account** (دون فاتورة — على الحساب). Each invoice shows its total and what is still open.
@@ -503,13 +503,13 @@ What it is for: Adjusting a customer's account without goods moving. A **credit 
 - Period, permission and mapping refusals: see "Messages and common refusals — Receivables concepts".
 
 ## Sales Returns (مرتجعات المبيعات)
-Path: Receivables → Sales & Receivables → Sales Returns   |   Arabic: الذمم المدينة ← المبيعات والذمم المدينة ← مرتجعات المبيعات
+Receivables → Sales & Invoices → Sales Returns   |   Arabic: الذمم المدينة ← المبيعات والفواتير ← مرتجعات المبيعات
 Address: /sales/sales-returns (list) · /sales/sales-returns/new · /sales/sales-returns/<return number>
 Needs: `view` on `sales_return` to open; `create` to raise a return; `approve` and `execute` on `sales_return` together to Accept or Reject. Accepting also needs `execute` on `inventory_movement` (the goods come back into stock) and `create`, `approve`, `post` — and `execute` when the offset is Accounts Receivable — on `customer_credit_memo` (the credit memo is made in the same step). `edit_draft` to add a note; `print` / `export` for copies; `create` on `attachment` to attach a file.
 What it is for: Taking back goods a customer returns against a posted sales invoice: the goods go back into a warehouse and the customer is credited (or refunded from a bank or cash account).
 
 ### How to raise a sales return — Sales Returns
-1. Open Receivables → Sales & Receivables → Sales Returns and press **New return** (مرتجع جديد).
+1. Open Receivables → Sales & Invoices → Sales Returns and press **New return** (مرتجع جديد).
 2. Optionally type the customer in **Customer Name** ("Customer name or code") — it only narrows the invoices suggested.
 3. In **Original Sales Invoice** (فاتورة المبيعات الأصلية) type the invoice number or part of it and press **Choose** (اختر). Only posted invoices can be returned against.
 4. The form appears with the customer filled in. Check the **Invoice Date**.
@@ -568,13 +568,13 @@ What it is for: Taking back goods a customer returns against a posted sales invo
 - Period, permission and mapping refusals: see "Messages and common refusals — Receivables concepts".
 
 ## Customer Reconciliation (مطابقة حسابات العملاء)
-Path: Receivables → Sales & Receivables → Customer Reconciliation   |   Arabic: الذمم المدينة ← المبيعات والذمم المدينة ← مطابقة حسابات العملاء
+Receivables → Customer Balances → Customer Reconciliation   |   Arabic: الذمم المدينة ← أرصدة العملاء ← مطابقة حسابات العملاء
 Address: /sales/customer-reconciliation
 Needs: `view` on `ar_invoice`.
 What it is for: A read-only check that the customers' balances (the subledger) add up to the Accounts Receivable control account in the general ledger. It shows a difference and where it comes from; it never corrects anything.
 
 ### How to read the reconciliation — Customer Reconciliation
-1. Open Receivables → Sales & Receivables → Customer Reconciliation. Set **As at** (كما في) and press **Show** (عرض); it opens as at today.
+Receivables → Customer Balances → Customer Reconciliation. Set **As at** (كما في) and press **Show** (عرض); it opens as at today.
 2. **Customer subledger and A/R control** (دفتر العملاء الفرعي وحساب مراقبة الذمم): one row per customer control account — **Account code** (رمز الحساب — opens the account's ledger), **Account** (الحساب), **Customer subledger** (دفتر العملاء الفرعي), **A/R control (G/L)** (حساب المراقبة (الأستاذ العام)), **Difference** (الفرق). The foot totals the three.
 3. The strip gives the verdict: "Difference: 0 IQD ✅ — the subledger and the control account agree at <amount>." or "Difference: <amount> ⚠️ — the lines below are where it comes from. Nothing is corrected here."
 4. **Investigation — the lines that make the difference** (التحقيق — الأسطر التي تصنع الفرق): each journal line behind a difference with its **Finding** (النتيجة), Invoice Date, **Journal entry** (a link), Account code, Customer Code, Description, **G/L line** (سطر الأستاذ العام) and **Subledger entry** (قيد الدفتر الفرعي). With no difference it says "Every line on the customer control accounts has its subledger entry, and every entry its line."
@@ -603,7 +603,7 @@ Nothing is saved; the screen only reads.
 Path: Monitoring → Monitoring → List of customers   |   Arabic: المتابعة ← المتابعة ← قائمة العملاء
 Address: /monitoring/customer-list
 Needs: `view` on `monitoring`.
-What it is for: A screen of the Monitoring module that is drawn but not built yet. It shows only **Coming soon** (قريباً). It is not the customer master — to work with customers use Receivables → Sales & Receivables → Customers.
+What it is for: A screen of the Monitoring module that is drawn but not built yet. It shows only **Coming soon** (قريباً). It is not the customer master — to work with customers use Accounting → Master Data — Financial → Customers.
 
 ### How to use it — List of customers
 There is nothing to do on this screen yet: no list, no search, no buttons. The tabs at the top lead to the two other Monitoring screens, History and Reports, which say the same. In the menu its name is greyed and hovering shows "Not yet built" (لم تُنشأ بعد).

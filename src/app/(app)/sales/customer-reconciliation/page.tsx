@@ -15,6 +15,7 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import { businessToday } from '@/server/domain/business-date';
 import * as reconciliation from '@/server/services/customer-reconciliation';
 import * as openItems from '@/server/services/open-items';
+import { IntentDateField } from '@/components/admin/intent-date-field';
 
 /**
  * Customer Reconciliation — Receivables, 2026-10-04.
@@ -87,7 +88,7 @@ export default async function CustomerReconciliationPage({ searchParams }: { sea
     <form action="/sales/customer-reconciliation" className={s.sapFilterBar} method="get">
       <label className={s.sapFilterField}>
         <span className={s.sapLabel}>{admin('reports.as_at_label')}</span>
-        <input defaultValue={asOf} name="as_at" required type="date" />
+        <IntentDateField defaultValue={asOf} name="as_at" required />
       </label>
       <button className={`${s.button} ${s.primary}`} type="submit">
         {admin('stock_movements.filter')}

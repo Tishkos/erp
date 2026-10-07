@@ -26,6 +26,8 @@ const Body = z.object({
   seen: z.object({ id, upTo: z.number().int().nonnegative() }).nullish(),
   typing: z.boolean().nullish(),
   limit: z.number().int().min(1).max(200).optional(),
+  // The chat windows docked at the foot of other screens (`chat-dock.tsx`).
+  windows: z.array(id).max(chatRead.SYNC_WINDOWS_MAX).optional(),
 });
 
 const NO_STORE = { 'cache-control': 'no-store' };
@@ -50,6 +52,7 @@ export async function POST(request: Request): Promise<Response> {
         seen: parsed.seen ?? null,
         typing: parsed.typing ?? null,
         limit: parsed.limit,
+        windows: parsed.windows,
       }),
     );
     if (outcome.status === 'signed_out') return Response.json({ error: 'signed_out' }, { status: 401, headers: NO_STORE });

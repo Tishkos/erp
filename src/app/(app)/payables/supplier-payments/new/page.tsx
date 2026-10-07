@@ -14,6 +14,7 @@ import * as payments from '@/server/services/supplier-payment';
 import { gapsFor } from '@domain/setup-gaps';
 import { createPayment } from '../actions';
 import { businessToday } from '@/server/domain/business-date';
+import { IntentDateField } from '@/components/admin/intent-date-field';
 
 /**
  * Making a Payment — Operations build, block 6.
@@ -113,12 +114,11 @@ export default async function NewPaymentPage({ searchParams }: { searchParams: S
       label: column('posting_date'),
       control: true,
       value: (
-        <input
+        <IntentDateField
           aria-label={column('posting_date')}
           defaultValue={today}
           name="payment_date"
           required
-          type="date"
         />
       ),
     },

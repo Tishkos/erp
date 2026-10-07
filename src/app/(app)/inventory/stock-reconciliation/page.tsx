@@ -31,6 +31,8 @@ import * as stock from '@/server/services/stock-operations';
 import * as warehouses from '@/server/services/warehouses';
 import { createAdjustment } from './actions';
 import { businessToday } from '@/server/domain/business-date';
+import { RegisterFilter } from '@/components/admin/register-filter';
+import { applyRegisterDates, registerDatesOf, registerDatesParams } from '@/server/domain/register-dates';
 
 /**
  * Item Reconciliation — Operations build, block 7.
@@ -70,7 +72,14 @@ export default async function ReconciliationPage({ searchParams }: { searchParam
         )
       : [],
   }));
-  const shown = rows.filter((row) => matches(row, outcome.q));
+  // The Filter's window of reconciliation dates and the order, over the whole register — newest first unless asked.
+  const dates = registerDatesOf(await searchParams);
+  const shown = applyRegisterDates(
+    rows.filter((row) => matches(row, outcome.q)),
+    (row) => row.adjustmentDate,
+    dates,
+    (row) => row.adjustmentNo,
+  );
   const today = businessToday();
 
   return (
@@ -162,10 +171,13 @@ export default async function ReconciliationPage({ searchParams }: { searchParam
           clearHref="/inventory/stock-reconciliation"
           clearLabel={t('clear_search')}
           countLabel={t('rows_shown', { count: shown.length })}
+          hidden={registerDatesParams(dates)}
           placeholder={t('search_placeholder')}
           q={outcome.q}
           searchLabel={t('search')}
-        />
+        >
+          <RegisterFilter dates={dates} keep={{ q: outcome.q }} path="/inventory/stock-reconciliation" />
+        </ListToolbar>
         <div className="table-wrap">
           <table className="list">
             <thead>

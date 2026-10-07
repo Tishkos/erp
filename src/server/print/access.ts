@@ -25,6 +25,8 @@ export const EXPORT_ACCESS = {
   item_reconciliation: { kind: 'document', route: '/inventory/stock-reconciliation', object: 'stock_reconciliation' },
   // IMPROVEMENT-002 — a stock count, printed from its own page.
   stock_count: { kind: 'document', route: '/inventory/stock-count', object: 'stock_count' },
+  // A Manual Stock Addition (2026-10-06), printed from its own page.
+  manual_stock_addition: { kind: 'document', route: '/inventory/manual-additions', object: 'manual_stock_addition' },
   // IMPROVEMENT-002 — the B/L, printed from its own page (its boxes, containers and what each carries).
   bill_of_lading: { kind: 'document', route: '/payables/shipments', object: 'bill_of_lading' },
   // IMPROVEMENT-002 — an ASYCUDA reading, printed from its own page (its lines as ASYCUDA gave them).

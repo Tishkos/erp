@@ -5,6 +5,7 @@ import styles from './admin.module.css';
 import { QUANTITY_PLACES, scaled, toNumber } from '@/lib/decimal';
 import { checkDigitFor, compactContainerNo, isContainerShape } from '@/lib/container-number';
 
+import { IntentSelect } from '@/components/admin/intent-select';
 /**
  * The containers of a B/L, typed as the B/L lists them — IMPROVEMENT-002
  * (sponsor, 2026-10-03: "container should be a table, not separated by
@@ -177,7 +178,8 @@ export function ContainerRowsGrid({
                     {problem ? <span className={styles.sapRowError}>{problem}</span> : null}
                   </td>
                   <td>
-                    <select
+                    <IntentSelect
+                      compact
                       aria-label={`${labels.sizeType} ${index + 1}`}
                       name={`size_type_${index}`}
                       onChange={(event) => patch(row.key, { sizeType: event.target.value })}
@@ -189,7 +191,7 @@ export function ContainerRowsGrid({
                           {type.label}
                         </option>
                       ))}
-                    </select>
+                    </IntentSelect>
                   </td>
                   <td>
                     <input

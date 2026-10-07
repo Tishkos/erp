@@ -18,9 +18,12 @@ import {
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { draftFromDocumentAction } from './invoices/actions';
+import { DatesHidden, RegisterFilter } from '@/components/admin/register-filter';
+import { registerDatesOf, registerDatesParams } from '@/server/domain/register-dates';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
-import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
+import { formatMoney, type Locale } from '@/i18n/config';
+import { DueDateText } from '@/components/admin/due-date-text';
 import { can } from '@domain/permissions';
 import { parseDecimal, toDecimalString } from '@domain/money';
 import { visibleRoute } from '@/server/delivered';
@@ -81,6 +84,8 @@ export default async function PayablesWorkbench({
       : null;
   const pageNo = Number(params.page) > 0 ? Number(params.page) : 1;
   const viewParam = typeof params.view === 'string' && params.view ? params.view : null;
+  // The Filter's window of document dates and the order — newest first unless asked (2026-10-07).
+  const dates = registerDatesOf(params);
 
   const { rows, total, types, savedViews } =
     await withCurrentUser(
@@ -109,6 +114,7 @@ export default async function PayablesWorkbench({
         search: outcome.q || null,
         page: pageNo,
         pageSize: 50,
+        dates,
       });
       const types = await settings.activeTypes(tx);
       return {
@@ -121,8 +127,6 @@ export default async function PayablesWorkbench({
 
   const money = (amount: string, currency: string) =>
     formatMoney(amount, currency, locale as Locale);
-  const day = (value: string | null) =>
-    value ? formatBusinessDate(value, locale as Locale) : '—';
   const daysSince = (since: Date | string) =>
     Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 86_400_000));
 
@@ -205,14 +209,32 @@ export default async function PayablesWorkbench({
             clearHref="/payables"
             clearLabel={admin('clear_search')}
             countLabel={admin('rows_shown', { count: rows.length })}
+            hidden={{
+              ...(viewParam ? { view: viewParam } : {}),
+              ...(typeof params.type === 'string' && params.type ? { type: params.type } : {}),
+              ...(stoppedFilter && !viewParam ? { stopped: stoppedFilter } : {}),
+              ...registerDatesParams(dates),
+            }}
             placeholder={admin('search_placeholder')}
             q={outcome.q}
             searchLabel={admin('search')}
-          />
+          >
+            <RegisterFilter
+              dates={dates}
+              keep={{
+                q: outcome.q,
+                view: viewParam,
+                type: typeof params.type === 'string' ? params.type : null,
+                stopped: typeof params.stopped === 'string' ? params.stopped : null,
+              }}
+              path="/payables"
+            />
+          </ListToolbar>
 
           {/* The screen's own filters: the saved views and the two facts they
               are made of. Choosing a view submits its stored query. */}
           <form className={s.filterBar} method="get">
+            <DatesHidden dates={dates} />
             <FilterRow>
               <Select
                 defaultValue={activeView}
@@ -334,7 +356,8 @@ export default async function PayablesWorkbench({
                       )}
                     </td>
                     <td>
-                      <bdi dir="ltr">{day(row.dueDate)}</bdi>
+                      {/* None until an invoice of it was set on purpose — an advance's balance waits for its SWIFT (2026-10-07). */}
+                      <DueDateText date={row.dueDate} locale={locale} waiting={row.dueDateWaiting ? admin('balance_due.waiting') : null} />
                     </td>
                     <td>
                       <bdi dir="ltr">{row.branchCode}</bdi>

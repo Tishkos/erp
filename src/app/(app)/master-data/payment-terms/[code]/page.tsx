@@ -29,6 +29,7 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as terms from '@/server/services/payment-terms';
 import { setPaymentTermActive, updatePaymentTerm } from '../actions';
 import { businessToday } from '@/server/domain/business-date';
+import { IntentDateField } from '@/components/admin/intent-date-field';
 
 /**
  * One payment term — Phase 2 requirement 7.
@@ -117,7 +118,7 @@ export default async function PaymentTermPage({
             <form className={s.sapFilterBar} method="get">
               <label className={s.sapFilterField}>
                 <span className={s.sapLabel}>{t('payment_terms.example_date')}</span>
-                <input defaultValue={exampleDate} name="on" required type="date" />
+                <IntentDateField defaultValue={exampleDate} name="on" required />
               </label>
               <button className={`${s.button} ${s.primary}`} type="submit">
                 {t('reports.run')}

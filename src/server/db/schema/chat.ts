@@ -130,4 +130,6 @@ export const chatPresence = pgTable('chat_presence', {
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
   lastActiveAt: timestamp('last_active_at', { withTimezone: true }),
   busy: boolean('busy').notNull().default(false),
+  /** What the person chose: available, busy, away or invisible ("appear offline") — 0410; `busy` follows it. */
+  status: text('status').notNull().default('available'),
 });

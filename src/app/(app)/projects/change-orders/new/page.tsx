@@ -13,6 +13,7 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as pb from '@/server/services/project-budget';
 import * as ps from '@/server/services/project-system';
 import { raiseChangeOrder } from '../actions';
+import { IntentSelect } from '@/components/admin/intent-select';
 
 /**
  * Raising a change order — REQ-PM-001 §7. Copies the Sales Return's new
@@ -98,14 +99,14 @@ export default async function NewChangeOrderPage({ searchParams }: { searchParam
                 {previous.length > 0 ? (
                   <label className={s.field}>
                     <span className={s.label}>{x('supersedes')}</span>
-                    <select className={s.select} name="supersedes_no">
+                    <IntentSelect name="supersedes_no">
                       <option value="" />
                       {previous.map((v) => (
                         <option key={v.variationNo} value={v.variationNo}>
                           {`${v.variationNo} · ${v.description}`}
                         </option>
                       ))}
-                    </select>
+                    </IntentSelect>
                     <span className={s.hint}>{x('supersedes_hint')}</span>
                   </label>
                 ) : null}

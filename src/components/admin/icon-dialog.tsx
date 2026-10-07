@@ -91,6 +91,8 @@ export function AttachmentsButton(props: {
   readonly label: string;
   readonly title: string;
   readonly closeLabel: string;
+  /** Wide when files gathered from related records are listed beside the record's own (2026-10-07). */
+  readonly wide?: boolean;
   readonly children: ReactNode;
 }) {
   return <IconDialog icon={<Paperclip aria-hidden="true" />} {...props} />;

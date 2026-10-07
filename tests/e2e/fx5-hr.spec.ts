@@ -52,23 +52,10 @@ test.describe('FIX-5 · HR structure and the user link', () => {
     await signIn(page, MANAGER);
     await page.goto('/hr/positions');
     const tabs = page.getByRole('navigation', { name: 'Positions' });
-    // The tabs are the section's built screens, in the menu's order; the
-    // whole thirteen are held by tests/unit/fx5-hr-menu.test.ts.
-    await expect(tabs.getByRole('link')).toHaveText([
-      'Dashboard',
-      'Employees',
-      'Departments',
-      'Positions',
-      'Attendance',
-      'Leave Management',
-      'Payroll',
-      'Advances & Loans',
-      'Recruitment',
-      'Performance',
-      'Employee Requests',
-      'Documents',
-      'Reports',
-    ]);
+    // The tabs are the section's built screens, in the menu's order — since
+    // 2026-10-07 the People & Organisation heading's four; the whole thirteen,
+    // across the three HR headings, are held by tests/unit/fx5-hr-menu.test.ts.
+    await expect(tabs.getByRole('link')).toHaveText(['Dashboard', 'Employees', 'Departments', 'Positions']);
 
     await page.getByRole('button', { name: 'New position' }).click();
     const dialog = page.getByRole('dialog');

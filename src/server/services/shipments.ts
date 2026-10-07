@@ -70,6 +70,8 @@ import * as units from './item-units';
 import * as payables from './payables';
 import { allocateDocumentNumber } from './numbering';
 import { registerPage, searchOf, type RegisterPaging } from './register-page';
+import { datesOrder, withinDates } from './register-dates-sql';
+import type { RegisterDates } from '../domain/register-dates';
 import { businessToday } from '../domain/business-date';
 import { can } from '../domain/permissions';
 import * as notifications from './notifications';
@@ -1631,11 +1633,13 @@ export async function listBls(tx: Tx, filter: { payableId?: string | null } = {}
 
 export interface BlRegisterFilter extends RegisterPaging {
   readonly search?: string | null;
+  /** The Filter: a window of B/L dates and the order (newest first unless asked). */
+  readonly dates?: RegisterDates | null;
 }
 
 /** §21.9 — the Shipments register: one page of fifty with the true count (HD15). */
 export async function listBlsForScreen(tx: Tx, filter: BlRegisterFilter = {}) {
-  const where = searchOf(
+  const where = and(withinDates(billOfLading.blDate, filter.dates), searchOf(
     [
       billOfLading.blNo,
       billOfLading.vessel,
@@ -1649,7 +1653,7 @@ export async function listBlsForScreen(tx: Tx, filter: BlRegisterFilter = {}) {
       businessPartner.legalName,
     ],
     filter.search,
-  ) ?? undefined;
+  ) ?? undefined);
   return registerPage({
     paging: filter,
     count: async () => {
@@ -1662,7 +1666,11 @@ export async function listBlsForScreen(tx: Tx, filter: BlRegisterFilter = {}) {
         .where(where);
       return row?.n ?? 0;
     },
-    rows: ({ limit, offset }) => blQuery(tx, where).limit(limit).offset(offset),
+    rows: ({ limit, offset }) =>
+      blQuery(tx, where)
+        .orderBy(...datesOrder(billOfLading.blDate, filter.dates, billOfLading.createdAt, billOfLading.id))
+        .limit(limit)
+        .offset(offset),
   });
 }
 

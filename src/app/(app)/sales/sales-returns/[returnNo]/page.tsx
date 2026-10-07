@@ -22,6 +22,7 @@ import * as recordNotes from '@/server/services/record-notes';
 import * as sr from '@/server/services/sales-return';
 import * as warehouses from '@/server/services/warehouses';
 import { acceptReturn, attachToReturn, rejectReturn } from '../actions';
+import { IntentSelect } from '@/components/admin/intent-select';
 
 /**
  * One Sales Return — Operations build, block 9.
@@ -252,7 +253,7 @@ export default async function SalesReturnPage({
                       accepted; it opens on the warehouse the line was sold
                       from. */}
                   {mayDecide ? (
-                    <select
+                    <IntentSelect
                       aria-label={`${column('warehouse')} ${line.itemCode}`}
                       defaultValue={found.soldFrom.get(line.arInvoiceLineId) ?? ''}
                       form="sales-return-accept"
@@ -264,7 +265,7 @@ export default async function SalesReturnPage({
                           {`${house.code} · ${house.name}`}
                         </option>
                       ))}
-                    </select>
+                    </IntentSelect>
                   ) : (
                     <ProfileLink code={line.destinationWarehouseCode} kind="warehouse" />
                   )}

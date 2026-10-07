@@ -59,6 +59,8 @@ test.beforeAll(async () => {
     await invoice('API-HQ-2026-940001', '2026-09-01', 1800000);
     await invoice('API-HQ-2026-940002', '2026-09-05', 300000);
     await invoice('API-HQ-2026-940003', '2099-12-31', 900000);
+    // Their due dates set on purpose: one never set is overdue on no day (2026-10-07).
+    await pool.query(`update ap_invoice set due_date_set_at = coalesce(due_date_set_at, now()) where invoice_no like 'API-HQ-2026-9400%'`);
     // Start clean: the administrator's screen views only (the audit trail stays).
     await pool.query(`delete from saved_view where kind = 'route' and owner_user_id = $1`, [admin[0].id]);
   } finally {

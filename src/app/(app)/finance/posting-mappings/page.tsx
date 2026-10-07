@@ -13,6 +13,7 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as coa from '@/server/services/chart-of-accounts';
 import * as posting from '@/server/services/posting';
 import { setPostingMappings } from './actions';
+import { IntentSelect } from '@/components/admin/intent-select';
 
 /**
  * Posting Mappings — §3.3, Appendix C.
@@ -224,7 +225,7 @@ export default async function PostingMappingsPage({
 
                           <td className={s.mapAccount}>
                             {mayConfigure ? (
-                              <select
+                              <IntentSelect
                                 aria-label={label}
                                 defaultValue={rule?.accountId ?? ''}
                                 dir="ltr"
@@ -245,7 +246,7 @@ export default async function PostingMappingsPage({
                                     {`${account.code} · ${account.name}`}
                                   </option>
                                 ))}
-                              </select>
+                              </IntentSelect>
                             ) : rule ? (
                               <bdi dir="auto">{`${rule.accountCode} · ${rule.accountName}`}</bdi>
                             ) : (

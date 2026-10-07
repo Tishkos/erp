@@ -120,14 +120,14 @@ export function Figure({
 }) {
   const body = (
     <>
-      <span className={cn('text-xs', tone === 'warn' ? INK.warning : 'text-muted-fg')}>{label}</span>
-      <span className={cn('font-semibold text-xl tabular-nums', tone === 'warn' ? INK.warning : 'text-fg')}>
+      <span className={cn('font-medium text-xs', tone === 'warn' ? INK.warning : 'text-muted-fg')}>{label}</span>
+      <span className={cn('font-semibold text-2xl/8 tabular-nums tracking-tight rtl:tracking-normal', tone === 'warn' ? INK.warning : 'text-fg')}>
         <bdi dir="ltr">{value}</bdi>
       </span>
     </>
   );
   const box = cn(
-    'flex min-w-0 flex-col gap-1 rounded-lg border p-3',
+    'flex min-w-0 flex-col gap-1 rounded-xl border p-3.5',
     tone === 'warn' ? 'border-warning-subtle-fg/30 bg-warning-subtle' : 'border-border bg-muted/40',
   );
   return href ? (

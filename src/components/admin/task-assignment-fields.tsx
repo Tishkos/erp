@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import styles from './admin.module.css';
+import { IntentSelect } from '@/components/admin/intent-select';
 
 /**
  * The Task Center's section and assignee, as two fields that follow each
@@ -58,8 +59,7 @@ export function TaskAssignmentFields({
         <label className={styles.label} htmlFor={`${idPrefix}-section`}>
           {labels.section}
         </label>
-        <select
-          className={styles.select}
+        <IntentSelect
           disabled={lockSection}
           id={`${idPrefix}-section`}
           name={lockSection ? undefined : 'department_code'}
@@ -72,15 +72,14 @@ export function TaskAssignmentFields({
               {s.name}
             </option>
           ))}
-        </select>
+        </IntentSelect>
         {lockSection ? <input name="department_code" type="hidden" value={section} /> : null}
       </div>
       <div className={styles.field}>
         <label className={styles.label} htmlFor={`${idPrefix}-assignee`}>
           {labels.assignee}
         </label>
-        <select
-          className={styles.select}
+        <IntentSelect
           defaultValue={people.some((p) => p.id === defaultAssignee) ? defaultAssignee : ''}
           id={`${idPrefix}-assignee`}
           key={section}
@@ -93,7 +92,7 @@ export function TaskAssignmentFields({
               {p.name} · {labels.via[p.via] ?? p.via}
             </option>
           ))}
-        </select>
+        </IntentSelect>
         <span className={styles.hint}>{labels.hint}</span>
       </div>
     </>

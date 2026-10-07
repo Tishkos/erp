@@ -21,8 +21,10 @@
  * snapshot from props there.
  */
 import { useSyncExternalStore } from 'react';
-import { earlierAction, sendAction } from '@/app/(app)/chat/actions';
-import { CHAT_PAGE_SIZE, pollIntervalMs } from '@domain/chat';
+import { earlierAction, sendAction, statusAction } from '@/app/(app)/chat/actions';
+import { CHAT_PAGE_SIZE, pollIntervalMs, type ChosenStatus } from '@domain/chat';
+import { incomingChime } from '@/lib/sound-rules';
+import { play, setQuiet } from '@/lib/sounds';
 import type {
   ConversationRow,
   PersonView,
@@ -63,6 +65,16 @@ export interface ChatSnapshot {
   readonly pending: readonly PendingMessage[];
   /** A conversation that was open and is no longer this person's. */
   readonly closed: string | null;
+  /** The chat windows docked at the foot of other screens, oldest first (`chat-dock.tsx`). */
+  readonly windows: readonly ChatWindow[];
+  /** The window in front: the one the poll treats as the open conversation. */
+  readonly focusedWindow: string | null;
+}
+
+/** A conversation open in a small window at the foot of the screen, or folded to its round head. */
+export interface ChatWindow {
+  readonly id: string;
+  readonly minimised: boolean;
 }
 
 export interface ChatSeed {
@@ -85,6 +97,8 @@ const EMPTY: ChatSnapshot = {
   firstUnseen: {},
   pending: [],
   closed: null,
+  windows: [],
+  focusedWindow: null,
 };
 
 /** Threads kept for a quick return; the open one is always among them. */
@@ -128,7 +142,7 @@ export function snapshot(): ChatSnapshot {
 // The poll
 // ---------------------------------------------------------------------------
 
-const mounts = { header: 0, screen: 0 };
+const mounts = { header: 0, screen: 0, dock: 0 };
 let timer: ReturnType<typeof setTimeout> | undefined;
 let inFlight = false;
 let again = false;
@@ -149,13 +163,33 @@ function schedule(): void {
   timer = undefined;
   if (mounts.header + mounts.screen === 0) return;
   if (state.status === 'signed_out' || state.status === 'unavailable') return;
+  const windowOpen = mounts.screen === 0 && expandedWindows().length > 0;
   const ms = pollIntervalMs({
     visible: visible(),
-    open: mounts.screen > 0 && state.openId !== null,
-    elsewhere: mounts.screen === 0,
+    open: (mounts.screen > 0 && state.openId !== null) || windowOpen,
+    elsewhere: mounts.screen === 0 && !windowOpen,
     failures,
   });
   timer = setTimeout(() => void poll(), ms);
+}
+
+/** The docked windows that are open (not folded to a head) — only while the dock is on the page. */
+function expandedWindows(): readonly ChatWindow[] {
+  return mounts.dock > 0 && mounts.screen === 0 ? state.windows.filter((w) => !w.minimised) : [];
+}
+
+/** The conversation the poll treats as open: the chat screen's, else the docked window in front. */
+function openNow(): string | null {
+  if (mounts.screen > 0) return state.openId;
+  const expanded = expandedWindows();
+  if (expanded.length === 0) return null;
+  return expanded.some((w) => w.id === state.focusedWindow) ? state.focusedWindow : expanded[expanded.length - 1]!.id;
+}
+
+/** Open, and in front of the person: a message arriving there needs no sound. */
+function inFrontNow(): string | null {
+  if (typeof document === 'undefined' || !visible() || !document.hasFocus()) return null;
+  return openNow();
 }
 
 /** Ask now (a send, a tap, the tab coming back), without waiting for the interval. */
@@ -173,8 +207,18 @@ async function poll(): Promise<void> {
     return;
   }
   inFlight = true;
-  const open = mounts.screen > 0 ? state.openId : null;
+  const open = openNow();
   const thread = open ? state.threads[open] : undefined;
+  const others = expandedWindows()
+    .map((w) => w.id)
+    .filter((id) => id !== open)
+    .slice(-3);
+  const revs: Record<string, number> = {};
+  if (open && thread) revs[open] = thread.rev;
+  for (const id of others) {
+    const held = state.threads[id];
+    if (held) revs[id] = held.rev;
+  }
   const now = Date.now();
 
   const ack: Record<string, number> = {};
@@ -197,11 +241,12 @@ async function poll(): Promise<void> {
         open,
         visible: visible(),
         active: visible() && now - lastActivity < ACTIVE_WITHIN_MS,
-        revs: open && thread ? { [open]: thread.rev } : {},
+        revs,
         ack,
         seen,
         typing,
         limit: open ? limits.get(open) : undefined,
+        ...(others.length > 0 ? { windows: others } : {}),
       }),
     });
     if (response.status === 401) {
@@ -243,30 +288,90 @@ function mergeThread(old: ThreadView | undefined, next: ThreadView): ThreadView 
   return { ...next, messages: [...older, ...next.messages], hasMore: old.hasMore };
 }
 
+/** Whether the conversations held before this answer are a fair "before" — not on the page's first answer. */
+let polledOnce = false;
+
+/**
+ * Each answer's list beside the one before it (null on the page's first
+ * answer), and what the message sound is decided with — for the pop-up
+ * notifications (`components/toasts`), which tell the same arrivals.
+ */
+export interface ChatArrival {
+  readonly before: readonly ConversationRow[] | null;
+  readonly after: readonly ConversationRow[];
+  readonly meId: string;
+  readonly busy: boolean;
+  /** The conversation open and in front, if any. */
+  readonly inFront: string | null;
+  /** The chat screen is on the page. */
+  readonly onChatScreen: boolean;
+}
+
+const incomingListeners = new Set<(arrival: ChatArrival) => void>();
+
+/** Hear every answer of the poll. Returns the way to stop. */
+export function onIncoming(listener: (arrival: ChatArrival) => void): () => void {
+  incomingListeners.add(listener);
+  return () => incomingListeners.delete(listener);
+}
+
+function tellIncoming(arrival: ChatArrival): void {
+  for (const listener of incomingListeners) {
+    try {
+      listener(arrival);
+    } catch {
+      // A listener's trouble never stops the chat.
+    }
+  }
+}
+
 function apply(response: SyncResponse, open: string | null): void {
   const threads: Record<string, ThreadView> = { ...state.threads };
   const live: Record<string, LiveView> = { ...state.live };
   const firstUnseen = { ...state.firstUnseen };
 
-  if (response.thread) {
-    const id = response.thread.id;
-    const had = id in threads;
-    delete threads[id];
-    threads[id] = mergeThread(state.threads[id], response.thread);
-    live[id] = { typing: response.thread.typing, members: response.thread.members };
-    if (!had || firstUnseen[id] === undefined) firstUnseen[id] = response.thread.firstUnseenSeq;
-  } else if (response.live) {
-    live[response.live.id] = { typing: response.live.typing, members: response.live.members };
+  const take = (thread: ThreadView | null, liveView: SyncResponse['live']) => {
+    if (thread) {
+      const id = thread.id;
+      const had = id in threads;
+      delete threads[id];
+      threads[id] = mergeThread(state.threads[id], thread);
+      live[id] = { typing: thread.typing, members: thread.members };
+      if (!had || firstUnseen[id] === undefined) firstUnseen[id] = thread.firstUnseenSeq;
+    } else if (liveView) {
+      live[liveView.id] = { typing: liveView.typing, members: liveView.members };
+    }
+  };
+  take(response.thread, response.live);
+  const gone = new Set<string>();
+  for (const view of response.windows ?? []) {
+    if (view.closed) gone.add(view.id);
+    else take(view.thread, view.live);
   }
-  // Keep the last few conversations read, not every one ever opened.
+  if (response.closed) gone.add(response.closed);
+  // Keep the last few conversations read, not every one ever opened — and every docked window's.
+  const keep = new Set([open, ...state.windows.map((w) => w.id)].filter((id): id is string => Boolean(id)));
   const keys = Object.keys(threads);
   for (const key of keys.slice(0, Math.max(0, keys.length - THREADS_KEPT))) {
-    if (key !== open) delete threads[key];
+    if (!keep.has(key)) delete threads[key];
   }
 
   const pending = state.pending.filter((p) => !threads[p.conversationId]?.messages.some((m) => m.clientId === p.clientId));
-  for (const gone of state.pending) if (!pending.includes(gone)) forms.delete(gone.clientId);
+  for (const sent of state.pending) if (!pending.includes(sent)) forms.delete(sent.clientId);
 
+  // A sound for a message from somebody else, unless the person is Busy or already reading it.
+  const busy = response.me.status === 'busy';
+  setQuiet(busy);
+  const before = polledOnce ? state.conversations : null;
+  const inFront = inFrontNow();
+  if (incomingChime(before, response.conversations, { meId: response.me.userId, busy, inFront })) {
+    play('message');
+  }
+  tellIncoming({ before, after: response.conversations, meId: response.me.userId, busy, inFront, onChatScreen: mounts.screen > 0 });
+  polledOnce = true;
+
+  const windows = state.windows.filter((w) => !gone.has(w.id));
+  const windowsChanged = windows.length !== state.windows.length;
   set({
     loaded: true,
     status: 'ok',
@@ -278,7 +383,11 @@ function apply(response: SyncResponse, open: string | null): void {
     firstUnseen,
     pending,
     ...(response.closed && state.openId === response.closed ? { openId: null, closed: response.closed } : {}),
+    ...(windowsChanged
+      ? { windows, focusedWindow: windows.some((w) => w.id === state.focusedWindow) ? state.focusedWindow : (windows.at(-1)?.id ?? null) }
+      : {}),
   });
+  if (windowsChanged) saveWindows();
 }
 
 // ---------------------------------------------------------------------------
@@ -314,6 +423,29 @@ function stop(): void {
   window.removeEventListener('pointerdown', onActivity);
   window.removeEventListener('keydown', onActivity);
   window.removeEventListener('pointermove', onActivity);
+}
+
+/**
+ * The docked chat windows are on the page (`chat-dock.tsx`). They ride on the
+ * header's poll — a person without chat has no header poll and so no windows —
+ * and make it ask about the open windows as often as about an open thread.
+ * The windows the person had open are taken back from this tab's session.
+ */
+export function mountDock(): () => void {
+  mounts.dock += 1;
+  if (mounts.dock === 1 && state.windows.length === 0) {
+    const restored = loadWindows();
+    if (restored.length > 0) set({ windows: restored, focusedWindow: restored.at(-1)!.id });
+  }
+  pollNow();
+  return () => {
+    mounts.dock -= 1;
+    if (mounts.dock === 0) {
+      wantTyping = false;
+      seenTarget = null;
+    }
+    schedule();
+  };
 }
 
 /** A component that needs the poll running: the header's badge, or the chat screen. Returns the way to let go. */
@@ -455,12 +587,15 @@ async function deliver(clientId: string): Promise<void> {
     if (result.ok) {
       // Stored. The stored copy arrives with the next answer and takes this one's place.
       patchPending(clientId, { state: 'sent', error: null });
+      play('sent');
       pollNow();
     } else {
       patchPending(clientId, { state: 'failed', error: result.error ?? null });
+      play('error');
     }
   } catch {
     patchPending(clientId, { state: 'failed', error: null });
+    play('error');
   }
 }
 
@@ -504,6 +639,123 @@ export function markReadLocally(id: string): void {
   const conversations = state.conversations.map((c) => (c.id === id ? { ...c, unread: 0, mentioned: false } : c));
   const lost = row.muted ? 0 : row.unread;
   set({ conversations, badge: Math.max(0, state.badge - lost) });
+}
+
+// ---------------------------------------------------------------------------
+// The person's own status (the account menu)
+// ---------------------------------------------------------------------------
+
+/** Available, Busy, Away or Appear offline: shown at once, kept by the server, put right by the next answer. */
+export async function chooseStatus(status: ChosenStatus): Promise<boolean> {
+  const before = state.me;
+  if (before) set({ me: { ...before, status, busy: status === 'busy' } });
+  setQuiet(status === 'busy');
+  try {
+    const result = await statusAction(status);
+    if (!result.ok && before) set({ me: before });
+    pollNow();
+    return result.ok;
+  } catch {
+    if (before) set({ me: before });
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The docked chat windows (`chat-dock.tsx`)
+// ---------------------------------------------------------------------------
+
+/** At most this many windows stand open; the next one folds the oldest to its head. */
+export const WINDOWS_OPEN_MAX = 3;
+/** Heads kept beside them; past this the oldest closes. */
+export const WINDOWS_KEPT_MAX = 8;
+const WINDOWS_KEY = 'erp-chat-windows';
+
+function saveWindows(): void {
+  try {
+    window.sessionStorage.setItem(WINDOWS_KEY, JSON.stringify({ windows: state.windows, focused: state.focusedWindow }));
+  } catch {
+    // A private window keeps them for the page only.
+  }
+}
+
+function loadWindows(): ChatWindow[] {
+  try {
+    const raw = window.sessionStorage.getItem(WINDOWS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as { windows?: unknown };
+    if (!Array.isArray(parsed.windows)) return [];
+    return parsed.windows
+      .filter((w): w is ChatWindow => typeof w === 'object' && w !== null && typeof (w as ChatWindow).id === 'string')
+      .map((w) => ({ id: w.id, minimised: Boolean(w.minimised) }))
+      .slice(-WINDOWS_KEPT_MAX);
+  } catch {
+    return [];
+  }
+}
+
+/** The window the person opened last, until its box has taken the cursor. */
+let justOpened: string | null = null;
+
+/** Whether this window was just opened by the person (once): a window restored with the page does not take the cursor. */
+export function takeJustOpened(id: string): boolean {
+  if (justOpened !== id) return false;
+  justOpened = null;
+  return true;
+}
+
+/** Opens a conversation as a window in front (or brings its window forward), folding the oldest past three. */
+export function openWindow(id: string): void {
+  justOpened = id;
+  const rest = state.windows.filter((w) => w.id !== id);
+  let windows: ChatWindow[] = [...rest, { id, minimised: false }];
+  const expanded = windows.filter((w) => !w.minimised);
+  if (expanded.length > WINDOWS_OPEN_MAX) {
+    const fold = new Set(expanded.slice(0, expanded.length - WINDOWS_OPEN_MAX).map((w) => w.id));
+    windows = windows.map((w) => (fold.has(w.id) ? { ...w, minimised: true } : w));
+  }
+  if (windows.length > WINDOWS_KEPT_MAX) windows = windows.slice(-WINDOWS_KEPT_MAX);
+  wantTyping = false;
+  seenTarget = null;
+  const firstUnseen = { ...state.firstUnseen };
+  delete firstUnseen[id];
+  set({ windows, focusedWindow: id, firstUnseen });
+  saveWindows();
+  pollNow();
+}
+
+/** The window the person is writing in or reading: the poll's open conversation. */
+export function focusWindow(id: string): void {
+  if (state.focusedWindow === id) return;
+  wantTyping = false;
+  seenTarget = null;
+  set({ focusedWindow: id });
+  saveWindows();
+  pollNow();
+}
+
+export function minimiseWindow(id: string): void {
+  const windows = state.windows.map((w) => (w.id === id ? { ...w, minimised: true } : w));
+  const expanded = windows.filter((w) => !w.minimised);
+  if (state.focusedWindow === id) {
+    wantTyping = false;
+    seenTarget = null;
+  }
+  set({ windows, focusedWindow: state.focusedWindow === id ? (expanded.at(-1)?.id ?? null) : state.focusedWindow });
+  saveWindows();
+  schedule();
+}
+
+export function closeWindow(id: string): void {
+  const windows = state.windows.filter((w) => w.id !== id);
+  if (state.focusedWindow === id) {
+    wantTyping = false;
+    seenTarget = null;
+  }
+  const expanded = windows.filter((w) => !w.minimised);
+  set({ windows, focusedWindow: state.focusedWindow === id ? (expanded.at(-1)?.id ?? null) : state.focusedWindow });
+  saveWindows();
+  schedule();
 }
 
 // ---------------------------------------------------------------------------

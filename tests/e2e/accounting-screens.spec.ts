@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import { dateField } from './support/controls';
+import { keepEnglish } from './support/locale';
 
 /**
  * REQ-ACC-001 Part D — the Accounting screens, in a browser.
@@ -24,6 +26,7 @@ let templateNo = '';
 
 async function signIn(page: Page, user: { email: string; password: string }) {
   await page.context().clearCookies();
+  await keepEnglish(page.context());
   await page.goto('/sign-in');
   await page.getByRole('textbox', { name: 'Email', exact: true }).fill(user.email);
   await page.getByLabel('Password', { exact: true }).fill(user.password);
@@ -143,8 +146,8 @@ test.describe('REQ-ACC-001 · the Accounting screens', () => {
     await dialog.getByLabel('Bank account').selectOption(bank!);
     // A period of its own each run, so a second run does not meet the first.
     const day = String((parseInt(RUN, 36) % 27) + 1).padStart(2, '0');
-    await dialog.getByRole('textbox', { name: 'Period from', exact: true }).fill(`2026-03-${day}`);
-    await dialog.getByRole('textbox', { name: 'Period to', exact: true }).fill(`2026-03-${day}`);
+    await dateField(dialog, 'Period from', { exact: true }).fill(`2026-03-${day}`);
+    await dateField(dialog, 'Period to', { exact: true }).fill(`2026-03-${day}`);
     await dialog.getByRole('textbox', { name: 'Opening balance', exact: true }).fill('0');
     await dialog.getByRole('textbox', { name: 'Closing balance', exact: true }).fill('-125000');
     await dialog.getByRole('button', { name: 'Create statement' }).click();

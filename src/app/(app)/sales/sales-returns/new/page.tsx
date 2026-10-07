@@ -18,6 +18,7 @@ import * as banks from '@/server/services/bank-cash-accounts';
 import * as sr from '@/server/services/sales-return';
 import { createSalesReturn } from '../actions';
 import { businessToday } from '@/server/domain/business-date';
+import { IntentSelect } from '@/components/admin/intent-select';
 
 /**
  * Raising a Sales Return — Operations build, block 9.
@@ -181,14 +182,14 @@ export default async function NewSalesReturnPage({ searchParams }: { searchParam
                 />
                 <label className={s.field}>
                   <span className={s.label}>{t('sales_returns.offset')}</span>
-                  <select className={s.select} name="offset_kind" required>
+                  <IntentSelect name="offset_kind" required>
                     <option value="receivable">{t('sales_returns.offset_receivable')}</option>
                     <option value="bank">{t('sales_returns.offset_bank')}</option>
-                  </select>
+                  </IntentSelect>
                 </label>
                 <label className={s.field}>
                   <span className={s.label}>{t('sales_returns.bank_account')}</span>
-                  <select className={s.select} name="offset_bank_account_id">
+                  <IntentSelect name="offset_bank_account_id">
                     <option value="" />
                     {accounts
                       // Active, and its G/L account still there — one deleted
@@ -199,7 +200,7 @@ export default async function NewSalesReturnPage({ searchParams }: { searchParam
                           {account.code} · {account.name}
                         </option>
                       ))}
-                  </select>
+                  </IntentSelect>
                 </label>
                 <Field
                   label={t('sales_returns.reason')}

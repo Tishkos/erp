@@ -32,6 +32,8 @@ export function documentHref(
       return `/inventory/transfers/${no}`;
     case 'stock_adjustment':
       return `/inventory/stock-reconciliation/${no}`;
+    case 'manual_stock_addition':
+      return `/inventory/manual-additions/${no}`;
     default:
       return null;
   }

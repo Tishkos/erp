@@ -17,6 +17,7 @@
 import { sql } from 'drizzle-orm';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ownerPool } from './setup';
+import { linkItemToSupplier } from './item-supplier';
 import { BAGHDAD, PANEL, WAREHOUSE, blWith, importOf, iqd, q, scope } from './logistics-fixture';
 import { ERBIL, as, buildChainWorld, expectOpenable, maintenance, person, type ChainWorld, type Person } from './cc01-world';
 import { containerNo } from '../support/container-number';
@@ -341,6 +342,8 @@ describe('REL3 · a supplier, a customer, an item', () => {
     const { rows } = await ownerPool.query(
       `insert into business_partner (code, legal_name, is_customer, is_supplier, status, active) values ('SUP-REL-NEW','Fresh Supplier',false,true,'active',true) returning id`,
     );
+    // 0408 — the fresh supplier sells the panel too.
+    await linkItemToSupplier(PANEL, rows[0].id);
     const order = await withScope(scope(world.clerk), (tx) =>
       po.create(tx, world.clerk, {
         supplierId: rows[0].id,

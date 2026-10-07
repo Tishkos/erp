@@ -21,7 +21,7 @@
  * is why `isStock` decides whether tracking is asked for at all rather than
  * being one more field on one long form.
  */
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   businessPartner,
@@ -79,10 +79,22 @@ export async function listAll(tx: Tx) {
       sellingPriceIqd: item.sellingPriceIqd,
       active: item.active,
       // How many suppliers can sell it — the column that tells a buyer whether
-      // this item has been set up for purchasing at all.
+      // this item has been set up for purchasing at all. Only links in use:
+      // since 0408 a link is the permission to buy, and one taken out of use
+      // sells nothing.
       supplierCount: sql<number>`(
-        select count(*) from item_supplier s where s.item_id = ${item.id}
+        select count(*) from item_supplier s where s.item_id = "item"."id" and s.active
       )::int`,
+      // Who it is bought from, by name — the register's Supplier column (by
+      // direction, 2026-10-06), the default first. The item's id is qualified
+      // by hand: in a one-table select drizzle prints a column bare, and a bare
+      // "id" inside this subquery would be the partner's.
+      supplierNames: sql<string | null>`(
+        select string_agg(bp.code || ' · ' || bp.legal_name, ', ' order by s.is_default desc, bp.code)
+          from item_supplier s
+          join business_partner bp on bp.id = s.supplier_id
+         where s.item_id = "item"."id" and s.active
+      )`,
       // What is actually on the shelf, added up across every warehouse.
       //
       // Read from `stock_position`, which is a view over the stock movements
@@ -104,7 +116,11 @@ export async function get(tx: Tx, code: string) {
   return row;
 }
 
-/** Every supplier this item can be bought from, the default first. */
+/**
+ * Every supplier this item can be bought from, the default first — and, after
+ * them, the links taken out of use with the reason, so the record still says
+ * who used to sell it and why that stopped.
+ */
 export async function suppliersOf(tx: Tx, itemId: string) {
   return tx
     .select({
@@ -115,11 +131,76 @@ export async function suppliersOf(tx: Tx, itemId: string) {
       purchasePriceIqd: itemSupplier.purchasePriceIqd,
       isDefault: itemSupplier.isDefault,
       active: itemSupplier.active,
+      deactivatedReason: itemSupplier.deactivatedReason,
     })
     .from(itemSupplier)
     .innerJoin(businessPartner, eq(businessPartner.id, itemSupplier.supplierId))
     .where(eq(itemSupplier.itemId, itemId))
-    .orderBy(desc(itemSupplier.isDefault), asc(businessPartner.code));
+    .orderBy(desc(itemSupplier.active), desc(itemSupplier.isDefault), asc(businessPartner.code));
+}
+
+/**
+ * A purchase names an item its supplier sells — 0408, by direction
+ * 2026-10-06: "an item needed to be linked to a supplier before buying".
+ *
+ * Says which items, by code and name, and which supplier, and where the link
+ * is made: the item's own page, whose address is in the sentence so the screen
+ * that shows the refusal can offer it as a link.
+ */
+export class ItemNotLinkedError extends Error {
+  readonly code = 'ITEM_NOT_LINKED_TO_SUPPLIER';
+  constructor(
+    readonly items: readonly { readonly code: string; readonly name: string }[],
+    readonly supplierCode: string,
+    supplierName: string,
+  ) {
+    const named = items.map((one) => `${one.code} (${one.name})`).join(', ');
+    const pages = items.map((one) => `/inventory/items/${one.code}`).join(', ');
+    super(
+      `${named} ${items.length === 1 ? 'is' : 'are'} not linked to ${supplierCode} (${supplierName}): ` +
+        'an item is bought only from the suppliers linked to it. ' +
+        `Link ${supplierCode} on the item's page (${pages}), or choose an item ${supplierCode} sells.`,
+    );
+    this.name = 'ItemNotLinkedError';
+  }
+}
+
+/**
+ * Refuses a purchase of an item that is not linked — in use — to its
+ * supplier. Codes that name no item are left to the caller's own check, which
+ * says so in its own words; an empty list asks nothing.
+ */
+export async function assertBoughtFrom(
+  tx: Tx,
+  supplierId: string,
+  itemCodes: readonly (string | null | undefined)[],
+): Promise<void> {
+  const codes = [...new Set(itemCodes.filter((code): code is string => Boolean(code?.trim())).map((code) => code.trim()))];
+  if (codes.length === 0) return;
+  const rows = await tx
+    .select({
+      code: item.code,
+      name: item.name,
+      linked: sql<boolean>`exists (
+        select 1 from item_supplier s
+         where s.item_id = "item"."id" and s.supplier_id = ${supplierId} and s.active
+      )`,
+    })
+    .from(item)
+    .where(inArray(item.code, codes))
+    .orderBy(asc(item.code));
+  const missing = rows.filter((row) => !row.linked);
+  if (missing.length === 0) return;
+  const [supplier] = await tx
+    .select({ code: businessPartner.code, name: businessPartner.legalName })
+    .from(businessPartner)
+    .where(eq(businessPartner.id, supplierId))
+    .limit(1);
+  throw new ItemNotLinkedError(
+    missing.map((row) => ({ code: row.code, name: row.name })),
+    supplier?.code ?? supplierId,
+    supplier?.name ?? '',
+  );
 }
 
 function priceOrNull(value: string | null): string | null {
@@ -192,6 +273,7 @@ export async function invoiceChoices(tx: Tx, mode: 'purchase' | 'sale') {
       supplierCode: businessPartner.code,
       legalName: businessPartner.legalName,
       purchasePriceIqd: itemSupplier.purchasePriceIqd,
+      supplierItemCode: itemSupplier.supplierItemCode,
     })
     .from(itemSupplier)
     .innerJoin(businessPartner, eq(businessPartner.id, itemSupplier.supplierId))
@@ -230,7 +312,8 @@ export async function invoiceChoices(tx: Tx, mode: 'purchase' | 'sale') {
     suppliers: (byItem.get(row.id) ?? []).map((link) => ({
       id: link.supplierId,
       label: `${link.supplierCode} · ${link.legalName}`,
-      ...(mode === 'purchase' ? { purchasePriceIqd: link.purchasePriceIqd } : {}),
+      // The supplier's own code for the item, shown beside it on a purchase line (0408).
+      ...(mode === 'purchase' ? { purchasePriceIqd: link.purchasePriceIqd, itemCode: link.supplierItemCode } : {}),
     })),
   }));
 }
@@ -479,7 +562,17 @@ async function allocateFreeCode(tx: Tx, userId: string): Promise<string> {
  * taken: SOLAR, then SOLAR_2. Two people entering the same panel produced two
  * codes for one thing, which is the duplicate §3.1 exists to prevent.
  */
-export async function create(tx: Tx, ctx: ActorContext, input: ItemInput) {
+export async function create(
+  tx: Tx,
+  ctx: ActorContext,
+  input: ItemInput,
+  /**
+   * The suppliers it is bought from, chosen on the New item form (0408, by
+   * direction 2026-10-06) — the first is its default. Optional: an item may be
+   * linked on its own page later, and is bought from nobody until it is.
+   */
+  options: { readonly supplierIds?: readonly string[] } = {},
+) {
   await permit(ctx, 'create', PERMISSION_OBJECT);
 
   requireText(input.name, 'name');
@@ -500,6 +593,11 @@ export async function create(tx: Tx, ctx: ActorContext, input: ItemInput) {
     objectId: code,
     after: { code, ...values },
   });
+
+  const supplierIds = [...new Set((options.supplierIds ?? []).map((id) => id.trim()).filter(Boolean))];
+  for (const [index, supplierId] of supplierIds.entries()) {
+    await writeLink(tx, ctx, { id: created!.id, code }, { supplierId, makeDefault: index === 0 });
+  }
   return { id: created!.id, code };
 }
 
@@ -586,7 +684,24 @@ export async function linkSupplier(
 ) {
   await permit(ctx, 'configure', PERMISSION_OBJECT, code);
   const row = await get(tx, code);
+  await writeLink(tx, ctx, row, input);
+}
 
+/**
+ * The link itself, once the caller is entitled to make it — `linkSupplier`
+ * asks `configure` on the item; `create` links the suppliers chosen on the New
+ * item form under the `create` that made the item.
+ *
+ * A link taken out of use comes back into use here, its reason cleared: the
+ * trail keeps both moments.
+ */
+async function writeLink(
+  tx: Tx,
+  ctx: ActorContext,
+  row: { readonly id: string; readonly code: string },
+  input: { readonly supplierId: string; readonly supplierItemCode?: string | null; readonly makeDefault: boolean },
+) {
+  const code = row.code;
   const [supplier] = await tx
     .select({ id: businessPartner.id, code: businessPartner.code, isSupplier: businessPartner.isSupplier })
     .from(businessPartner)
@@ -597,20 +712,23 @@ export async function linkSupplier(
     throw new AdminValidationError('supplierId', 'does not hold the supplier role');
   }
 
-  const existing = await tx
-    .select({ supplierId: itemSupplier.supplierId })
+  const [existing] = await tx
+    .select({ supplierId: itemSupplier.supplierId, active: itemSupplier.active })
     .from(itemSupplier)
     .where(and(eq(itemSupplier.itemId, row.id), eq(itemSupplier.supplierId, supplier.id)))
     .limit(1);
 
   // The first supplier an item gets is its default: an item with suppliers but
-  // no default would make a purchase order ask a question with no answer.
-  const anyExisting = await tx
+  // no default would make a purchase order ask a question with no answer. Only
+  // links in use count — one taken out of use sells nothing — and a default
+  // stays the default until another is made it.
+  const othersInUse = await tx
     .select({ supplierId: itemSupplier.supplierId })
     .from(itemSupplier)
-    .where(eq(itemSupplier.itemId, row.id))
+    .where(and(eq(itemSupplier.itemId, row.id), eq(itemSupplier.active, true), ne(itemSupplier.supplierId, supplier.id)))
     .limit(1);
-  const isDefault = input.makeDefault || anyExisting.length === 0;
+  const wasDefault = existing?.active === true && (await isDefaultLink(tx, row.id, supplier.id));
+  const isDefault = input.makeDefault || othersInUse.length === 0 || wasDefault;
 
   if (isDefault) {
     await tx
@@ -625,41 +743,70 @@ export async function linkSupplier(
     supplierItemCode: optionalText(input.supplierItemCode, 100),
     isDefault,
     active: true,
+    deactivatedReason: null,
+    deactivatedAt: null,
+    deactivatedBy: null,
   };
-  if (existing.length > 0) {
+  if (existing) {
     await tx
       .update(itemSupplier)
       .set(values)
       .where(and(eq(itemSupplier.itemId, row.id), eq(itemSupplier.supplierId, supplier.id)));
   } else {
-    await tx.insert(itemSupplier).values(values);
+    await tx.insert(itemSupplier).values({ ...values, createdBy: ctx.principal.userId });
   }
 
   await recordChange(tx, ctx, {
-    action: existing.length > 0 ? 'item.supplier_updated' : 'item.supplier_linked',
+    action: existing ? (existing.active ? 'item.supplier_updated' : 'item.supplier_relinked') : 'item.supplier_linked',
     objectType: PERMISSION_OBJECT,
     objectId: code,
-    after: { supplier: supplier.code, supplierItemCode: values.supplierItemCode, isDefault },
+    ...(existing ? { before: { supplier: supplier.code, active: existing.active } } : {}),
+    after: { supplier: supplier.code, supplierItemCode: values.supplierItemCode, isDefault, active: true },
   });
 }
 
+async function isDefaultLink(tx: Tx, itemId: string, supplierId: string): Promise<boolean> {
+  const [link] = await tx
+    .select({ isDefault: itemSupplier.isDefault })
+    .from(itemSupplier)
+    .where(and(eq(itemSupplier.itemId, itemId), eq(itemSupplier.supplierId, supplierId)))
+    .limit(1);
+  return link?.isDefault ?? false;
+}
+
 /**
- * Unlinks a supplier. If it was the default and others remain, the next one by
- * code takes over — an item is never left with suppliers and no default.
+ * Takes a supplier off an item — with the reason, never deleted (0408): the
+ * link is the permission to buy that item from that supplier, and the record
+ * keeps who could sell it and why that stopped. From then on a purchase of the
+ * item from that supplier is refused (`assertBoughtFrom`); what was already
+ * bought stays as it is.
+ *
+ * If it was the default and others remain in use, the next one by code takes
+ * over — an item is never left with suppliers and no default.
  */
-export async function unlinkSupplier(tx: Tx, ctx: ActorContext, code: string, supplierId: string) {
+export async function unlinkSupplier(
+  tx: Tx,
+  ctx: ActorContext,
+  code: string,
+  supplierId: string,
+  reason: string,
+) {
   await permit(ctx, 'configure', PERMISSION_OBJECT, code);
   const row = await get(tx, code);
+  const why = (reason ?? '').trim();
+  if (!why) throw new AdminValidationError('reason', 'is required to take a supplier off an item');
 
   const [link] = await tx
-    .select({ isDefault: itemSupplier.isDefault, supplierId: itemSupplier.supplierId })
+    .select({ isDefault: itemSupplier.isDefault, supplierId: itemSupplier.supplierId, active: itemSupplier.active, code: businessPartner.code })
     .from(itemSupplier)
+    .innerJoin(businessPartner, eq(businessPartner.id, itemSupplier.supplierId))
     .where(and(eq(itemSupplier.itemId, row.id), eq(itemSupplier.supplierId, supplierId)))
     .limit(1);
-  if (!link) throw new AdminValidationError('supplierId', 'is not linked to this item');
+  if (!link || !link.active) throw new AdminValidationError('supplierId', 'is not linked to this item');
 
   await tx
-    .delete(itemSupplier)
+    .update(itemSupplier)
+    .set({ active: false, isDefault: false, deactivatedReason: why, deactivatedAt: new Date(), deactivatedBy: ctx.principal.userId })
     .where(and(eq(itemSupplier.itemId, row.id), eq(itemSupplier.supplierId, supplierId)));
 
   if (link.isDefault) {
@@ -667,7 +814,7 @@ export async function unlinkSupplier(tx: Tx, ctx: ActorContext, code: string, su
       .select({ supplierId: itemSupplier.supplierId, code: businessPartner.code })
       .from(itemSupplier)
       .innerJoin(businessPartner, eq(businessPartner.id, itemSupplier.supplierId))
-      .where(eq(itemSupplier.itemId, row.id))
+      .where(and(eq(itemSupplier.itemId, row.id), eq(itemSupplier.active, true)))
       .orderBy(asc(businessPartner.code))
       .limit(1);
     if (remaining[0]) {
@@ -684,6 +831,8 @@ export async function unlinkSupplier(tx: Tx, ctx: ActorContext, code: string, su
     action: 'item.supplier_unlinked',
     objectType: PERMISSION_OBJECT,
     objectId: code,
-    before: { supplierId, wasDefault: link.isDefault },
+    before: { supplier: link.code, supplierId, wasDefault: link.isDefault, active: true },
+    after: { supplier: link.code, active: false },
+    reason: why,
   });
 }

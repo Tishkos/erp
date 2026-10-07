@@ -40,15 +40,14 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
     ]);
     // Goods Receipts is Inventory's (by direction, 2026-10-06), at its old address.
     expect(keysOf('payables')).not.toContain('goods_receipts');
-    expect(keysOf('inventory')).toContain('goods_receipts');
+    expect(keysOf('inventory_in_out')).toContain('goods_receipts');
     expect(keysOf('payables_payments')).toEqual([
       'supplier_payments',
       'supplier_advances',
       'supplier_credits',
       'supplier_credit_memos',
     ]);
-    expect(keysOf('payables_suppliers').slice(0, 4)).toEqual([
-      'suppliers',
+    expect(keysOf('payables_suppliers').slice(0, 3)).toEqual([
       'ap_statements',
       'ap_open_items',
       'ap_reconciliation',
@@ -56,12 +55,13 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
     expect(MENU.some((s) => s.key === 'payables_setup')).toBe(false);
   });
 
-  it('the supplier master is Payables’, the settings and the sheet migration Administration’s', () => {
-    // By direction, 2026-10-04: "move the suppliers to payable". Once, under
-    // Supplier Balances, at the address every supplier link already uses.
+  it('the supplier master is Master Data’s, the settings and the sheet migration Administration’s', () => {
+    // By direction, 2026-10-06: "yes move the customer and supplier to master
+    // data". Once, under Master Data — Financial, at the address every
+    // supplier link already uses.
     const everywhere = MENU.flatMap((s) => s.items.filter((item) => item.key === 'suppliers').map(() => s.key));
-    expect(everywhere).toEqual(['payables_suppliers']);
-    expect(keysOf('master_data')).not.toContain('suppliers');
+    expect(everywhere).toEqual(['master_data']);
+    expect(keysOf('payables_suppliers')).not.toContain('suppliers');
     expect(keysOf('administration')).toEqual(expect.arrayContaining(['payables_settings', 'payables_migration']));
     const payables = ['payables', 'payables_transfers', 'payables_payments', 'payables_suppliers'].flatMap(keysOf);
     for (const gone of ['payables_settings', 'payables_migration']) {
@@ -120,39 +120,48 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
     expect(keysOf('master_banking')).toEqual(['banks', 'bank_cash_accounts', 'cash_accounts']);
   });
 
-  it('Receivables is one heading, Sales & Receivables, in the order a receivable lives (2026-10-04)', () => {
-    expect(keysOf('sales').slice(0, 9)).toEqual([
-      'customers',
-      'ar_invoices',
-      'customer_receipts',
-      'ar_allocations',
-      'ar_statements',
-      'ar_open_items',
-      'customer_credit_memos',
-      'sales_returns',
-      'ar_reconciliation',
-    ]);
-    const route = (itemKey: string) =>
-      routeFor(section('sales').items.find((item) => item.key === itemKey)!, 'sales');
-    expect(route('ar_allocations')).toBe('/sales/customer-credits');
-    expect(route('customer_credit_memos')).toBe('/sales/credit-notes');
-    expect(route('ar_reconciliation')).toBe('/sales/customer-reconciliation');
+  it('Receivables is three headings, grouped by what they do like Payables (2026-10-07)', () => {
+    // By direction: "receivable … should be grouped based on their functionality, like payable".
+    expect(keysOf('sales').slice(0, 3)).toEqual(['ar_invoices', 'customer_credit_memos', 'sales_returns']);
+    expect(keysOf('sales_receipts')).toEqual(['customer_receipts', 'ar_allocations']);
+    expect(keysOf('sales_balances').slice(0, 3)).toEqual(['ar_statements', 'ar_open_items', 'ar_reconciliation']);
+    const route = (sectionKey: string, itemKey: string) =>
+      routeFor(section(sectionKey).items.find((item) => item.key === itemKey)!, sectionKey);
+    // Every built screen keeps the address it had under the one heading (D-FX-1).
+    expect(route('sales', 'ar_invoices')).toBe('/sales/ar-invoices');
+    expect(route('sales_receipts', 'customer_receipts')).toBe('/sales/customer-receipts');
+    expect(route('sales_receipts', 'ar_allocations')).toBe('/sales/customer-credits');
+    expect(route('sales', 'customer_credit_memos')).toBe('/sales/credit-notes');
+    expect(route('sales_balances', 'ar_statements')).toBe('/sales/customer-statements');
+    expect(route('sales_balances', 'ar_open_items')).toBe('/sales/receivables');
+    expect(route('sales_balances', 'ar_reconciliation')).toBe('/sales/customer-reconciliation');
   });
 
-  it('Customers live in Sales & Receivables only, at the route every customer link uses', () => {
-    // By direction, 2026-10-04: "customer [to] receivable".
+  it('Inventory and Projects are three headings each, every screen at its old address (2026-10-07)', () => {
+    expect(keysOf('inventory')).toEqual(['availability', 'stock_movements', 'stock_ledger']);
+    expect(keysOf('inventory_in_out')).toEqual(['opening_stock', 'manual_stock_additions', 'goods_receipts', 'stock_receipts', 'stock_issues', 'transfer_requests']);
+    expect(keysOf('inventory_control')).toEqual(['stock_count', 'stock_reconciliation', 'inventory_checks', 'inventory_valuation', 'fifo_valuation']);
+    expect(routeFor(section('inventory_control').items.find((item) => item.key === 'fifo_valuation')!, 'inventory_control')).toBe('/inventory/fifo-valuation');
+    expect(keysOf('projects')).toEqual(['project_master', 'contracts', 'wbs', 'cost_plan', 'project_budgets', 'change_orders']);
+    expect(keysOf('projects_execution')).toEqual(['project_costs', 'project_procurement', 'material_issues', 'progress']);
+    expect(keysOf('projects_billing')).toEqual(['project_billing', 'project_forecast', 'project_close', 'project_reports']);
+  });
+
+  it('Customers live in Master Data — Financial only, at the route every customer link uses', () => {
+    // By direction, 2026-10-06: "yes move the customer and supplier to master data".
     const everywhere = MENU.flatMap((s) => s.items.filter((item) => item.key === 'customers').map(() => s.key));
-    expect(everywhere).toEqual(['sales']);
-    expect(routeFor(section('sales').items.find((item) => item.key === 'customers')!, 'sales')).toBe(
+    expect(everywhere).toEqual(['master_data']);
+    expect(keysOf('sales')).not.toContain('customers');
+    expect(routeFor(section('master_data').items.find((item) => item.key === 'customers')!, 'master_data')).toBe(
       '/sales/customers',
     );
   });
 
-  it('Master Data — Financial holds reference data only, no partners', () => {
+  it('Master Data — Financial heads with the business partners, then the reference data', () => {
     const financial = keysOf('master_data');
-    expect(financial).not.toContain('customers');
-    expect(financial).not.toContain('suppliers');
-    expect(financial.slice(0, 6)).toEqual([
+    expect(financial.slice(0, 8)).toEqual([
+      'customers',
+      'suppliers',
       'chart_of_accounts',
       'statement_mapping',
       'currencies_rates',
@@ -182,10 +191,10 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
     expect(route('payables_transfers', 'payment_applications')).toBe('/payables/payment-applications');
     expect(route('payables_transfers', 'payables_workbench')).toBe('/payables');
     expect(route('payables', 'purchase_orders')).toBe('/payables/purchase-orders');
-    expect(route('inventory', 'goods_receipts')).toBe('/payables/goods-receipts');
+    expect(route('inventory_in_out', 'goods_receipts')).toBe('/payables/goods-receipts');
     expect(route('payables', 'service_receipts')).toBe('/payables/service-receipts');
-    expect(route('payables_suppliers', 'suppliers')).toBe('/payables/suppliers');
-    expect(route('sales', 'customers')).toBe('/sales/customers');
+    expect(route('master_data', 'suppliers')).toBe('/payables/suppliers');
+    expect(route('master_data', 'customers')).toBe('/sales/customers');
     expect(route('administration', 'payables_settings')).toBe('/administration/payables-settings');
     expect(route('administration', 'payables_migration')).toBe('/administration/payables-migration');
   });

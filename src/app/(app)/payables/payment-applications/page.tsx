@@ -22,6 +22,8 @@ import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as applications from '@/server/services/payment-applications';
 import { STATUS_CHIP, statusKey } from './status';
+import { DatesHidden, RegisterFilter } from '@/components/admin/register-filter';
+import { registerDatesOf, registerDatesParams, registerDatesQuery } from '@/server/domain/register-dates';
 
 /**
  * Payment applications — REQ-AP-001 §21.7.
@@ -66,12 +68,16 @@ export default async function PaymentApplicationsPage({ searchParams }: { search
   const viewParam = typeof params.view === 'string' ? params.view : '';
 
   const inView = Object.hasOwn(VIEWS, viewParam) ? VIEWS[viewParam] : undefined;
+  // The Filter's window of application dates and the order — newest first unless asked (2026-10-07).
+  const dates = registerDatesOf(params);
   const { result } = await withCurrentUser(async (tx) => ({
-    result: await applications.listForScreen(tx, { statuses: inView ?? null, search: outcome.q, page: outcome.page }),
+    result: await applications.listForScreen(tx, { statuses: inView ?? null, search: outcome.q, page: outcome.page, dates }),
   }));
   const shown = result.rows;
   const query = (p: number) =>
-    [outcome.q ? `q=${encodeURIComponent(outcome.q)}` : '', inView ? `view=${viewParam}` : '', `page=${p}`].filter(Boolean).join('&');
+    [outcome.q ? `q=${encodeURIComponent(outcome.q)}` : '', inView ? `view=${viewParam}` : '', registerDatesQuery(dates), `page=${p}`]
+      .filter(Boolean)
+      .join('&');
 
   const statusLabel = (status: string, kind: string) => t(statusKey(status, kind));
 
@@ -79,7 +85,7 @@ export default async function PaymentApplicationsPage({ searchParams }: { search
     <AdminPage
       actions={
         mayCreate ? (
-          <Link className="action" href="/payables/payment-applications/new">
+          <Link className="action action--primary" href="/payables/payment-applications/new">
             {t('new')}
           </Link>
         ) : null
@@ -103,12 +109,16 @@ export default async function PaymentApplicationsPage({ searchParams }: { search
             clearHref="/payables/payment-applications"
             clearLabel={admin('clear_search')}
             countLabel={admin('rows_shown', { count: result.total })}
+            hidden={{ ...(inView ? { view: viewParam } : {}), ...registerDatesParams(dates) }}
             placeholder={admin('search_placeholder')}
             q={outcome.q}
             searchLabel={admin('search')}
-          />
+          >
+            <RegisterFilter dates={dates} keep={{ q: outcome.q, view: inView ? viewParam : null }} path="/payables/payment-applications" />
+          </ListToolbar>
 
           <form className={s.filterBar} method="get">
+            <DatesHidden dates={dates} />
             <FilterRow>
               <Select
                 defaultValue={viewParam}

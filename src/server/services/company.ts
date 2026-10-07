@@ -12,10 +12,12 @@ import {
   accentOrDefault,
   assertAccent,
   assertPalette,
+  effectiveColours,
   paletteOrDefault,
   type Accent,
   type Palette,
 } from '../domain/appearance';
+import { storedCompanyDefaults } from './user-appearance';
 import {
   AdminValidationError,
   normaliseCode,
@@ -159,8 +161,11 @@ export async function setAppearance(
 }
 
 /**
- * The look this person actually sees: their own saved choice, or the shared
- * Sand and Gold application defaults. Company preferences never affect users.
+ * The look this person actually sees: their own saved choice, else everyone's
+ * default (0419, `company.ui_defaults`, set from the Appearance drawer), else
+ * the shared Sand and Gold application defaults. The company's own palette
+ * above (`ui_palette` / `ui_accent`, `setAppearance`) still never reaches a
+ * person's screen.
  */
 export async function appearanceFor(
   tx: Tx,
@@ -171,18 +176,15 @@ export async function appearanceFor(
     .from(appUser)
     .where(eq(appUser.id, userId))
     .limit(1);
-  return {
-    palette: paletteOrDefault(u?.palette),
-    accent: accentOrDefault(u?.accent),
-  };
+  return effectiveColours(u ?? {}, await storedCompanyDefaults(tx));
 }
 
 /**
  * A person chooses their own look — or hands the choice back.
  *
  * Self-service by construction: it writes only the caller's row, so the only
- * permission needed is being signed in. Users always have a saved preference;
- * there is no company-wide appearance fallback.
+ * permission needed is being signed in. Once saved it is theirs; until then
+ * they see everyone's default (`appearanceFor`).
  */
 export async function setMyAppearance(
   tx: Tx,

@@ -14,6 +14,7 @@ import * as coa from '@/server/services/chart-of-accounts';
 import * as partners from '@/server/services/partners';
 import * as notes from '@/server/services/customer-notes';
 import { createNote } from '../actions';
+import { IntentSelect } from '@/components/admin/intent-select';
 
 /**
  * Raising a credit or debit note — Receivables, 2026-10-04.
@@ -133,14 +134,14 @@ export default async function NewNotePage({ searchParams }: { searchParams: Sear
             ) : null}
             <label className={s.field}>
               <span className={s.label}>{column('invoice_no')}</span>
-              <select className={s.select} defaultValue={invoiceAsked} name="ar_invoice_id">
+              <IntentSelect defaultValue={invoiceAsked} name="ar_invoice_id">
                 <option value="">{t('no_invoice')}</option>
                 {invoices.map((invoice) => (
                   <option key={invoice.id} value={invoice.id}>
                     {`${invoice.invoiceNo} · ${money(invoice.netIqd)} · ${t('outstanding_short', { amount: money(invoice.outstandingIqd) })}`}
                   </option>
                 ))}
-              </select>
+              </IntentSelect>
               <span className={s.hint}>{t(kind === 'credit' ? 'invoice_hint_credit' : 'invoice_hint_debit')}</span>
             </label>
             <Field
@@ -154,14 +155,14 @@ export default async function NewNotePage({ searchParams }: { searchParams: Sear
             />
             <label className={s.field}>
               <span className={s.label}>{t(kind === 'credit' ? 'account_credit' : 'account_debit')}</span>
-              <select className={s.select} name="account_id">
+              <IntentSelect name="account_id">
                 <option value="">{admin('invoices.account_default')}</option>
                 {accounts.map((account) => (
                   <option key={account.id} value={account.id}>
                     {`${account.code} · ${account.name}`}
                   </option>
                 ))}
-              </select>
+              </IntentSelect>
             </label>
             <Field label={t('reason')} name="reason" required requiredLabel={admin('required_hint')} wide />
             <Field label={t('description')} name="description" type="textarea" wide />

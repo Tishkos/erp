@@ -200,6 +200,8 @@ const TARGETS = new Map<string, NoteTarget>([
   ['stock_reconciliation', target('stock_reconciliation', 'create', inTable('stock_adjustment', 'id', 'branch_code'))],
   ['opening_stock', target('opening_stock', 'edit_draft', inTable('opening_stock', 'id', 'branch_code'))],
   ['stock_count', target('stock_count', 'create', inTable('stock_count', 'id', 'branch_code'))],
+  // A Manual Stock Addition (0415): whoever may raise one adds a note to it, at any status.
+  ['manual_stock_addition', target('manual_stock_addition', 'create', inTable('manual_stock_addition', 'id', 'branch_code'))],
   // The Project System — its documents are kept by number.
   ['project', target('project', 'edit_draft', inTable('project', 'code', 'branch_code'))],
   ['project_certificate', target('project', 'edit_draft', inTable('project_certificate', 'certificate_no', 'branch_code'))],

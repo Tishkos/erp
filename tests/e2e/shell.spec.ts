@@ -144,9 +144,13 @@ test.describe('Appendix A · the shell', () => {
   });
 
   test('shows the branch the session is working in', async ({ page }) => {
-    // Posting to the wrong branch is expensive to unwind (§4.1), so which one
-    // is in force is on screen rather than in a menu.
-    await expect(page.getByRole('banner')).toContainText('HQ');
+    // Posting to the wrong branch is expensive to unwind (§4.1). Since
+    // 2026-10-06 (by direction: "move active branch into profile drop down
+    // menu … make more spaces") it heads the account menu, not the bar.
+    await page.getByRole('button', { name: 'Open user menu' }).click();
+    const branch = page.locator('#erp-user-panel').getByRole('group', { name: /^Active branch/ });
+    await expect(branch).toBeVisible();
+    await expect(branch.locator('[data-active-branch]')).toHaveText('HQ');
   });
 });
 

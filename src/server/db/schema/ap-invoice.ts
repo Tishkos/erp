@@ -240,6 +240,13 @@ export const apInvoice = pgTable(
      * application is raised without a second form.
      */
     advancePercent: numeric('advance_percent', { precision: 9, scale: 4 }),
+    /**
+     * 0411 — how the advance is agreed: 'percent' (`advancePercent`) or
+     * 'amount' (`advanceAmount`, in the currency the invoice was agreed in).
+     * Null is no advance; `ap_invoice_advance_basis_shape` holds the three shapes.
+     */
+    advanceBasis: text('advance_basis'),
+    advanceAmount: numeric('advance_amount', { precision: 19, scale: 4 }),
     advancePaidFromAccountId: uuid('advance_paid_from_account_id').references(() => bankCashAccount.id),
     advancePaymentMethodCode: text('advance_payment_method_code'),
     /** The application it raised, so a second posting raises no second advance. */

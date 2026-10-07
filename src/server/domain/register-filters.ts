@@ -28,10 +28,20 @@ export function rowMatches(row: Record<string, unknown>, q: string): boolean {
 export const INVOICE_VIEWS = ['imports', 'expenses', 'unpaid', 'overdue'] as const;
 export type InvoiceView = (typeof INVOICE_VIEWS)[number];
 
+/**
+ * The Import application filter (2026-10-06, by direction: "make a filter show
+ * connected import application … show its imported application or not"):
+ * an invoice linked to an import application, or one that is not.
+ */
+export const INVOICE_IMPORT_LINKS = ['linked', 'unlinked'] as const;
+export type InvoiceImportLink = (typeof INVOICE_IMPORT_LINKS)[number];
+
 export interface InvoiceRegisterRow {
   readonly totalIqd: string;
   readonly isImport: boolean;
   readonly expenseCategoryCode: string | null;
+  /** The import application the invoice belongs to, by number; null for none. */
+  readonly payableNo?: string | null;
   /** `expenses.paymentState` of the row on the day the register is read. */
   readonly state: string;
 }
@@ -41,12 +51,14 @@ export interface InvoiceRegisterFilter {
   readonly view?: string | null;
   /** Exact decimal, IQD; a row is kept when its total is at least this. */
   readonly minAmount?: string | null;
+  /** `linked` / `unlinked` to an import application; anything else is every invoice. */
+  readonly importLink?: string | null;
 }
 
 /**
- * Purchase Invoices: the search, the View filter and the amount floor.
- * The amount is compared as scaled integers, never as a float — a dinar under
- * the floor is under it.
+ * Purchase Invoices: the search, the View filter, the Import application
+ * filter and the amount floor. The amount is compared as scaled integers,
+ * never as a float — a dinar under the floor is under it.
  */
 export function filterInvoiceRegister<T extends InvoiceRegisterRow>(
   rows: readonly T[],
@@ -55,6 +67,13 @@ export function filterInvoiceRegister<T extends InvoiceRegisterRow>(
   const floor = filter.minAmount ? parseDecimal(filter.minAmount, MONEY_SCALE) : null;
   return rows
     .filter((row) => rowMatches(row as unknown as Record<string, unknown>, filter.q ?? ''))
+    .filter((row) =>
+      filter.importLink === 'linked'
+        ? Boolean(row.payableNo)
+        : filter.importLink === 'unlinked'
+          ? !row.payableNo
+          : true,
+    )
     .filter((row) =>
       filter.view === 'imports'
         ? row.isImport

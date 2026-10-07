@@ -21,6 +21,8 @@ import * as asycuda from '@/server/services/asycuda-runs';
 import * as recordNotes from '@/server/services/record-notes';
 import * as customs from '@/server/services/customs-pd';
 import { applyAsycudaRun, attachToAsycudaRun, editAsycudaLines } from '../../actions';
+import { IntentSelect } from '@/components/admin/intent-select';
+import { IntentDateField } from '@/components/admin/intent-date-field';
 
 /**
  * One ASYCUDA reading — IMPROVEMENT-002 (sponsor, 2026-10-03: "a new ASYCUDA
@@ -193,28 +195,27 @@ export default async function AsycudaReadingPage({
               </td>
               <td>
                 {editing ? (
-                  <select
+                  <IntentSelect
                     aria-label={cellLabel(t('asycuda_says'), line.line)}
-                    className={s.sapCellField}
+                    compact
                     defaultValue={draft.statusCode}
                     name={`status_${line.line}`}
                   >
                     {line.outcome === 'unreadable' ? <option value="">—</option> : null}
                     {choices}
                     <option value={asycuda.DROP_LINE}>{t('asycuda_drop_line')}</option>
-                  </select>
+                  </IntentSelect>
                 ) : (
                   statusName(line.asycudaStatus)
                 )}
               </td>
               <td>
                 {editing ? (
-                  <input
+                  <IntentDateField
                     aria-label={cellLabel(t('effective_date'), line.line)}
-                    className={s.sapCellField}
+                    compact
                     defaultValue={draft.effectiveDate}
                     name={`date_${line.line}`}
-                    type="date"
                   />
                 ) : (
                   <bdi dir="ltr">{line.outcome === 'unreadable' ? '—' : line.effectiveDate ? formatBusinessDate(line.effectiveDate, locale as Locale) : t('today')}</bdi>
@@ -252,13 +253,13 @@ export default async function AsycudaReadingPage({
               <input aria-label={cellLabel(t('pd_no'), t('asycuda_new_line'))} className={s.sapCellField} dir="ltr" name="pd_new" />
             </td>
             <td>
-              <select aria-label={cellLabel(t('asycuda_says'), t('asycuda_new_line'))} className={s.sapCellField} defaultValue="" name="status_new">
+              <IntentSelect aria-label={cellLabel(t('asycuda_says'), t('asycuda_new_line'))} compact defaultValue="" name="status_new">
                 <option value="">—</option>
                 {choices}
-              </select>
+              </IntentSelect>
             </td>
             <td>
-              <input aria-label={cellLabel(t('effective_date'), t('asycuda_new_line'))} className={s.sapCellField} name="date_new" type="date" />
+              <IntentDateField aria-label={cellLabel(t('effective_date'), t('asycuda_new_line'))} compact name="date_new" />
             </td>
             <td colSpan={4} />
           </tr>

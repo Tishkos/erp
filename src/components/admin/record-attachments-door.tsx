@@ -1,4 +1,4 @@
-import { Suspense } from 'react';
+import { Suspense, type ReactNode } from 'react';
 import { getTranslations } from 'next-intl/server';
 import { attachToRecordAction } from '@/server/record-attach-action';
 import { requireContext, withCurrentUser } from '@/server/session';
@@ -36,18 +36,33 @@ export async function RecordAttachmentsDoor({
   recordId,
   files,
   mayAttach = true,
+  related,
+  relatedCount = 0,
 }: {
   readonly object: string;
   readonly recordId: string;
   readonly files?: AttachmentsRead;
   readonly mayAttach?: boolean;
+  /**
+   * Files that come back to this paperclip from the records related to it —
+   * drawn under the record's own, and counted on the clip (the import
+   * application's blocks, 2026-10-07). Uploading still files under `object`.
+   */
+  readonly related?: ReactNode;
+  readonly relatedCount?: number;
 }) {
   const [t, context] = await Promise.all([getTranslations('admin'), requireContext()]);
   const read = files ?? (await withCurrentUser((tx) => readAttachments(tx, object, recordId)));
   // QS Cloud Files linked to the record count on the same paperclip (nothing, while the integration is off).
   const cloud = await loadCloudSection(context, object, recordId);
   return (
-    <AttachmentsButton closeLabel={t('close')} count={read.rows.length + (cloud?.links.length ?? 0)} label={t('attachments.title')} title={t('attachments.title')}>
+    <AttachmentsButton
+      closeLabel={t('close')}
+      count={read.rows.length + (cloud?.links.length ?? 0) + relatedCount}
+      label={t('attachments.title')}
+      title={t('attachments.title')}
+      wide={relatedCount > 0}
+    >
       <Attachments
         cloud={cloud}
         action={attachToRecordAction}
@@ -62,6 +77,7 @@ export async function RecordAttachmentsDoor({
         objectType={object}
         preloaded={read}
       />
+      {related}
     </AttachmentsButton>
   );
 }

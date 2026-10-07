@@ -231,7 +231,7 @@ export const AGENT_TOOLS = [
   {
     name: 'invoice',
     description:
-      "One invoice by its number, either side: a purchase invoice (API-…) with what was bought and what is still unpaid, or a sales invoice (INV-…) with what the customer owes. Side is 'purchase' or 'sales'.",
+      "One invoice by its number, either side: a purchase invoice (PUR-…, or API-… before 2026-10-06) with what was bought and what is still unpaid, or a sales invoice (INV-…) with what the customer owes. Side is 'purchase' or 'sales'.",
     input_schema: {
       type: 'object',
       properties: {
@@ -308,7 +308,7 @@ export const AGENT_TOOLS = [
           ...string,
           enum: ['approve_document', 'reject_document', 'approve_opening_stock', 'document_step', 'create_partner', 'approve_partner', 'create_draft', 'run_plan'],
           description:
-            "approve_document / reject_document: something already waiting in their own approval inbox. approve_opening_stock: an opening stock document, which posts its quantities into the inventory ledger. document_step: move a document one step by its number — give `step`; purchase invoice API-… (submit, post, reverse), sales invoice INV-… (approve, post, reverse), purchase order PO-… (submit, approve, cancel), goods receipt GRN-… (submit, post), purchase return GRT-… (approve, post), supplier payment PAY-… (post, reverse), customer receipt RCT-… (approve, post), journal entry JE-… (submit, approve, reject, reverse), internal transfer BTR-… (approve, post), opening stock OPN-… (submit, approve). create_partner: a new customer or supplier — give `role` and `name`. approve_partner: make a prospect customer or supplier usable — give its code as `document`. create_draft: key a document from what they told you and save it as a DRAFT (nothing posts) — give `kind` (journal_entry, purchase_invoice or sales_invoice), `lines`, and for an invoice `party`; a journal line is `account` + `debit` or `credit` (+ `department`), an invoice line is `item` + `quantity` + `unitPrice` (+ `warehouse`, `discount`).",
+            "approve_document / reject_document: something already waiting in their own approval inbox. approve_opening_stock: an opening stock document, which posts its quantities into the inventory ledger. document_step: move a document one step by its number — give `step`; purchase invoice PUR-… or API-… (submit, post, reverse), sales invoice INV-… (approve, post, reverse), purchase order PO-… (submit, approve, cancel), goods receipt GRN-… (submit, post), purchase return GRT-… (approve, post), supplier payment PAY-… (post, reverse), customer receipt RCT-… (approve, post), journal entry JE-… (submit, approve, reject, reverse), internal transfer BTR-… (approve, post), opening stock OPN-… (submit, approve). create_partner: a new customer or supplier — give `role` and `name`. approve_partner: make a prospect customer or supplier usable — give its code as `document`. create_draft: key a document from what they told you and save it as a DRAFT (nothing posts) — give `kind` (journal_entry, purchase_invoice or sales_invoice), `lines`, and for an invoice `party`; a journal line is `account` + `debit` or `credit` (+ `department`), an invoice line is `item` + `quantity` + `unitPrice` (+ `warehouse`, `discount`).",
         },
         document: { ...string, description: 'The document number as it is written on the system (or the partner code for approve_partner).' },
         step: { ...string, enum: ['submit', 'approve', 'reject', 'post', 'reverse', 'cancel'], description: 'For document_step: which step.' },
@@ -360,7 +360,7 @@ export const AGENT_TOOLS = [
   {
     name: 'document_status',
     description:
-      'Any document by its number — what it is, its status, its branch and amount, and the address of its page: a purchase invoice (API-…), sales invoice (INV-…), purchase order (PO-…), goods receipt (GRN-…), purchase return (GRT-…), supplier payment (PAY-…), customer receipt (RCT-…), journal entry (JE-…), internal transfer (BTR-…), opening stock (OPN-…). Use it before you propose a step on a document, and for "where is…", "what happened to…".',
+      'Any document by its number — what it is, its status, its branch and amount, and the address of its page: a purchase invoice (PUR-…, or API-… before 2026-10-06), sales invoice (INV-…), purchase order (PO-…), goods receipt (GRN-…), purchase return (GRT-…), supplier payment (PAY-…), customer receipt (RCT-…), journal entry (JE-…), internal transfer (BTR-…), opening stock (OPN-…). Use it before you propose a step on a document, and for "where is…", "what happened to…".',
     input_schema: { type: 'object', properties: { no: { ...string, description: 'The document number.' } }, required: ['no'], additionalProperties: false },
   },
   {
@@ -396,7 +396,7 @@ export const AGENT_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        address: { ...string, description: 'The page: a path inside the ERP (/payables/invoices/API-HQ-2026-000005) or its full address.' },
+        address: { ...string, description: 'The page: a path inside the ERP (/payables/invoices/PUR-HQ-2026-000005) or its full address.' },
         language: { ...string, enum: ['en', 'ar'], description: 'The language the screen is shown in: the language you are answering in.' },
         pointAt: {
           type: 'array',
@@ -489,7 +489,7 @@ export const AGENT_TOOLS = [
   {
     name: 'document_story',
     description:
-      'EVERYTHING about one document, by its number, in one reading: what it is and its status, the customer or supplier, its lines, the journal it wrote (every debit and credit), the stock it moved, what was paid or received against it, who raised / approved / posted it and when, its history from the audit trail, and what it is waiting for. Use it FIRST whenever a question is about a particular document or "why did nothing happen after I did X" — why a customer\'s account is empty, why stock did not move, why something is not on a report, who approved it, what to do next. Purchase invoice API-…, sales invoice INV-…, purchase order PO-…, goods receipt GRN-…, purchase return GRT-…, supplier payment PAY-…, customer receipt RCT-…, journal entry JE-…, internal transfer BTR-…, opening stock OPN-…. If they gave no number, find it first (invoice, open_items, a query on the table ordered by created_at desc).',
+      'EVERYTHING about one document, by its number, in one reading: what it is and its status, the customer or supplier, its lines, the journal it wrote (every debit and credit), the stock it moved, what was paid or received against it, who raised / approved / posted it and when, its history from the audit trail, and what it is waiting for. Use it FIRST whenever a question is about a particular document or "why did nothing happen after I did X" — why a customer\'s account is empty, why stock did not move, why something is not on a report, who approved it, what to do next. Purchase invoice PUR-… (API-… before 2026-10-06), sales invoice INV-…, purchase order PO-…, goods receipt GRN-…, purchase return GRT-…, supplier payment PAY-…, customer receipt RCT-…, journal entry JE-…, internal transfer BTR-…, opening stock OPN-…. If they gave no number, find it first (invoice, open_items, a query on the table ordered by created_at desc).',
     input_schema: { type: 'object', properties: { no: { ...string, description: 'The document number.' } }, required: ['no'], additionalProperties: false },
   },
   {
@@ -629,7 +629,7 @@ export const AGENT_TOOLS = [
       properties: {
         olderThanDays: { type: 'integer', description: 'Only what has waited at least this many days. Leave out for everything.' },
         mine: { ...boolean, description: 'True for only what the person asking raised themselves.' },
-        kind: { ...string, description: 'One kind only: a number prefix (INV, API, JE, PO…), or a name such as "sales", "purchase", "journal", "payment applications", "prospects", "inbox".' },
+        kind: { ...string, description: 'One kind only: a number prefix (INV, PUR, API, JE, PO…), or a name such as "sales", "purchase", "journal", "payment applications", "prospects", "inbox".' },
       },
       additionalProperties: false,
     },
@@ -648,7 +648,7 @@ export const AGENT_TOOLS = [
       type: 'object',
       properties: {
         user: { ...string, description: 'Part of a person\'s name or e-mail.' },
-        document: { ...string, description: 'A document number (INV-…, API-…, JE-…) or a record code.' },
+        document: { ...string, description: 'A document number (INV-…, PUR-…, API-…, JE-…) or a record code.' },
         action: { ...string, description: 'Part of an action name, such as "posted", "approved", "whatsapp", "login", "ar_invoice".' },
         object: { ...string, description: 'Part of an object type, such as "ar_invoice", "business_partner", "app_user".' },
         outcome: { ...string, enum: ['success', 'denied', 'failure', 'problems'], description: '"problems" for everything refused or failed.' },

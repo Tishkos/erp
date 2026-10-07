@@ -13,6 +13,8 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import { businessToday } from '@/server/domain/business-date';
 import { addDays } from '@/server/domain/dates';
 import * as forecasts from '@/server/services/cash-forecast';
+import { IntentSelect } from '@/components/admin/intent-select';
+import { IntentDateField } from '@/components/admin/intent-date-field';
 
 /**
  * Cash Forecast — REQ-ACC-001 Part D-4, over Phase 07's `cash-forecast.ts`.
@@ -75,21 +77,21 @@ export default async function CashForecastPage({ searchParams }: { searchParams:
           <form action="/treasury/cash-forecast" className={s.sapFilterBar} method="get">
             <label className={s.sapFilterField}>
               <span className={s.sapLabel}>{admin('reports.from')}</span>
-              <input defaultValue={from} name="from" required type="date" />
+              <IntentDateField defaultValue={from} name="from" required />
             </label>
             <label className={s.sapFilterField}>
               <span className={s.sapLabel}>{admin('reports.to')}</span>
-              <input defaultValue={to} name="to" required type="date" />
+              <IntentDateField defaultValue={to} name="to" required />
             </label>
             <label className={s.sapFilterField}>
               <span className={s.sapLabel}>{t('bucket')}</span>
-              <select defaultValue={bucket} name="bucket">
+              <IntentSelect defaultValue={bucket} name="bucket">
                 {forecasts.FORECAST_BUCKETS.map((key) => (
                   <option key={key} value={key}>
                     {t(`bucket_${key}`)}
                   </option>
                 ))}
-              </select>
+              </IntentSelect>
             </label>
             <button className={`${s.button} ${s.primary}`} type="submit">
               {admin('reports.run')}

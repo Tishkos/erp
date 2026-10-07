@@ -119,9 +119,11 @@ export const MENU: readonly MenuSection[] = Object.freeze([
      * and returns that correct it, and the reconciliation that proves it to
      * the ledger.
      *
-     * Customers came back here from Master Data (by direction, 2026-10-04:
-     * "move … customer [to] receivable"), first, before the documents that
-     * name them. Listed once; the route did not move (D-FX-1).
+     * Customers came here from Master Data on 2026-10-04 ("move … customer
+     * [to] receivable") and went back on 2026-10-06, by direction ("yes move
+     * the customer and supplier to master data"): the customer master is
+     * Master Data — Financial's, first, at the route every customer link uses
+     * (D-FX-1).
      *
      * Credits & Advances and Customer Reconciliation are Appendix A's
      * Allocations and Reconciliation (finance_ar), brought here and given
@@ -129,25 +131,17 @@ export const MENU: readonly MenuSection[] = Object.freeze([
      */
     key: 'sales',
     ordinal: 3,
+    /*
+     * Three headings since 2026-10-07, by direction: "receivable … should be grouped based on their
+     * functionality, like payable … and projects and hr and inventory" —
+     * the invoices and what corrects them, how the customer pays and what it
+     * holds, and the balances, as Payables has. The key stays `sales`, so the
+     * items that derive their route from it keep it (D-FX-1).
+     */
     items: [
-      page('customers', 'business_partner', '/sales/customers'),
       page('ar_invoices', 'ar_invoice'),
-      page('customer_receipts', 'customer_receipt'),
-      // An object anybody who reads receipts already holds: the credits are
-      // receipts' remainders first, and applying one is the receipt's own
-      // `execute`.
-      page('ar_allocations', 'customer_receipt', '/sales/customer-credits'),
-      // A customer's account statement. Appendix A filed it under Receivables;
-      // it grants over `business_partner` because that is the record it reads
-      // and the object the page authorises on.
-      page('ar_statements', 'business_partner', '/sales/customer-statements'),
-      // The ageing, beside the invoices it ages (2026-09-30).
-      page('ar_open_items', 'ar_invoice', '/sales/receivables'),
       page('customer_credit_memos', 'customer_credit_memo', '/sales/credit-notes'),
       page('sales_returns', 'sales_return'),
-      // The subledger against the control account. Read under the invoices'
-      // object, as the ageing's tie is.
-      page('ar_reconciliation', 'ar_invoice', '/sales/customer-reconciliation'),
       // Not built yet — kept in the tree (Appendix A), hidden until they are.
       page('sales_dashboard', 'sales_dashboard'),
       page('customer_price_lists', 'price_list'),
@@ -156,10 +150,39 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('pick_lists', 'pick_list'),
       page('delivery_notes', 'delivery_note'),
       page('cash_sales', 'cash_sale'),
-      page('credit_control', 'credit_control'),
       page('warranty_inquiry', 'warranty'),
-      page('sales_reports', 'sales_report'),
       page('sales_settings', 'sales_settings'),
+    ],
+  },
+  {
+    // How the customer pays, and what the customer holds of its own (2026-10-07).
+    key: 'sales_receipts',
+    ordinal: 32,
+    items: [
+      page('customer_receipts', 'customer_receipt', '/sales/customer-receipts'),
+      // An object anybody who reads receipts already holds: the credits are
+      // receipts' remainders first, and applying one is the receipt's own
+      // `execute`.
+      page('ar_allocations', 'customer_receipt', '/sales/customer-credits'),
+    ],
+  },
+  {
+    // Who owes, how much, how late — and does it tie to the ledger (2026-10-07).
+    key: 'sales_balances',
+    ordinal: 33,
+    items: [
+      // A customer's account statement. Appendix A filed it under Receivables;
+      // it grants over `business_partner` because that is the record it reads
+      // and the object the page authorises on.
+      page('ar_statements', 'business_partner', '/sales/customer-statements'),
+      // The ageing, beside the invoices it ages (2026-09-30).
+      page('ar_open_items', 'ar_invoice', '/sales/receivables'),
+      // The subledger against the control account. Read under the invoices'
+      // object, as the ageing's tie is.
+      page('ar_reconciliation', 'ar_invoice', '/sales/customer-reconciliation'),
+      // Not built yet (Appendix A) — the addresses they were given under Sales.
+      page('credit_control', 'credit_control', '/sales/credit-control'),
+      page('sales_reports', 'sales_report', '/sales/sales-reports'),
     ],
   },
   {
@@ -176,9 +199,10 @@ export const MENU: readonly MenuSection[] = Object.freeze([
      * bank loans to Treasury & Banking (FIX-1); the module's settings and
      * sheet migration went to Administration. The supplier master went to
      * Master Data and came back the same day, by direction (2026-10-04:
-     * "move the suppliers to payable"), first under Supplier Balances.
-     * Routes did not move (D-FX-1), so every item that left the section it
-     * was derived from names its route.
+     * "move the suppliers to payable"), and went to Master Data — Financial
+     * again on 2026-10-06, by direction ("yes move the customer and supplier
+     * to master data"). Routes did not move (D-FX-1), so every item that left
+     * the section it was derived from names its route.
      *
      * Five never-built items were the same screens under a second name and
      * are gone: Payments (Supplier Payments), Advances (Supplier Advances),
@@ -244,10 +268,8 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     key: 'payables_suppliers',
     ordinal: 21,
     items: [
-      // The supplier master — whom the balances below are owed to; its
-      // profile shows the payables position (by direction, 2026-10-04). The
-      // address stays /payables/suppliers (D-FX-1).
-      page('suppliers', 'business_partner', '/payables/suppliers'),
+      // The supplier master is Master Data — Financial's (2026-10-06); its
+      // profile still shows the payables position.
       // The supplier's side of the same mirror. See the note under Sales.
       page('ap_statements', 'business_partner', '/payables/supplier-statements'),
       page('ap_open_items', 'ap_invoice', '/payables/open-items'),
@@ -270,9 +292,22 @@ export const MENU: readonly MenuSection[] = Object.freeze([
      */
     key: 'inventory',
     ordinal: 5,
+    // Three headings since 2026-10-07 (by direction): what is where, what came
+    // in and went out, the counts and the valuations.
     items: [
       page('availability', 'inventory_movement', '/inventory/availability'),
+      page('stock_movements', 'stock_movement', '/inventory/stock-movements'),
+      page('stock_ledger', 'stock_movement', '/inventory/stock-ledger'),
+    ],
+  },
+  {
+    // Stock coming in, going out and moving between warehouses (2026-10-07).
+    key: 'inventory_in_out',
+    ordinal: 34,
+    items: [
       page('opening_stock', 'opening_stock', '/inventory/opening-stock'),
+      // Stock put onto the books by hand, approved by a second person (2026-10-06, by direction).
+      page('manual_stock_additions', 'manual_stock_addition', '/inventory/manual-additions'),
       // The purchase order's receipt — Payables' until 2026-10-06, by
       // direction ("Goods Receipts should be in inventory"). Its address
       // stayed where every link already points (D-FX-1).
@@ -280,18 +315,26 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('stock_receipts', 'stock_movement', '/inventory/stock-receipts'),
       page('stock_issues', 'stock_movement', '/inventory/stock-issues'),
       page('transfer_requests', 'warehouse_transfer', '/inventory/transfers'),
-      page('stock_movements', 'stock_movement', '/inventory/stock-movements'),
-      page('stock_ledger', 'stock_movement', '/inventory/stock-ledger'),
+    ],
+  },
+  {
+    // The counts, the corrections, the checks and what the stock is worth (2026-10-07).
+    key: 'inventory_control',
+    ordinal: 35,
+    items: [
       page('stock_count', 'stock_count', '/inventory/stock-count'),
       page('stock_reconciliation', 'stock_reconciliation', '/inventory/stock-reconciliation'),
       page('inventory_checks', 'inventory_movement', '/inventory/checks'),
       page('inventory_valuation', 'inventory_movement', '/inventory/valuation'),
-      page('fifo_valuation', 'fifo_valuation'),
+      // The Warehouses Report — the address it was derived under Inventory (D-FX-1).
+      page('fifo_valuation', 'fifo_valuation', '/inventory/fifo-valuation'),
     ],
   },
   {
     key: 'projects',
     ordinal: 6,
+    // Three headings since 2026-10-07 (by direction), in the order a project
+    // lives: set up and planned, carried out, billed and closed.
     items: [
       // REQ-PM-001 PM-1 — the Project System's master screens.
       page('project_master', 'project', '/projects'),
@@ -301,12 +344,24 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('cost_plan', 'project', '/projects/plan'),
       page('project_budgets', 'project', '/projects/budgets'),
       page('change_orders', 'project', '/projects/change-orders'),
+    ],
+  },
+  {
+    key: 'projects_execution',
+    ordinal: 36,
+    items: [
       // REQ-PM-001 PM-3 — execution: the line items, the orders and payables, the issues.
       page('project_costs', 'project', '/projects/costs'),
       page('project_procurement', 'project', '/projects/procurement'),
       page('material_issues', 'project', '/projects/material-issues'),
       // REQ-PM-001 PM-4 — progress, earned value, the milestones and their trend.
       page('progress', 'project', '/projects/progress'),
+    ],
+  },
+  {
+    key: 'projects_billing',
+    ordinal: 37,
+    items: [
       // REQ-PM-001 PM-5 — the billing plan, certificates, recognition; the forecast at completion.
       page('project_billing', 'project', '/projects/billing'),
       page('project_forecast', 'project', '/projects/forecast'),
@@ -550,16 +605,30 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     key: 'hr_payroll',
     ordinal: 15,
     items: [
-      // REQ-FIX-001 FIX-5 — the sponsor's order (2026-10-02). The screens
-      // live under /hr; with REQ-HR-001 HR-6 every one of them is built.
+      // REQ-FIX-001 FIX-5 — the sponsor's order (2026-10-02), kept across the
+      // three headings it became on 2026-10-07 (by direction): the people and
+      // the organisation, their time and pay, the talent and the requests.
+      // The screens live under /hr; with REQ-HR-001 HR-6 every one is built.
       page('hr_dashboard', 'hr_report', '/hr/dashboard'),
       page('employees', 'employee', '/hr/employees'),
       page('hr_departments', 'org_structure', '/hr/departments'),
       page('hr_positions', 'org_structure', '/hr/positions'),
+    ],
+  },
+  {
+    key: 'hr_time_pay',
+    ordinal: 38,
+    items: [
       page('attendance', 'attendance', '/hr/attendance'),
       page('leave', 'leave_request', '/hr/leave'),
       page('payroll', 'payroll_run', '/hr/payroll'),
       page('employee_advances', 'employee_advance', '/hr/advances'),
+    ],
+  },
+  {
+    key: 'hr_talent',
+    ordinal: 39,
+    items: [
       page('recruitment', 'recruitment', '/hr/recruitment'),
       page('performance', 'performance_review', '/hr/performance'),
       page('employee_requests', 'employee_request', '/hr/requests'),
@@ -612,8 +681,11 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     key: 'master_data',
     ordinal: 18,
     items: [
-      // Customers and Suppliers went back to Receivables and Payables, by
-      // direction (2026-10-04), so this heading holds reference data only.
+      // The business partners first (by direction, 2026-10-06: "yes move the
+      // customer and supplier to master data"), at the addresses every
+      // customer and supplier link already uses (D-FX-1).
+      page('customers', 'business_partner', '/sales/customers'),
+      page('suppliers', 'business_partner', '/payables/suppliers'),
       page('chart_of_accounts', 'chart_of_account', '/master-data/chart-of-accounts'),
       page('statement_mapping', 'financial_statement', '/master-data/statement-mapping'),
       page('currencies_rates', 'exchange_rate', '/master-data/exchange-rates'),

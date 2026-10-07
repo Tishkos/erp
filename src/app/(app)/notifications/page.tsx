@@ -4,6 +4,8 @@ import { ActionButton, AdminPage, FilterRow, Flash, ListToolbar, Select, Submit,
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { Denied } from '@/components/denied';
+import { cn } from '@/components/intent/cn';
+import { CategoryIcon } from '@/components/notifications/category-look';
 import { noteText, whenText, type Words } from '@/components/notifications/note-text';
 import { Pagination } from '@/components/ui';
 import { can } from '@domain/permissions';
@@ -145,35 +147,45 @@ export default async function NotificationsPage({ searchParams }: { searchParams
                   const tone = text.gone ? 'cancelled' : item.read ? 'draft' : 'submitted';
                   return (
                     <tr data-notification-id={item.id} data-read={item.read ? 'true' : 'false'} key={item.id}>
-                      <td>
-                        <time dateTime={item.createdAt} title={when.absolute}>
-                          {when.relative}
-                        </time>
+                      <td className="whitespace-nowrap">
+                        {/* The bell's unread dot, so the screen and the popover read alike. */}
+                        <span className="inline-flex items-center gap-2">
+                          <span
+                            aria-hidden="true"
+                            className={cn('size-2 shrink-0 rounded-full', item.read ? 'bg-transparent' : 'bg-primary ring-4 ring-primary-subtle')}
+                          />
+                          <time
+                            className={cn('tabular-nums', item.read ? 'text-muted-fg' : 'font-medium text-fg')}
+                            dateTime={item.createdAt}
+                            title={when.absolute}
+                          >
+                            {when.relative}
+                          </time>
+                        </span>
                       </td>
-                      <td>{n(`category.${item.category}`)}</td>
-                      <td>
+                      <td className="whitespace-nowrap">
+                        <span className="inline-flex items-center gap-2.5">
+                          <CategoryIcon category={item.category} className="size-8" gone={text.gone} />
+                          {n(`category.${item.category}`)}
+                        </span>
+                      </td>
+                      <td className="min-w-64">
                         {item.openable ? (
                           // A plain link on purpose: the address is worked out when it is followed (/notifications/open/<id>).
-                          <a className={s.sapLink} href={`/notifications/open/${item.id}`}>
+                          <a className={cn(s.sapLink, item.read ? 'font-medium' : 'font-semibold')} href={`/notifications/open/${item.id}`}>
                             <bdi dir="auto">{text.title}</bdi>
                           </a>
                         ) : (
-                          <bdi dir="auto">{text.title}</bdi>
+                          <bdi className={cn(text.gone ? 'text-muted-fg' : 'text-fg', item.read ? 'font-medium' : 'font-semibold')} dir="auto">
+                            {text.title}
+                          </bdi>
                         )}
                         {text.detail ? (
-                          <>
-                            <br />
-                            <span className="muted">
-                              <bdi dir="auto">{text.detail}</bdi>
-                            </span>
-                          </>
+                          <span className="mt-0.5 block text-xs leading-5 text-muted-fg">
+                            <bdi dir="auto">{text.detail}</bdi>
+                          </span>
                         ) : null}
-                        {text.gone && text.title !== n('gone') ? (
-                          <>
-                            <br />
-                            <span className="muted">{n('gone')}</span>
-                          </>
-                        ) : null}
+                        {text.gone && text.title !== n('gone') ? <span className="mt-0.5 block text-xs italic text-muted-fg">{n('gone')}</span> : null}
                       </td>
                       <td>
                         <span className={`status status--${tone} ${s.sapRegisterStatus}`} data-status={tone}>

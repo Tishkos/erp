@@ -13,6 +13,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { ownerPool, rejection, resetTestData, seedBranch } from './setup';
+import { linkItemsToSuppliers } from './item-supplier';
 import { withScope } from '@/server/db/client';
 import * as authz from '@/server/services/authorization';
 import * as po from '@/server/services/purchase-order';
@@ -235,6 +236,9 @@ async function receive(
 }
 
 // ---------------------------------------------------------------------------
+
+// 0408 — an item is bought only from a supplier linked to it; this suite's items are every supplier's.
+beforeEach(linkItemsToSuppliers);
 
 describe('05.2 gate · a receipt without a purchase order is impossible', () => {
   it('has no nullable order to leave empty — the column is NOT NULL', async () => {

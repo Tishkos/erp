@@ -74,11 +74,33 @@ export async function allocateDocumentNumber(
   const definition = await loadSequenceDefinition(tx, key);
   const scopeKey = scopeKeyFor(definition, context);
 
-  const result = await tx.execute(
-    sql`select next_document_serial(${key}, ${scopeKey})::text as serial`,
-  );
-  const serial = BigInt((result.rows[0] as { serial: string }).serial);
-  const documentNo = formatDocumentNumber(definition, serial, context);
+  /*
+   * A number is issued once, by whichever series — `doc_number_allocation`'s
+   * own unique index says so. Two series can come to write the same number
+   * when a prefix moves to another series (0409: PUR- left the local-goods
+   * payable for the purchase invoice), so a number another series already
+   * holds is stepped over rather than refused at the insert. The serial it
+   * skips is a gap the gap report shows.
+   */
+  let serial = 0n;
+  let documentNo = '';
+  for (let attempt = 0; ; attempt += 1) {
+    const result = await tx.execute(
+      sql`select next_document_serial(${key}, ${scopeKey})::text as serial`,
+    );
+    serial = BigInt((result.rows[0] as { serial: string }).serial);
+    documentNo = formatDocumentNumber(definition, serial, context);
+    const taken = await tx.execute(
+      sql`select 1 from doc_number_allocation where document_no = ${documentNo} limit 1`,
+    );
+    if (taken.rows.length === 0) break;
+    if (attempt >= 999) {
+      throw new Error(
+        `The ${key} series keeps meeting numbers another series has already issued (last ${documentNo}). ` +
+          'Give it a prefix of its own on the Numbering screen.',
+      );
+    }
+  }
 
   await tx.insert(docNumberAllocation).values({
     sequenceKey: key,

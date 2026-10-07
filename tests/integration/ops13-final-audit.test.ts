@@ -944,7 +944,8 @@ describe('Critical Rule 1 · every code and number is the system’s', () => {
   it('numbers every document from its own sequence', async () => {
     const purchase = await buy(supplierA, '5', '100');
     const sale = await sell('1', '300');
-    expect(purchase.invoiceNo).toMatch(/^API-BGW-2026-\d{6}$/);
+    // Purchase invoices are numbered PUR- since 0409 (2026-10-06, by direction: "make pur not api").
+    expect(purchase.invoiceNo).toMatch(/^PUR-BGW-2026-\d{6}$/);
     expect(sale.invoiceNo).toMatch(/^INV-BGW-2026-\d{6}$/);
   });
 });

@@ -37,6 +37,8 @@ import type { AccountType } from '@domain/accounts';
 import * as coa from '@/server/services/chart-of-accounts';
 import * as trialBalance from '@/server/services/trial-balance';
 import * as statementLines from '@/server/services/statement-lines';
+import { BalanceTrend } from '@/components/charts/balance-trend';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * One account — its details, its balance and the journals posted to it, on
@@ -297,6 +299,13 @@ export default async function AccountRecordPage({
         </div>
 
         <div className={s.profileStack}>
+          {/* The balance month by month, from the same lines as the figures below; nothing for a group account. */}
+          {node.isGroup ? null : (
+            <BalanceTrend
+              asOf={businessToday()}
+              lines={activity.map((row) => ({ postingDate: row.postingDate, debit: row.debitIqd, credit: row.creditIqd }))}
+            />
+          )}
           {node.isGroup ? null : (
             <section aria-labelledby="account-journals-title" className={CARD}>
               <header className={CARD_HEADER}>

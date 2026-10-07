@@ -21,6 +21,7 @@ import {
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { AuditLogButton, RecordHistory } from '@/components/admin/history';
 import { RelatedRecords } from '@/components/admin/related-records';
+import { AgeingChart } from '@/components/charts/ageing-chart';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, formatQuantity, formatTimestamp, type Locale } from '@/i18n/config';
@@ -350,6 +351,9 @@ export default async function BusinessPartnerPage({
               </ul>
             </Panel>
           ) : null}
+
+          {/* What we owe this supplier, by how late — the open invoices the position above adds up. */}
+          {position && routeRole === 'supplier' ? <AgeingChart rows={position.openInvoices} side="supplier" /> : null}
 
           {mayAdminister ? (
             <Panel title={row.active ? t('partners.deactivate_title') : t('reactivate')}>

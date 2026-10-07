@@ -17,6 +17,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   numeric,
   pgEnum,
   pgTable,
@@ -63,6 +64,12 @@ export const company = pgTable(
     uiPalette: text('ui_palette').notNull().default('sand'),
     /** The highlight colour — pressed, selected, actionable. 0171. */
     uiAccent: text('ui_accent').notNull().default('gold'),
+    /**
+     * Everyone's default appearance — palette, accent, layout and navigation —
+     * for a person who has not chosen their own; NULL is the built-in default.
+     * Keys and values held by `company_ui_defaults_known`. 0419.
+     */
+    uiDefaults: jsonb('ui_defaults'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

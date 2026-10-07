@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import styles from './admin.module.css';
+import { IntentSelect } from '@/components/admin/intent-select';
 
 /**
  * The lines of a draft journal, typed straight into the grid.
@@ -303,7 +304,8 @@ export function JournalLinesGrid({
                   <bdi dir="ltr">{index + 1}</bdi>
                 </td>
                 <td>
-                  <select
+                  <IntentSelect
+                    compact
                     aria-label={labels.account}
                     dir="auto"
                     onChange={(event) => patch(row.key, { accountId: event.target.value })}
@@ -315,7 +317,7 @@ export function JournalLinesGrid({
                         {accountLabel(a)}
                       </option>
                     ))}
-                  </select>
+                  </IntentSelect>
                   {row.error ? (
                     <span className={styles.sapRowError} role="alert">
                       {row.error}
@@ -323,7 +325,8 @@ export function JournalLinesGrid({
                   ) : null}
                 </td>
                 <td>
-                  <select
+                  <IntentSelect
+                    compact
                     aria-label={labels.department}
                     dir="auto"
                     onChange={(event) => patch(row.key, { departmentCode: event.target.value })}
@@ -334,7 +337,7 @@ export function JournalLinesGrid({
                         {d.code} · {d.name}
                       </option>
                     ))}
-                  </select>
+                  </IntentSelect>
                 </td>
                 <td>
                   <input

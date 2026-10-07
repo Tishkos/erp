@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { dueDateFor, type PaymentTerms } from '@domain/payment-terms';
 import { PAIRED_CHOICE } from './paired-picker';
+import { IntentDateField } from '@/components/admin/intent-date-field';
 
 /**
  * The due date a document's own header can work out — §16.
@@ -89,13 +90,12 @@ export function DueDateField({
   }, [dateField, partnerField, terms]);
 
   return (
-    <input
+    <IntentDateField
       aria-label={label}
       name={name}
       onChange={(event) => setValue(event.target.value)}
       ref={box}
       required={required}
-      type="date"
       value={value}
     />
   );

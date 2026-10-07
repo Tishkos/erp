@@ -13,6 +13,7 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as attendance from '@/server/services/attendance';
 import * as departments from '@/server/services/departments';
 import { saveAttendanceSheet } from './actions';
+import { IntentSelect } from '@/components/admin/intent-select';
 
 /**
  * Attendance — REQ-HR-001 Stage HR-2 (§8, D-HR-8). The day sheet of one
@@ -160,11 +161,11 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
                         ) : (
                           <>
                             <td>
-                              <select aria-label={`${x('status')} ${row.employeeNo}`} className={s.sapCellField} defaultValue={row.recorded ?? ''} name={`status_${index}`}>
+                              <IntentSelect aria-label={`${x('status')} ${row.employeeNo}`} compact defaultValue={row.recorded ?? ''} name={`status_${index}`}>
                                 <option value="">—</option>
                                 <option value="present">{x('status_present')}</option>
                                 <option value="absent">{x('status_absent')}</option>
-                              </select>
+                              </IntentSelect>
                             </td>
                             <td>
                               <input aria-label={`${x('check_in')} ${row.employeeNo}`} className={s.sapCellField} defaultValue={row.checkIn ?? ''} name={`check_in_${index}`} type="time" />

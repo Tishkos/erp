@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { keepEnglish } from './support/locale';
 
 /**
  * REQ-AR-001 — Receivables in a browser (2026-10-04).
@@ -36,6 +37,7 @@ test.setTimeout(240_000);
 
 async function signIn(page: Page) {
   await page.context().clearCookies();
+  await keepEnglish(page.context());
   await page.goto('/sign-in');
   await page.locator('input[name="email"]').fill(ADMIN.email);
   await page.locator('input[name="password"]').fill(ADMIN.password);

@@ -74,6 +74,8 @@ import * as savedViews from './saved-views';
 import * as stock from './stock-operations';
 import * as tasks from './tasks';
 import { rows as listRows } from './list';
+// A due date nobody set (an advance's balance waiting for its SWIFT) falls due on no day (2026-10-07).
+import { knownPayableDueSql } from './known-due-date';
 
 export interface LoaderContext {
   readonly tx: Tx;
@@ -618,6 +620,7 @@ const LOADERS_BY_KEY: Record<WidgetKey, Loader> = {
              (count(*) over())::int as "total"
         from payable p join business_partner bp on bp.id = p.supplier_id
        where p.due_date between ${ctx.today}::date and ${ctx.today}::date + 7
+         and ${knownPayableDueSql(sql`p.id`, sql`p.due_date`)} is not null
          and p.cancelled_at is null and p.closed_at is null and p.stage_code not in ('paid', 'closed')
        order by p.due_date, p.payable_no
        limit ${ROWS}`);

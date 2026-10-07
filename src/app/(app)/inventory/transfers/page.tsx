@@ -33,6 +33,8 @@ import * as stock from '@/server/services/stock-operations';
 import * as warehouses from '@/server/services/warehouses';
 import { createTransfer } from './actions';
 import { businessToday } from '@/server/domain/business-date';
+import { RegisterFilter } from '@/components/admin/register-filter';
+import { applyRegisterDates, registerDatesOf, registerDatesParams } from '@/server/domain/register-dates';
 
 /**
  * Transfer — Operations build, block 7: *"Items can be transferred between
@@ -72,7 +74,14 @@ export default async function TransfersPage({ searchParams }: { searchParams: Se
         )
       : [],
   }));
-  const shown = rows.filter((row) => matches(row, outcome.q));
+  // The Filter's window of transfer dates and the order, over the whole register — newest first unless asked.
+  const dates = registerDatesOf(await searchParams);
+  const shown = applyRegisterDates(
+    rows.filter((row) => matches(row, outcome.q)),
+    (row) => row.transferDate,
+    dates,
+    (row) => row.transferNo,
+  );
   const today = businessToday();
   const warehouseOptions = houses.map((house) => ({
     value: house.code,
@@ -164,10 +173,13 @@ export default async function TransfersPage({ searchParams }: { searchParams: Se
           clearHref="/inventory/transfers"
           clearLabel={t('clear_search')}
           countLabel={t('rows_shown', { count: shown.length })}
+          hidden={registerDatesParams(dates)}
           placeholder={t('search_placeholder')}
           q={outcome.q}
           searchLabel={t('search')}
-        />
+        >
+          <RegisterFilter dates={dates} keep={{ q: outcome.q }} path="/inventory/transfers" />
+        </ListToolbar>
         <div className="table-wrap">
           <table className="list">
             <thead>

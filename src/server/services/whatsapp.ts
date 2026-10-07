@@ -29,6 +29,7 @@ import { and, asc, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import { applyScope, db, withScope, type RequestScope, type Tx } from '../db/client';
 import { appUser, businessPartner, notificationRule, payableHold, warehouse, whatsappContact, whatsappMessage, whatsappSession, whatsappSetting } from '../db/schema';
 import { businessToday } from '../domain/business-date';
+import { importDueDate } from '../domain/balance-due';
 import { can, type Principal } from '../domain/permissions';
 import {
   DEFAULT_SETTINGS,
@@ -1269,11 +1270,14 @@ async function payableStatus(ctx: ReadContext, no: string): Promise<Drafted> {
     await ctx.tx.execute(sql`select name from payable_stage where payable_type_code = ${p.payableTypeCode} and code = ${p.stageCode} limit 1`)
   ).rows as { name: string }[];
   const stageName = stage?.name ?? p.stageCode;
+  // The import's due date only once one of its invoices had it set on purpose (2026-10-07).
+  const due = importDueDate(p.dueDate, v.invoices.map((invoice) => ({ ...invoice, status: String(invoice.status) })));
+  const dueText = due.date ?? (due.waiting ? L(ctx.locale, 'not set yet — set once the SWIFT is received', 'لم يُحدَّد بعد — يُحدَّد عند استلام السويفت') : '—');
   const lines = [
     `*${p.payableNo}* · ${v.type.name} · ${v.supplier?.name ?? '—'}`,
     L(ctx.locale, `Amount: ${money(p.amountTxn, p.currency)} (${money(p.amountIqd, 'IQD')})`, `المبلغ: ${money(p.amountTxn, p.currency)} (${money(p.amountIqd, 'IQD')})`),
     L(ctx.locale, `Stage: ${stageName} since ${day(p.stageSince)}`, `المرحلة: ${stageName} منذ ${day(p.stageSince)}`),
-    L(ctx.locale, `Due: ${p.dueDate ?? '—'} · Branch ${p.branchCode}`, `الاستحقاق: ${p.dueDate ?? '—'} · الفرع ${p.branchCode}`),
+    L(ctx.locale, `Due: ${dueText} · Branch ${p.branchCode}`, `الاستحقاق: ${dueText} · الفرع ${p.branchCode}`),
     p.onHold
       ? L(ctx.locale, `STOPPED — ${v.holds.map((h) => `${h.reasonCode} (owner ${nameOf(h.ownerUserId)}, since ${day(h.startedAt)})`).join('; ')}`, `موقوف — ${v.holds.map((h) => `${h.reasonCode} (المالك ${nameOf(h.ownerUserId)}، منذ ${day(h.startedAt)})`).join('؛ ')}`)
       : L(ctx.locale, 'Not stopped.', 'غير موقوف.'),

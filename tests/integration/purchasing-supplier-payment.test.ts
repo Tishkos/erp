@@ -18,6 +18,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { ownerPool, rejection, resetTestData, seedBranch } from './setup';
+import { linkItemsToSuppliers } from './item-supplier';
 import { fundLedger } from './funds';
 import { withScope } from '@/server/db/client';
 import * as authz from '@/server/services/authorization';
@@ -278,6 +279,9 @@ async function payment(amountIqd: bigint, overrides: Partial<pay.CreatePaymentIn
 }
 
 // ---------------------------------------------------------------------------
+
+// 0408 — an item is bought only from a supplier linked to it; this suite's items are every supplier's.
+beforeEach(linkItemsToSuppliers);
 
 describe('05.10 gate · payment allocates to specific invoices', () => {
   it('reduces the invoice and the payment together', async () => {

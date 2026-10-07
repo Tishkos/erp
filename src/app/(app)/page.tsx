@@ -74,8 +74,8 @@ export default async function Home() {
       variant="sap"
     >
       <div className="flex min-w-0 flex-col gap-6 text-sm">
-        <KpiRow served={visibleRoute} widgets={view.kpi} x={x} />
-        <ChartsBand served={visibleRoute} widgets={view.chart} x={x} />
+        <KpiRow charts={view.chart} served={visibleRoute} widgets={view.kpi} x={x} />
+        <ChartsBand asOf={view.asOf} served={visibleRoute} widgets={view.chart} x={x} />
         {lists.length > 0 ? (
           <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
             {lists.map((widget, index) => (

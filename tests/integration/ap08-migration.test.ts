@@ -20,6 +20,7 @@ import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import writeXlsxFile from 'write-excel-file/node';
 import { ownerPool, rejection } from './setup';
+import { linkItemToSupplier } from './item-supplier';
 import { withScope } from '@/server/db/client';
 import * as ap from '@/server/services/ap-invoice';
 import * as authz from '@/server/services/authorization';
@@ -131,6 +132,8 @@ beforeEach(async () => {
     `insert into business_partner (code, legal_name, is_customer, is_supplier, status, active)
      values ('SUP-AIKO','Aiko Energy Singapore Pte. Ltd.',false,true,'active',true)`,
   );
+  // 0408 — the panel bought after the cut-over is Aiko's too.
+  await linkItemToSupplier(PANEL, 'SUP-AIKO');
   // A USD account at Mansour Bank, where the sheet's SWIFTs left from.
   const { rows: parent } = await ownerPool.query(`select id from chart_of_account where code = 'A000001'`);
   const { rows: gl } = await ownerPool.query(

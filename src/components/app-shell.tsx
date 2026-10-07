@@ -12,6 +12,7 @@ import { AppFooter } from './app-footer';
 import { ErpShell } from './erp-shell';
 import { PermissionsWatch } from './permissions-watch';
 import type { UserAppearanceSettings } from '@/server/domain/appearance';
+import { mayConfigureCompanyDefaults } from '@/server/services/user-appearance';
 
 /**
  * The authenticated application shell.
@@ -23,10 +24,13 @@ export async function AppShell({
   children,
   initialAppearanceSettings,
   appearanceSettingsSaved,
+  appearanceFollowsCompany = false,
 }: {
   readonly children: ReactNode;
   readonly initialAppearanceSettings: UserAppearanceSettings;
   readonly appearanceSettingsSaved: boolean;
+  /** No appearance of their own, and the company has a default (0419): the shell adopts nothing on load. */
+  readonly appearanceFollowsCompany?: boolean;
 }) {
   const t = await getTranslations();
   // HD2 / HD4 — a restricted session gets the shell with no menu; the page
@@ -70,6 +74,8 @@ export async function AppShell({
       sections={sections}
       initialAppearanceSettings={initialAppearanceSettings}
       appearanceSettingsSaved={appearanceSettingsSaved}
+      appearanceFollowsCompany={appearanceFollowsCompany}
+      mayConfigureCompanyAppearance={!restriction && mayConfigureCompanyDefaults(principal)}
       unreadNotifications={unread}
       notificationZone={BUSINESS_TIME_ZONE}
       footer={<AppFooter />}

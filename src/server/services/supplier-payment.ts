@@ -44,6 +44,7 @@ import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
 import * as dueNotices from './due-notices';
+import { knownInvoiceDueSql } from './known-due-date';
 import * as posting from './posting';
 import * as statuses from './statuses';
 import { allocateDocumentNumber } from './numbering';
@@ -425,7 +426,8 @@ export async function allocate(
       invoiceId: invoice.id,
       invoiceNo: invoice.invoiceNo,
       partyName: supplier?.name ?? null,
-      dueDate: invoice.dueDate,
+      // No due date set yet (the balance of an advance): it cannot be late.
+      dueDate: invoice.dueDateSetAt ? invoice.dueDate : null,
       paidOn: payment.paymentDate,
       branchCode: payment.branchCode,
       link: `/payables/invoices/${invoice.invoiceNo}`,
@@ -809,6 +811,7 @@ export async function ageing(tx: Tx, asOf: string) {
       supplierInvoiceNo: apInvoice.supplierInvoiceNo,
       invoiceDate: apInvoice.invoiceDate,
       dueDate: apInvoice.dueDate,
+      dueDateSetAt: apInvoice.dueDateSetAt,
       totalIqd: apInvoice.totalIqd,
       settledIqd: apInvoice.settledAmountIqd,
       outstandingIqd: sql<string>`(${apInvoice.totalIqd} - ${apInvoice.settledAmountIqd})`,
@@ -823,7 +826,8 @@ export async function ageing(tx: Tx, asOf: string) {
     )
     .orderBy(businessPartner.code, apInvoice.dueDate);
 
-  return rows.map((row) => ({ ...row, bucket: bucketFor(row.dueDate, asOf) }));
+  // No due date set yet (an advance's balance waiting for its SWIFT): not yet due.
+  return rows.map((row) => ({ ...row, bucket: row.dueDateSetAt ? bucketFor(row.dueDate, asOf) : ('current' as const) }));
 }
 
 /**
@@ -1093,7 +1097,8 @@ export async function allocationsOf(tx: Tx, supplierPaymentId: string) {
   return tx
     .select({
       invoiceNo: apInvoice.invoiceNo,
-      dueDate: apInvoice.dueDate,
+      // None until it was set on purpose — an advance's balance waits for its SWIFT (2026-10-07).
+      dueDate: knownInvoiceDueSql(apInvoice.dueDate, apInvoice.dueDateSetAt),
       amountIqd: supplierPaymentAllocation.amountIqd,
       allocatedAt: supplierPaymentAllocation.allocatedAt,
     })
@@ -1135,6 +1140,8 @@ export async function openInvoicesFor(tx: Tx, supplierId: string) {
       supplierInvoiceNo: invoice.supplierInvoiceNo,
       invoiceDate: invoice.invoiceDate,
       dueDate: invoice.dueDate,
+      // Shown as none until it was set on purpose (2026-10-07); the order below still reads the column.
+      dueDateSet: invoice.dueDateSetAt !== null,
       totalIqd: invoice.totalIqd,
       outstanding: outstandingOn(invoice),
     }))

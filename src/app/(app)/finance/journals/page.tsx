@@ -13,6 +13,8 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as journal from '@/server/services/journal';
 import * as attachments from '@/server/services/attachments';
 import { startJournal } from './actions';
+import { RegisterFilter } from '@/components/admin/register-filter';
+import { applyRegisterDates, registerDatesOf, registerDatesParams } from '@/server/domain/register-dates';
 
 /**
  * Journal Entries — Phase 1 requirement 2.
@@ -57,9 +59,16 @@ export default async function JournalsPage({ searchParams }: { searchParams: Sea
   // date that decided the period (§14.6).
   const params = await searchParams;
   const month = typeof params.month === 'string' && /^\d{4}-\d{2}$/.test(params.month) ? params.month : null;
-  const shown = rows
-    .filter((row) => matches(row, outcome.q))
-    .filter((row) => (month ? row.postingDate.startsWith(month) : true));
+  // The Filter's window of posting dates and the order, over the whole register — newest first unless asked.
+  const dates = registerDatesOf(params);
+  const shown = applyRegisterDates(
+    rows
+      .filter((row) => matches(row, outcome.q))
+      .filter((row) => (month ? row.postingDate.startsWith(month) : true)),
+    (row) => row.postingDate,
+    dates,
+    (row) => row.entryNo,
+  );
 
   return (
     <AdminPage
@@ -92,10 +101,13 @@ export default async function JournalsPage({ searchParams }: { searchParams: Sea
             clearHref="/finance/journals"
             clearLabel={t('clear_search')}
             countLabel={t('rows_shown', { count: shown.length })}
+            hidden={{ ...(month ? { month } : {}), ...registerDatesParams(dates) }}
             placeholder={t('search_placeholder')}
             q={outcome.q}
             searchLabel={t('search')}
-          />
+          >
+            <RegisterFilter dateLabel={t('journals.posting_date')} dates={dates} keep={{ q: outcome.q, month }} path="/finance/journals" />
+          </ListToolbar>
 
           <div className={`${s.sapTableWrap} ${s.sapRegisterTableWrap}`}>
             <table aria-labelledby="journal-list-title" className={`${s.sapTable} ${s.sapRegisterTable}`}>

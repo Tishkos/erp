@@ -28,10 +28,19 @@ import * as payables from '@/server/services/payables';
 import { invoiceLineAvailability, markPaidAction, postApInvoice, removeApInvoiceLine, reverseApInvoice, saveApInvoiceAccounts, saveApInvoiceLine, setDueDateAction, submitApInvoice } from '../actions';
 import * as supplierNotes from '@/server/services/supplier-notes';
 import { PurchaseDoors, readDoors } from '../../record-doors';
+import { balanceDueDialogProps, dueDateMarkText } from '../../balance-due';
+import { BalanceDueDialog } from '@/components/admin/balance-due-dialog';
+import { DueDateText } from '@/components/admin/due-date-text';
+import * as balanceDue from '@/server/services/balance-due';
 import { businessToday } from '@/server/domain/business-date';
 import { MONEY_SCALE, parseDecimal, RATE_SCALE, toDecimalString, toIqd } from '@/server/domain/money';
-import { advanceOf } from '@/server/domain/payment-applications';
+import { advanceShareOf, invoiceAdvance } from '@/server/domain/payment-applications';
 import { QUANTITY_FACTOR, parseQuantity } from '@/server/domain/uom';
+import { IntentSelect } from '@/components/admin/intent-select';
+import { AccountBalanceLine, AccountBalanceNote } from '@/components/admin/account-balance-note';
+import * as posting from '@/server/services/posting';
+import * as trialBalance from '@/server/services/trial-balance';
+import { accountBalanceAction, approveApInvoiceDraft, saveApInvoiceSupplierNo } from '../actions';
 
 /**
  * One Purchase Invoice — Operations build, block 4.
@@ -103,6 +112,7 @@ export default async function ApInvoicePage({
   if (!can(principal, 'view', ap.PERMISSION_OBJECT)) {
     return <Denied object={page('ap_invoices')} />;
   }
+  const held = (await searchParams).held === '1';
 
   const found = await withCurrentUser(async (tx) => {
     const document = await ap.viewByNo(tx, decodeURIComponent(invoiceNo));
@@ -140,6 +150,13 @@ export default async function ApInvoicePage({
       importApplication: document.invoice.payableId
         ? await payables.load(tx, document.invoice.payableId)
         : null,
+      /*
+       * The balance's due date (2026-10-07): the import's question once its
+       * SWIFT is in — which opens "Set due date" here — and who set this
+       * invoice's date, once set.
+       */
+      duePrompt: document.invoice.payableId ? await balanceDue.promptFor(tx, principal, document.invoice.payableId) : null,
+      dueMark: (await balanceDue.marksFor(tx, [document.invoice])).get(document.invoice.id) ?? null,
       suppliers: await partners.listActiveInRole(tx, 'supplier'),
       stockItems: editable ? await items.invoiceChoices(tx, 'purchase') : [],
       // What may be chosen on the document: the supplier control accounts the
@@ -160,6 +177,29 @@ export default async function ApInvoicePage({
           .filter((id): id is string => Boolean(id))
           .map((id) => coa.loadAccount(tx, id).catch(() => null)),
       ),
+      /*
+       * The balance of each account the invoice names, from the ledger
+       * (2026-10-06, by direction: "the balance for each account we select …
+       * directly from the chart of accounts") — read for whoever may read the
+       * ledger. "As configured" is the account the posting rule would use.
+       * One at a time: a transaction answers one query at a time.
+       */
+      balances: await (async () => {
+        if (!(can(principal, 'view', 'chart_of_account') || can(principal, 'view', 'gl_inquiry'))) return null;
+        const mappedPayable = await posting
+          .mappedAccountFor(tx, 'purchasing.ap_invoice', 'supplier_payable', document.invoice.branchCode)
+          .catch(() => null);
+        const read = async (id: string | null | undefined) => (id ? await trialBalance.accountBalance(tx, id) : null);
+        const paidFromGl = document.invoice.advancePaidFromAccountId
+          ? await trialBalance.glAccountOfBankCash(tx, document.invoice.advancePaidFromAccountId)
+          : null;
+        return {
+          mappedPayable,
+          payable: await read(document.invoice.payableAccountId ?? mappedPayable),
+          expense: await read(document.invoice.expenseAccountId),
+          paidFrom: await read(paidFromGl),
+        };
+      })(),
       houses: editable ? await housesFor(tx, document.invoice.branchCode, document.lines.map((line) => line.warehouseCode)) : [],
     };
   });
@@ -197,7 +237,22 @@ export default async function ApInvoicePage({
     invoice.expenseCategoryCode === null &&
     can(principal, 'edit_draft', ap.PERMISSION_OBJECT);
   const maySubmit = invoice.status === 'draft' && can(principal, 'submit', ap.PERMISSION_OBJECT);
+  /*
+   * A super user's own draft has no Send for approval: they press Approve and
+   * post and the service records both steps (2026-10-06, by direction: "send
+   * for approval not needed when super user raises the invoice"). Everybody
+   * else sends it for approval, as before.
+   */
+  const approvesDirectly = maySubmit && principal.isSuperUser && invoice.createdBy === principal.userId;
   const mayChooseAccounts = mayEdit;
+  // The supplier's own number is corrected on a draft raised on its own (an order's invoice is the order's).
+  const mayEditSupplierNo =
+    invoice.status === 'draft' && invoice.purchaseOrderId === null && can(principal, 'edit_draft', ap.PERMISSION_OBJECT);
+  const balanceLabels = {
+    balance: t('invoices.balance'),
+    debit: t('invoices.balance_dr'),
+    credit: t('invoices.balance_cr'),
+  };
   /*
    * "As configured" means *no account was chosen on this document* — the
    * mapping decides. It must never be shown for a document that did choose
@@ -217,25 +272,46 @@ export default async function ApInvoicePage({
       <bdi dir="auto">{t('invoices.account_missing')}</bdi>
     );
   };
+  /*
+   * Each account with its balance under it, from the ledger (2026-10-06): on
+   * a draft the line follows the select, past it the figure is read with the
+   * page. Nothing at all for whoever may not read the ledger.
+   */
   const accountField = (
     label: string,
     name: string,
     current: string | null,
     eligible: (account: (typeof accounts)[number]) => boolean,
+    balance: { readonly shown: trialBalance.AccountBalance | null | undefined; readonly fallback?: string | null },
   ): DocumentField => ({
     label,
     control: mayChooseAccounts,
     value: mayChooseAccounts ? (
-      <select aria-label={label} defaultValue={current ?? ''} form="ap-invoice-accounts" name={name}>
-        <option value="">{t('invoices.account_default')}</option>
-        {accounts.filter(eligible).map((account) => (
-          <option key={account.id} value={account.id}>
-            {`${account.code} · ${account.name}`}
-          </option>
-        ))}
-      </select>
+      <>
+        <IntentSelect aria-label={label} defaultValue={current ?? ''} form="ap-invoice-accounts" name={name}>
+          <option value="">{t('invoices.account_default')}</option>
+          {accounts.filter(eligible).map((account) => (
+            <option key={account.id} value={account.id}>
+              {`${account.code} · ${account.name}`}
+            </option>
+          ))}
+        </IntentSelect>
+        {found.balances ? (
+          <AccountBalanceNote
+            fallbackAccountId={balance.fallback ?? null}
+            formId="ap-invoice-accounts"
+            labels={balanceLabels}
+            load={accountBalanceAction}
+            locale={locale}
+            selectName={name}
+          />
+        ) : null}
+      </>
     ) : (
-      accountLabel(current)
+      <>
+        {accountLabel(current)}
+        <AccountBalanceLine balance={balance.shown} labels={balanceLabels} locale={locale} />
+      </>
     ),
   });
   const mayPost =
@@ -253,7 +329,8 @@ export default async function ApInvoicePage({
   const paymentState = expenses.paymentState(
     {
       status: invoice.status,
-      dueDate: invoice.dueDate,
+      // Never overdue on a date nobody set — an advance's balance waits for its SWIFT (2026-10-07).
+      dueDate: invoice.dueDateSetAt ? invoice.dueDate : null,
       totalIqd: invoice.totalIqd,
       settledAmountIqd: invoice.settledAmountIqd,
     },
@@ -269,17 +346,53 @@ export default async function ApInvoicePage({
     can(principal, 'post', 'supplier_payment');
   const importApplication = found.importApplication;
 
+  /*
+   * The balance's due date (2026-10-07, by direction): the words, who set it,
+   * and — while the import's SWIFT is in and this invoice still waits for a
+   * date, for whoever may set one — the same dialog the import page opens.
+   */
+  const bd = await getTranslations('admin.balance_due');
+  const dueMark = found.dueMark ? await dueDateMarkText(found.dueMark, locale) : null;
+  const dueDialog =
+    found.duePrompt?.ask && found.duePrompt.waiting.some((waiting) => waiting.id === invoice.id)
+      ? await balanceDueDialogProps(found.duePrompt, locale)
+      : null;
+
   const self = `/payables/invoices/${encodeURIComponent(invoice.invoiceNo)}`;
 
   /*
-   * The advance, by `advanceOf` — the same arithmetic the posting uses to
-   * raise the payment application, so the record and the request to the bank
-   * cannot differ. Against the total summed from the lines, because
-   * `total_iqd` is written at posting and is zero before it.
+   * The advance, by `invoiceAdvance` — the same arithmetic the posting uses to
+   * raise the payment application, by percentage or by amount (0411), so the
+   * record and the request to the bank cannot differ. Against the total summed
+   * from the lines, because `total_iqd` is written at posting and is zero
+   * before it.
    */
-  const advanceIqd = advanceOf(total, invoice.advancePercent);
+  const advance = (() => {
+    try {
+      return invoiceAdvance({
+        totalIqd: total,
+        basis: invoice.advanceBasis,
+        percent: invoice.advancePercent,
+        amount: invoice.advanceAmount,
+        agreedCurrency: invoice.agreedCurrency,
+        agreedRate: invoice.agreedRate,
+      });
+    } catch (error) {
+      // A draft whose lines fell under its amount advance: the arithmetic
+      // refuses it (posting refuses it too), and the record shows no advance
+      // rather than a wrong one. Anything else is a fault and surfaces.
+      if (error instanceof Error && error.message.startsWith('an advance cannot be more than')) return null;
+      throw error;
+    }
+  })();
+  const advanceIqd = advance?.iqd ?? null;
   /** "20.0000" is 20; "20.5000" is 20.5. Trailing zeroes say nothing. */
   const trimPercent = (percent: string) => percent.replace(/\.?0+$/, '');
+  /** A figure in the currency the invoice was agreed in, with its dinars beside a foreign one. */
+  const agreedMoney = (agreedValue: bigint, iqdValue: bigint) =>
+    advance && advance.currency !== 'IQD'
+      ? `${formatMoney(toDecimalString(agreedValue, MONEY_SCALE), advance.currency, locale as Locale)} · ${money(toDecimalString(iqdValue, MONEY_SCALE))}`
+      : money(toDecimalString(iqdValue, MONEY_SCALE));
 
   const fields: DocumentField[] = [
     { label: column('invoice_no'), value: <bdi dir="ltr">{invoice.invoiceNo}</bdi> },
@@ -324,6 +437,33 @@ export default async function ApInvoicePage({
         </ProfileLink>
       ),
     },
+    /*
+     * The supplier's own invoice or receipt number (2026-10-06, by direction).
+     * An invoice entered without one carries our number in its place; that is
+     * not the supplier's, so it reads as none. Corrected on a draft.
+     */
+    {
+      label: x('supplier_receipt_no'),
+      control: mayEditSupplierNo,
+      value: mayEditSupplierNo ? (
+        <form action={saveApInvoiceSupplierNo} className="flex items-center gap-2">
+          <input name="id" type="hidden" value={invoice.id} />
+          <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
+          <input
+            aria-label={x('supplier_receipt_no')}
+            autoComplete="off"
+            defaultValue={invoice.supplierInvoiceNo === invoice.invoiceNo ? '' : invoice.supplierInvoiceNo}
+            dir="auto"
+            maxLength={100}
+            name="supplier_invoice_no"
+            type="text"
+          />
+          <Submit label={t('save')} tone="secondary" />
+        </form>
+      ) : (
+        <bdi dir="auto">{invoice.supplierInvoiceNo === invoice.invoiceNo ? '—' : invoice.supplierInvoiceNo}</bdi>
+      ),
+    },
     // PAY9 — a debit note names the invoice it adjusts.
     ...(found.adjusts ? [{ label: t('supplier_notes.invoice'), value: <ProfileLink code={found.adjusts} kind="purchase_invoice" /> }] : []),
     {
@@ -336,12 +476,27 @@ export default async function ApInvoicePage({
      * `due_date` cannot be empty, so an invoice entered on advance terms
      * carries the day it was entered; showing that reads as a promise nobody
      * made. `due_date_set_at` is stamped when somebody sets it on purpose.
+     * Until then a dash and why (2026-10-07: the balance of an advance falls
+     * due once the SWIFT is in); once set, who set it and when.
      */
-    ...(invoice.dueDateSetAt
+    ...(invoice.status !== 'reversed'
       ? [
           {
             label: column('due_date'),
-            value: <bdi dir="ltr">{formatBusinessDate(invoice.dueDate, locale as Locale)}</bdi>,
+            value: (
+              <span data-due-date-field="">
+                <DueDateText
+                  date={invoice.dueDateSetAt ? invoice.dueDate : null}
+                  locale={locale}
+                  waiting={bd('waiting')}
+                />
+                {dueMark ? (
+                  <span className="block text-xs text-muted-fg" data-due-date-mark="">
+                    <bdi dir="auto">{dueMark}</bdi>
+                  </span>
+                ) : null}
+              </span>
+            ),
           },
         ]
       : []),
@@ -378,22 +533,14 @@ export default async function ApInvoicePage({
      * What was agreed to be paid in front, and what that comes to — the figure
      * the payment application is raised for when the account is named (§15.3).
      */
-    ...(invoice.advancePercent && advanceIqd !== null
+    ...(advance && advanceIqd !== null
       ? [
-          {
-            label: x('advance_percent'),
-            value: (
-              <bdi dir="ltr">
-                {`${trimPercent(invoice.advancePercent)}% · ${money(
-                  toDecimalString(advanceIqd, MONEY_SCALE),
-                )}`}
-              </bdi>
-            ),
-          },
           /*
            * Where it leaves from and how, and the application the posting
-           * raised for it (2026-10-06): the account opens its own profile, the
-           * application its own page; before the posting, "when it posts".
+           * raised for it (2026-10-06) — first, as on the form (2026-10-07: "before
+           * that it checks which bank account, then … the payable amount"): the
+           * account opens its own profile, the application its own page; before
+           * the posting, "when it posts".
            */
           {
             label: x('advance_paid_from'),
@@ -415,10 +562,46 @@ export default async function ApInvoicePage({
                 ) : (
                   x('advance_application_pending')
                 )}
+                {/* The balance of the G/L account it is kept on (2026-10-06). */}
+                <AccountBalanceLine balance={found.balances?.paidFrom} labels={balanceLabels} locale={locale} />
               </>
             ) : (
               x('advance_paid_from_none')
             ),
+          },
+          /*
+           * How it was agreed — by percentage (the share) or by amount — then
+           * what it comes to, the payable amount (2026-10-06, by direction:
+           * "advance amount make it payable amount"), and what is left to pay:
+           * in the currency the invoice was agreed in (the figure the payment
+           * application asks the bank for) and in dinars.
+           */
+          {
+            label: x('advance_basis'),
+            value: (
+              <>
+                {x(advance.basis === 'amount' ? 'advance_basis_amount' : 'advance_basis_percent')}
+                {advance.basis === 'percent' && invoice.advancePercent ? (
+                  <>
+                    {' · '}
+                    <bdi dir="ltr">{`${trimPercent(invoice.advancePercent)}%`}</bdi>
+                  </>
+                ) : (
+                  <>
+                    {' · '}
+                    <bdi dir="ltr">{x.raw('share_of_total').replace('{percent}', advanceShareOf(advance))}</bdi>
+                  </>
+                )}
+              </>
+            ),
+          },
+          {
+            label: x('payable_amount'),
+            value: <bdi dir="ltr">{agreedMoney(advance.agreed, advanceIqd)}</bdi>,
+          },
+          {
+            label: x('left_to_pay'),
+            value: <bdi dir="ltr">{agreedMoney(advance.totalAgreed - advance.agreed, total - advanceIqd)}</bdi>,
           },
         ]
       : []),
@@ -432,12 +615,14 @@ export default async function ApInvoicePage({
       'payable_account_id',
       invoice.payableAccountId,
       (account) => account.controlAccount === 'supplier',
+      { shown: found.balances?.payable, fallback: found.balances?.mappedPayable ?? null },
     ),
     accountField(
       t('invoices.expense_account'),
       'expense_account_id',
       invoice.expenseAccountId,
       (account) => account.accountType === 'expense' && account.controlAccount === null,
+      { shown: found.balances?.expense },
     ),
     { label: column('submitted_by'), value: <bdi dir="auto">{submittedBy ?? t('none')}</bdi> },
     { label: t('ap_invoices.posted_by'), value: <bdi dir="auto">{postedBy ?? t('none')}</bdi> },
@@ -458,6 +643,12 @@ export default async function ApInvoicePage({
         saved={outcome.saved}
         savedLabel={t('saved')}
       />
+      {/* A super user's one-step approval stopped at Submitted for an automation rule's review. */}
+      {held && invoice.status === 'submitted' ? (
+        <p className={s.sapNote} role="status">
+          {x('held_by_rule')}
+        </p>
+      ) : null}
 
       <DocumentWindow
         actions={
@@ -469,7 +660,14 @@ export default async function ApInvoicePage({
                 <Submit label={t('invoices.save_accounts')} tone="secondary" variant="document" />
               </form>
             ) : null}
-            {maySubmit ? (
+            {approvesDirectly ? (
+              // A super user's own draft: one press records the submission and the approval (2026-10-06).
+              <form action={approveApInvoiceDraft}>
+                <input name="id" type="hidden" value={invoice.id} />
+                <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
+                <Submit label={t('ap_invoices.approve_and_post')} variant="document" />
+              </form>
+            ) : maySubmit ? (
               <form action={submitApInvoice}>
                 <input name="id" type="hidden" value={invoice.id} />
                 <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
@@ -493,13 +691,14 @@ export default async function ApInvoicePage({
               </Link>
             ) : null}
             {/*
-              Set due date is hidden (2026-10-03, by direction). The invoice is
-              entered without one because the company buys on advance, and the
-              moment the date becomes known — the bank confirms the transfer and
-              the supplier names the day for the balance — has not been settled.
-              `setDueDateAction` and `ap.setDueDate` stay where they are for
-              when it is.
+              Set due date — settled 2026-10-07, by direction: the date becomes
+              known once a payment application of the import is paid (the
+              SWIFT is in). Offered then, on an invoice still owing and still
+              without one, to whoever may set it; it opens the import's own
+              dialog, which sets the date on every invoice of the import that
+              waits for one.
             */}
+            {dueDialog ? <BalanceDueDialog {...dueDialog} autoOpen={false} opener={{ label: bd('set_button'), variant: 'document' }} /> : null}
             {mayReverse ? (
               <form action={reverseApInvoice} title={t('invoices.reverse_hint')}>
                 <input name="id" type="hidden" value={invoice.id} />
@@ -560,6 +759,13 @@ export default async function ApInvoicePage({
               stockUnavailable: t('invoices.stock_unavailable'),
               availableStock: t('invoices.available_stock'),
               availabilityHint: t('invoices.availability_hint'),
+              // 0408 — the items offered are this supplier's own.
+              supplierItemCode: t('invoices.supplier_item_code'),
+              notLinked: t('invoices.not_linked'),
+              noLinkedItems: t('invoices.no_linked_items'),
+              chooseSupplierFirst: t('invoices.choose_supplier_first'),
+              searchNotLinked: t.raw('invoices.search_not_linked') as string,
+              searchNotFound: t.raw('invoices.search_not_found') as string,
             }}
             live={{
               documentId: invoice.id,
@@ -622,7 +828,10 @@ export default async function ApInvoicePage({
                     <ProfileLink code={line.itemCode} kind="item" />
                   </td>
                   <td>
-                    <bdi dir="auto">{line.description}</bdi>
+                    {/* The name opens the item too (by direction, 2026-10-07: "make sure the item also clickable"). */}
+                    <ProfileLink code={line.itemCode} dir="auto" kind="item">
+                      {line.description}
+                    </ProfileLink>
                   </td>
                   <td className={s.sapNum}>
                     <bdi dir="ltr">{String(Number(line.quantity))}</bdi>
@@ -731,7 +940,7 @@ export default async function ApInvoicePage({
                     <tfoot>
                       <tr>
                         <td colSpan={3}>
-                          <strong>{t('journals.balanced')}</strong>
+                          <strong>{t('journals.total')}</strong>
                         </td>
                         <td className={s.sapNum}>
                           <strong>

@@ -81,13 +81,13 @@ Purchases are not typed in Projects; they arrive from Payables.
 See Procurement for the commitments and Project Costs for the cost lines.
 
 ## Project Master (الملف الرئيسي للمشروع)
-Path: Projects → Projects & Contracting → Project Master   |   Arabic: المشاريع ← المشاريع والمقاولات ← الملف الرئيسي للمشروع
+Projects → Projects & Planning → Project Master   |   Arabic: المشاريع ← المشاريع والتخطيط ← الملف الرئيسي للمشروع
 Address: /projects (a project's record: /projects/<project code>)
 Needs: `view` on `project` to open; `create` to add a project; `edit_draft` to edit it, add elements and add notes; `approve` to release, technically complete, reopen and close; `submit` to put on hold and resume
 What it is for: The register of every project — for a customer, internal or investment — with its budget, committed, actual and available amounts. A row opens the project record, where the project is edited and moved through its statuses, and where its structure, budget, costs and contract are read. (The Arabic page title reads سجل المشاريع.)
 
 ### How to find a project — Project Master
-1. Open Projects → Projects & Contracting → Project Master. The newest project is at the top; 25 rows per page.
+Projects → Projects & Planning → Project Master. The newest project is at the top; 25 rows per page.
 2. To search, type part of the project code, its name or the customer's name in **Search this list** (ابحث في هذه القائمة) and press the magnifier. **Clear** (مسح) removes the search.
 3. To filter, choose **Status** (الحالة) — All statuses (كل الحالات), Created, Released, On hold, Technically complete, Closed — and/or **Type** (النوع), then press **Filter** (تصفية).
 4. Columns: Code (الرمز), Name (الاسم), Type (النوع), Customer (العميل), Project manager (مدير المشروع), Baseline finish (نهاية الأساس), Budget, Committed, Actual, Available (see "Budget, committed, actual, available"), Status.
@@ -190,13 +190,13 @@ The project record has no printer and no paperclip; use Reports to print project
 - "Permission denied: 'approve' on 'project' is not granted to this user." — your role lacks that permission; ask an administrator.
 
 ## Contracts (العقود)
-Path: Projects → Projects & Contracting → Contracts   |   Arabic: المشاريع ← المشاريع والمقاولات ← العقود
+Projects → Projects & Planning → Contracts   |   Arabic: المشاريع ← المشاريع والتخطيط ← العقود
 Address: /projects/contracts
 Needs: `view` on `project`
 What it is for: A read-only list of the customer projects seen as contracts: who the customer is, the dates, the contract value, the budget and what has been spent. Nothing is created or changed here; a row opens the project record, where the Contract table shows retention and advance.
 
 ### How to read the list — Contracts
-1. Open Projects → Projects & Contracting → Contracts. Only projects whose type is the delivered "Customer project" type (code CUSTOMER) are listed.
+Projects → Projects & Planning → Contracts. Only projects whose type is the delivered "Customer project" type (code CUSTOMER) are listed.
 2. Search by project code, name or customer name in **Search this list** (ابحث في هذه القائمة); filter by **Status** (الحالة) and press **Filter** (تصفية).
 3. Columns:
    - **Code** (الرمز) — click it to open the project record.
@@ -210,13 +210,13 @@ What it is for: A read-only list of the customer projects seen as contracts: who
 5. To change a contract value after release, raise a change order (Change Orders) with a **Contract change**.
 
 ## WBS (هيكل تقسيم العمل (WBS))
-Path: Projects → Projects & Contracting → WBS   |   Arabic: المشاريع ← المشاريع والمقاولات ← هيكل تقسيم العمل (WBS)
+Projects → Projects & Planning → WBS   |   Arabic: المشاريع ← المشاريع والتخطيط ← هيكل تقسيم العمل (WBS)
 Address: /projects/wbs (one project: /projects/wbs?project=<project code>)
 Needs: `view` on `project` to open; `edit_draft` to add or change elements, activities and links and to schedule; `submit` as well to raise a stop line or record actual dates
 What it is for: The work breakdown structure of one project — its elements with their amounts rolled up the tree — and, under the tree, the schedule: activities and milestones, the links between them, and the critical path.
 
 ### How to open a project's structure — WBS
-1. Open Projects → Projects & Contracting → WBS. The newest project that is not Closed is shown.
+Projects → Projects & Planning → WBS. The newest project that is not Closed is shown.
 2. To see another, choose it in **Project** (المشروع) and press **Open** (فتح). (The list offers the 100 newest projects; older ones open from the project record's **WBS** link.)
 3. Under the filter: the project's status chip and the link **Open the project record** (فتح سجل المشروع).
 4. The tree. Columns: Code (الرمز, indented by level), Name (الاسم), Responsible (المسؤول), Planned start (البداية المخططة), Planned finish (النهاية المخططة), May receive (يستقبل: plan · costs · billing), Budget, Committed, Actual, Available, Availability (التوفر — with "raised to N %" when the stop line was raised for the element), Active (نشط) or inactive (معطّل), and **Edit** (تعديل) on each row.
@@ -350,13 +350,13 @@ Run it again after any change to durations, links, "Not before" dates or the cal
 - "status: … is closed" — a Closed project is not scheduled.
 
 ## Cost Plan (خطة التكاليف)
-Path: Projects → Projects & Contracting → Cost Plan   |   Arabic: المشاريع ← المشاريع والمقاولات ← خطة التكاليف
+Projects → Projects & Planning → Cost Plan   |   Arabic: المشاريع ← المشاريع والتخطيط ← خطة التكاليف
 Address: /projects/plan (one project: /projects/plan?project=<project code>)
 Needs: `view` on `project` to open; `edit_draft` to create a version and type the plan
 What it is for: What the project is expected to cost, by element, cost code and month, kept in versions (the original plan and each re-plan). The current version is the "Planned" figure on Progress (earned value) and "Plan" on Forecast. The plan limits nothing — spending is limited by the budget documents on Budgets.
 
 ### How to open the plan — Cost Plan
-1. Open Projects → Projects & Contracting → Cost Plan. The newest project that is not Closed is shown with its current version.
+Projects → Projects & Planning → Cost Plan. The newest project that is not Closed is shown with its current version.
 2. Choose another **Project** (المشروع) or an older **Version** (النسخة) and press **Open** (فتح). The current version is marked "current" (الحالية); an older one shows "an older version, kept as it was" (نسخة أقدم محفوظة كما كانت) and cannot be changed.
 3. The table has one row per element and cost code, one column per month, and **Total** (المجموع) at the end; the last row totals each month. A dash means nothing is planned in that month.
 4. With no version yet the page says "No plan yet — a version is created first." (لا خطة بعد — تُنشأ نسخة أولًا.)
@@ -398,7 +398,7 @@ To set or correct one month:
 - The element you want is not in the list — it is not a planning element or it is inactive; tick "Planning element" on WBS.
 
 ## Budgets (الموازنات)
-Path: Projects → Projects & Contracting → Budgets   |   Arabic: المشاريع ← المشاريع والمقاولات ← الموازنات
+Projects → Projects & Planning → Budgets   |   Arabic: المشاريع ← المشاريع والتخطيط ← الموازنات
 Address: /projects/budgets (new: /projects/budgets/new; one document: /projects/budgets/<number>)
 Needs: `view` on `project` to open; `create` to raise a document; `edit_draft` to change a draft; `submit` to submit it; `approve` to approve or reject it
 What it is for: The budget kept as documents — the original budget, supplements, returns and transfers between elements. Each is raised by one person and approved by another; an element's budget is the sum of the approved ones, and that budget is what availability control checks spending against.
@@ -418,7 +418,7 @@ A budget document cannot be deleted or cancelled. Nothing is posted to the ledge
 Important: only cost codes that carry an amount in the approved **original** budget get a budget line on the project. A cost code that is missing from the original cannot be spent against later, even if a supplement adds budget for it (the posting is refused with "There is no budget line '…' on this project"). Put an amount on every cost code the project will use when typing the original budget.
 
 ### How to find a budget document — Budgets
-1. Open Projects → Projects & Contracting → Budgets. The newest document is at the top; 50 rows per page.
+Projects → Projects & Planning → Budgets. The newest document is at the top; 50 rows per page.
 2. Search by document number, description or project name in **Search this list** (ابحث في هذه القائمة).
 3. Filter by **Project** (المشروع — All projects / كل المشاريع), **Kind** (النوع — All kinds / كل الأنواع) and **Status** (الحالة), then press **Filter** (تصفية).
 4. Columns: Number (الرقم), Project, Kind, Date (التاريخ), Description (الوصف), Lines (السطور), Amount (المبلغ — the sum of the lines; zero for a transfer, negative for a return), Raised by (رفعه), Approved by (اعتمده), Status.
@@ -473,13 +473,13 @@ If the project already has an approved original and you chose Original budget, t
 - "reason: is required" — type why it is rejected.
 
 ## Change Orders (أوامر التغيير)
-Path: Projects → Projects & Contracting → Change Orders   |   Arabic: المشاريع ← المشاريع والمقاولات ← أوامر التغيير
+Projects → Projects & Planning → Change Orders   |   Arabic: المشاريع ← المشاريع والتخطيط ← أوامر التغيير
 Address: /projects/change-orders (new: /projects/change-orders/new; one record: /projects/change-orders/<number>)
 Needs: `view` on `project` to open; `create` to raise a change order; `approve` to approve or reject it
 What it is for: A change to a released project — its scope, the customer's contract value, the budget and the finish date — in one document. It takes two approvals by people other than its raiser; the second approval raises the budget document itself and moves the forecast finish. The baseline never moves; the revised figures sit beside it.
 
 ### How to find a change order — Change Orders
-1. Open Projects → Projects & Contracting → Change Orders. Newest first; 50 rows per page.
+Projects → Projects & Planning → Change Orders. Newest first; 50 rows per page.
 2. Search by number, description or project name in **Search this list** (ابحث في هذه القائمة); filter by **Project** (المشروع) and **Status** (الحالة — Draft / مسودة, Approved / معتمد, Rejected / مرفوض) and press **Filter** (تصفية).
 3. Columns: Number (الرقم — with "· v2" for a later version), Project, Date, Description, **Contract change** (تغيير العقد), **Budget change** (تغيير الموازنة), **Schedule effect** (أثر الجدول — the revised finish date, or the number of days), **Approvals** (الاعتمادات — which of Commercial approval / Budget approval are in), Raised by (رفعه), Status.
 4. Click the number to open the change order.
@@ -539,13 +539,13 @@ The four icons in the title bar print it (Change Order — أمر التغيير
 - "reason: is required" — type why it is rejected.
 
 ## Project Costs (تكاليف المشروع)
-Path: Projects → Projects & Contracting → Project Costs   |   Arabic: المشاريع ← المشاريع والمقاولات ← تكاليف المشروع
+Projects → Execution & Progress → Project Costs   |   Arabic: المشاريع ← التنفيذ والتقدّم ← تكاليف المشروع
 Address: /projects/costs
 Needs: `view` on `project`
 What it is for: A read-only register of the cost line items: every cost on every project with its element, cost code, source document and journal, and their sum beside the ledger's figure for the same project. Costs are not typed here — they arrive from posted purchase invoices, posted material issues and posted labour.
 
 ### How to read and filter — Project Costs
-1. Open Projects → Projects & Contracting → Project Costs. Newest cost first; 50 rows per page.
+Projects → Execution & Progress → Project Costs. Newest cost first; 50 rows per page.
 2. Filter and press **Filter** (تصفية):
    - **Project** (المشروع) — one project, or All projects (كل المشاريع).
    - **Element** (العنصر) — type an element's code; its children are included.
@@ -573,13 +573,13 @@ When exactly one **Project** is chosen and Element, Cost code and the search box
 To correct a cost, correct its source: reverse the purchase invoice in Payables, or post a Return from project on Material Issues. A cost line itself cannot be edited or deleted.
 
 ## Procurement (مشتريات المشروع)
-Path: Projects → Projects & Contracting → Procurement   |   Arabic: المشاريع ← المشاريع والمقاولات ← مشتريات المشروع
+Projects → Execution & Progress → Procurement   |   Arabic: المشاريع ← التنفيذ والتقدّم ← مشتريات المشروع
 Address: /projects/procurement
 Needs: `view` on `project`
 What it is for: A read-only register of the purchase orders and payables assigned to project elements, showing the commitment each one made, how much of it has turned into cost or stock, how much was given back, and what is still open. See "How a purchase reaches a project".
 
 ### How to read the list — Procurement
-1. Open Projects → Projects & Contracting → Procurement. Newest document first; 50 rows per page.
+Projects → Execution & Progress → Procurement. Newest document first; 50 rows per page.
 2. Choose a **Project** (المشروع) and press **Filter** (تصفية), or search by document number, supplier name or supplier reference in **Search this list** (ابحث في هذه القائمة).
 3. Columns:
    - **Number** (الرقم) — click it to open the purchase order or the payable in Payables.
@@ -596,13 +596,13 @@ What it is for: A read-only register of the purchase orders and payables assigne
 An open amount here keeps the check "Open purchase orders and payables" open on the Close screen and blocks the settlement. Clear it by posting the remaining invoices or cancelling the order or payable in Payables.
 
 ## Material Issues (صرف المواد)
-Path: Projects → Projects & Contracting → Material Issues   |   Arabic: المشاريع ← المشاريع والمقاولات ← صرف المواد
+Projects → Execution & Progress → Material Issues   |   Arabic: المشاريع ← التنفيذ والتقدّم ← صرف المواد
 Address: /projects/material-issues (one document: /projects/material-issues/<number>)
 Needs: `view` on `project` to open; `create` to raise a document; `post` on `project` and `execute` on `inventory_movement` to post it; `edit_draft` to cancel a draft
 What it is for: Taking stock from a warehouse to a project element — the moment bought goods become project cost — and bringing unused stock back. An issue leaves the warehouse at its FIFO cost (oldest stock first); a return comes back at the cost it went out at.
 
 ### How to find a material issue — Material Issues
-1. Open Projects → Projects & Contracting → Material Issues. Newest first; 50 rows per page.
+Projects → Execution & Progress → Material Issues. Newest first; 50 rows per page.
 2. Search by document number, project name or element code in **Search this list** (ابحث في هذه القائمة); filter by **Project** (المشروع) and **Status** (الحالة — Draft / مسودة, Posted / مرحّل, Cancelled / ملغى) and press **Filter** (تصفية).
 3. Columns: Number (الرقم), Project, Element, Cost code, Warehouse (المخزن), Kind (النوع — Issue to project / صرف إلى المشروع, Return from project / إرجاع من المشروع), Date, Lines (السطور), Cost (التكلفة — filled once posted; negative for a return), Status.
 4. Click the number to open the document.
@@ -674,13 +674,13 @@ The stock comes back into the warehouse at that unit cost and the project's actu
 - "reason: is required" — type why it is cancelled.
 
 ## Progress (التقدم)
-Path: Projects → Projects & Contracting → Progress   |   Arabic: المشاريع ← المشاريع والمقاولات ← التقدم
+Projects → Execution & Progress → Progress   |   Arabic: المشاريع ← التنفيذ والتقدّم ← التقدم
 Address: /projects/progress (one project and day: /projects/progress?project=<project code>&as_of=<date>)
 Needs: `view` on `project` to open; `edit_draft` to measure progress and cancel hours; `approve` to approve measurements, milestones and hours; `submit` to report a milestone reached; `create` to book hours; `post` on `project` and `view` on `employee_compensation` to post the month's labour
 What it is for: How far the work has gone and what it is worth: earned value element by element to a chosen day, the progress measurements, the milestones and their trend, and the hours people worked on the project with the monthly labour posting.
 
 ### How to open and read earned value — Progress
-1. Open Projects → Projects & Contracting → Progress. The newest Released project is shown, as of today.
+Projects → Execution & Progress → Progress. The newest Released project is shown, as of today.
 2. Choose the **Project** (المشروع) and the day in **As of** (حتى تاريخ), then press **Open** (فتح).
 3. The table has one row per element; a parent's row is the sum of its own figures and its children's:
    - **Measured** (المقيس) — the element's own latest approved measurement up to the day.
@@ -786,13 +786,13 @@ Read across a row to see how a milestone's date moved from one schedule run to t
 - "No accounting mapping is configured for the 'project_labour' line of 'projects.timesheet'…" (or 'labour_absorption') — Finance maps the account in Accounting → General Ledger → Posting Mappings.
 
 ## Billing (الفوترة)
-Path: Projects → Projects & Contracting → Billing   |   Arabic: المشاريع ← المشاريع والمقاولات ← الفوترة
+Projects → Billing & Close → Billing   |   Arabic: المشاريع ← الفوترة والإغلاق ← الفوترة
 Address: /projects/billing (one project: /projects/billing?project=<project code>&period_end=<date>; one certificate: /projects/billing/<number>)
 Needs: `view` on `project` to open; `edit_draft` to add or cancel billing-plan lines, cancel a draft certificate and attach files; `create` to raise a certificate; `approve` to approve and post a certificate; `post` to run revenue recognition
 What it is for: Billing the customer of a customer project: the billing plan, the certificates raised from it or from measured progress, the contract's balances (certified, billed, retention, advance) and the period's revenue recognition. Internal and investment projects are not billed and do not appear here.
 
 ### How to open a project's billing — Billing
-1. Open Projects → Projects & Contracting → Billing. The newest Released customer project is shown. With none the page says "There is no customer project to bill." (لا يوجد مشروع عميل للفوترة.)
+Projects → Billing & Close → Billing. The newest Released customer project is shown. With none the page says "There is no customer project to bill." (لا يوجد مشروع عميل للفوترة.)
 2. Choose the **Project** (المشروع) — customer projects only — and, for revenue recognition, the **Period end** (نهاية الفترة; the last day of last month by default). Press **Open** (فتح).
 3. Under the filter: the project's status, the link **Open the project record** and the customer's code and name.
 4. **Billing plan** (خطة الفوترة) table: # (line number), Element, Description, Falls due (يستحق — the milestone or the date), Bills (يفوتر — "30 %" or Amount), Gross (الإجمالي), Due since (مستحق منذ), Status, Certificate (الشهادة — a link once billed), Actions.
@@ -908,13 +908,13 @@ If the EAC is above the contract value the page warns: "…this is a loss contra
 - "No accounting mapping is configured for the 'project_wip' line of 'projects.recognition'…" (or 'project_deferred_revenue') — Finance maps the account in Accounting → General Ledger → Posting Mappings.
 
 ## Forecast (التوقعات)
-Path: Projects → Projects & Contracting → Forecast   |   Arabic: المشاريع ← المشاريع والمقاولات ← التوقعات
+Projects → Billing & Close → Forecast   |   Arabic: المشاريع ← الفوترة والإغلاق ← التوقعات
 Address: /projects/forecast (one project and day: /projects/forecast?project=<project code>&as_of=<date>)
 Needs: `view` on `project` to open; `edit_draft` to type an estimate to complete
 What it is for: A report of what the project will have cost when it is finished: per element the plan, the budget, what is committed, what is spent, the estimate to complete, the estimate at completion and the variance. The project manager may replace the formula's estimate to complete with a typed one. Revenue recognition on Billing uses this report's estimate at completion.
 
 ### How to read the report — Forecast
-1. Open Projects → Projects & Contracting → Forecast. The newest Released project is shown, as of today.
+Projects → Billing & Close → Forecast. The newest Released project is shown, as of today.
 2. Choose the **Project** (المشروع) and the day in **As of** (حتى تاريخ) and press **Search** (بحث).
 3. One row per element; a parent's row includes its children. Columns:
    - **Plan** (الخطة) — the whole current cost plan of the element (all months).
@@ -953,13 +953,13 @@ The typed figure replaces the formula for that element's own amounts only; its c
 - The **Set ETC** button is missing — the project is Created or Closed, or you lack the edit-draft permission.
 
 ## Close (إغلاق المشروع)
-Path: Projects → Projects & Contracting → Close   |   Arabic: المشاريع ← المشاريع والمقاولات ← إغلاق المشروع
+Projects → Billing & Close → Close   |   Arabic: المشاريع ← الفوترة والإغلاق ← إغلاق المشروع
 Address: /projects/close (one project: /projects/close?project=<project code>)
 Needs: `view` on `project` to open; `approve` to mark technically complete, post a settlement and close the project; `create` to draft a settlement; `edit_draft` to cancel a draft settlement
 What it is for: Ending a project in order: technical completion, the settlement of its cost (to an asset under construction for an investment project, to the result otherwise), and the close — with a checklist of everything that still stands in the way.
 
 ### How to open and read the checklist — Close
-1. Open Projects → Projects & Contracting → Close. The newest Technically complete project is shown; if there is none, the newest Released one.
+Projects → Billing & Close → Close. The newest Technically complete project is shown; if there is none, the newest Released one.
 2. Choose the **Project** (المشروع) and press **Open** (فتح).
 3. Under the filter: the status, the link **Open the project record**, and how the project settles: "Customer project — settles to the result" (مشروع عميل — يُسوّى إلى النتيجة), "Internal project — settles to the result" (مشروع داخلي — يُسوّى إلى النتيجة) or "Investment project — settles to the asset under construction" (مشروع استثماري — يُسوّى إلى أصل قيد الإنشاء).
 4. The title counts what is left: "3 things stand in the way" or "nothing stands in the way" (لا شيء يعترض).
@@ -1034,13 +1034,13 @@ The project record also has a Close project button (with a "Closing note" box) t
 - "reason: is required" — type why the settlement is cancelled.
 
 ## Reports (التقارير)
-Path: Projects → Projects & Contracting → Reports   |   Arabic: المشاريع ← المشاريع والمقاولات ← التقارير
+HR → Talent & Requests → Reports   |   Arabic: المشاريع ← المواهب والطلبات ← التقارير
 Address: /projects/reports
 Needs: `view` on `project` to open; `print` on `project` for the PDF copy; `export` on `project` for the Excel and Word copies
 What it is for: The four project reports for one project, on screen and as a file. Read-only. The printed or exported copy carries exactly the figures the screen shows.
 
 ### How to run and print a report — Reports
-1. Open Projects → Projects & Contracting → Reports. The newest Released project and the Cost report are shown.
+HR → Talent & Requests → Reports. The newest Released project and the Cost report are shown.
 2. Choose the **Project** (المشروع) and the **Report** (التقرير):
    - **Cost report (hierarchy)** (تقرير التكاليف (الهيكل))
    - **Line items** (بنود التكاليف)

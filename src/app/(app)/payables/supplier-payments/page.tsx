@@ -9,6 +9,8 @@ import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
+import { RegisterFilter } from '@/components/admin/register-filter';
+import { applyRegisterDates, registerDatesOf, registerDatesParams } from '@/server/domain/register-dates';
 import * as payments from '@/server/services/supplier-payment';
 
 /**
@@ -44,7 +46,14 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Sea
   const mayCreate = can(principal, 'create', payments.PERMISSION_OBJECT);
 
   const rows = await withCurrentUser((tx) => payments.list(tx));
-  const shown = rows.filter((row) => matches(row, outcome.q));
+  // The Filter's window of payment dates and the order, over the whole register — newest first unless asked.
+  const dates = registerDatesOf(await searchParams);
+  const shown = applyRegisterDates(
+    rows.filter((row) => matches(row, outcome.q)),
+    (row) => row.paymentDate,
+    dates,
+    (row) => row.paymentNo,
+  );
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
 
   return (
@@ -80,10 +89,13 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Sea
             clearHref="/payables/supplier-payments"
             clearLabel={t('clear_search')}
             countLabel={t('rows_shown', { count: shown.length })}
+            hidden={registerDatesParams(dates)}
             placeholder={t('search_placeholder')}
             q={outcome.q}
             searchLabel={t('search')}
-          />
+          >
+            <RegisterFilter dates={dates} keep={{ q: outcome.q }} path="/payables/supplier-payments" />
+          </ListToolbar>
 
           <div className={`${s.sapTableWrap} ${s.sapRegisterTableWrap}`}>
             <table aria-labelledby="pay-list-title" className={`${s.sapTable} ${s.sapRegisterTable}`}>

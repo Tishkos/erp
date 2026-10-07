@@ -12,6 +12,7 @@ import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as coa from '@/server/services/chart-of-accounts';
 import * as trialBalance from '@/server/services/trial-balance';
+import { BalanceTrend } from '@/components/charts/balance-trend';
 
 /**
  * One account of the General Ledger: every journal posted to it, entry by
@@ -83,6 +84,16 @@ export default async function LedgerAccountPage({
       trail={[{ href: '/', label: t('dashboard_label') }]}
       variant="sap"
     >
+      {/* The register's running balance, day by day, as a picture — from the same rows, in the same currency. */}
+      <BalanceTrend
+        asOf={to}
+        className="mb-4"
+        currency={currency}
+        from={from}
+        lines={rows.map((line) => ({ postingDate: line.postingDate, debit: line.debit, credit: line.credit }))}
+        mode="days"
+        title={t('reports.running_balance')}
+      />
       <ReportWindow
         filter={<ReportFilter action={`/finance/gl-inquiry/${encodeURIComponent(code)}`} currency={currency} from={from} to={to} />}
         foot={

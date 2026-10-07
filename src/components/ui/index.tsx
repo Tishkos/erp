@@ -20,6 +20,7 @@ import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, Info, Search, type LucideIcon } from 'lucide-react';
 import styles from './ui.module.css';
+import { IntentSelect } from '@/components/admin/intent-select';
 
 export { styles as ui };
 export { PreviewAction } from './preview-action';
@@ -196,8 +197,7 @@ export function ContextField({
         <span>{label}</span>
       </label>
       {options ? (
-        <select
-          className={styles.select}
+        <IntentSelect
           id={id}
           onChange={onChange ? (event) => onChange(event.target.value) : undefined}
           value={value}
@@ -207,7 +207,7 @@ export function ContextField({
               {option.label}
             </option>
           ))}
-        </select>
+        </IntentSelect>
       ) : (
         <output className={styles.select} id={id}>
           {value}
@@ -570,13 +570,13 @@ export function ReportParameters({
         <label className={styles.contextField} htmlFor={field.id} key={field.id}>
           <span className={styles.contextLabel}>{field.label}</span>
           {field.options ? (
-            <select className={styles.select} defaultValue={field.value} id={field.id}>
+            <IntentSelect defaultValue={field.value} id={field.id}>
               {field.options.map((option) => (
                 <option key={option} value={option}>
                   {option}
                 </option>
               ))}
-            </select>
+            </IntentSelect>
           ) : (
             <output className={styles.select} id={field.id}>
               {field.value}

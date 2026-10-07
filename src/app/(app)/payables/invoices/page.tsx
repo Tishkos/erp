@@ -30,6 +30,11 @@ import { businessToday } from '@/server/domain/business-date';
 import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
 import { savedViewsFor } from '@/server/saved-views-gate';
 import { invoiceRegister } from '@/server/services/screen-registers';
+import { INVOICE_IMPORT_LINKS } from '@/server/domain/register-filters';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { DueDateText } from '@/components/admin/due-date-text';
+import { DatesHidden, RegisterFilter } from '@/components/admin/register-filter';
+import { registerDatesOf, registerDatesParams } from '@/server/domain/register-dates';
 
 /**
  * Purchase Invoices — Operations build, block 4.
@@ -69,6 +74,8 @@ export default async function ApInvoicesPage({ searchParams }: { searchParams: S
     return <Denied object={page('ap_invoices')} />;
   }
   const mayCreate = can(principal, 'create', ap.PERMISSION_OBJECT);
+  // What an invoice with no due date set says in the Due Date column (2026-10-07).
+  const dueWaiting = t('balance_due.waiting');
 
   // The person's saved views of this screen — and, on a bare arrival, their default one.
   const saved = await savedViewsFor('payables.invoices', searchParams);
@@ -76,11 +83,17 @@ export default async function ApInvoicesPage({ searchParams }: { searchParams: S
   const viewParam = typeof params.view === 'string' ? params.view : '';
   // Validated by the registry (an amount, at most four decimals), so the floor below cannot be a typo.
   const minAmount = saved?.current.params['min_amount'] ?? '';
+  // Linked to an import application or not (2026-10-06, by direction) — validated by the registry too.
+  const importParam = (INVOICE_IMPORT_LINKS as readonly string[]).includes(saved?.current.params['import'] ?? '')
+    ? (saved?.current.params['import'] ?? '')
+    : '';
   const today = businessToday();
+  // The Filter's window of invoice dates and the order — newest first unless asked (2026-10-07).
+  const dates = registerDatesOf(params);
 
   const { shown, notes, suppliers, categories, imports } = await withCurrentUser(async (tx) => ({
     // The register's rows and filters are `invoiceRegister` — the pinned count on Home asks the same function.
-    ...(await invoiceRegister(tx, { q: outcome.q, view: viewParam, minAmount }, today)),
+    ...(await invoiceRegister(tx, { q: outcome.q, view: viewParam, minAmount, importLink: importParam, dates }, today)),
     notes: await expenses.latestNotes(tx),
     suppliers: mayCreate ? await partners.listActiveInRole(tx, 'supplier') : [],
     categories: mayCreate ? await expenses.categories(tx) : [],
@@ -121,14 +134,25 @@ export default async function ApInvoicesPage({ searchParams }: { searchParams: S
             clearLabel={t('clear_search')}
             countLabel={t('rows_shown', { count: shown.length })}
             placeholder={t('search_placeholder')}
-            hidden={{ ...(viewParam ? { view: viewParam } : {}), ...(minAmount ? { min_amount: minAmount } : {}) }}
+            hidden={{
+              ...(viewParam ? { view: viewParam } : {}),
+              ...(minAmount ? { min_amount: minAmount } : {}),
+              ...(importParam ? { import: importParam } : {}),
+              ...registerDatesParams(dates),
+            }}
             q={outcome.q}
             searchLabel={t('search')}
           >
+            <RegisterFilter
+              dates={dates}
+              keep={{ q: outcome.q, view: viewParam, min_amount: minAmount, import: importParam }}
+              path="/payables/invoices"
+            />
             <SavedViewsMenu state={saved} />
           </ListToolbar>
 
           <form className={s.filterBar} method="get">
+            <DatesHidden dates={dates} />
             <FilterRow>
               <Select
                 defaultValue={viewParam}
@@ -142,6 +166,14 @@ export default async function ApInvoicesPage({ searchParams }: { searchParams: S
                   { value: 'overdue', label: x('view_overdue') },
                 ]}
               />
+              {/* An invoice with an import application behind it, or one without (2026-10-06). */}
+              <Select
+                defaultValue={importParam}
+                emptyLabel={x('import_filter_all')}
+                label={x('import_filter')}
+                name="import"
+                options={INVOICE_IMPORT_LINKS.map((value) => ({ value, label: x(`import_filter_${value}`) }))}
+              />
               <Field defaultValue={minAmount} label={x('min_amount')} min={0} name="min_amount" type="number" />
               <SubmitRow>
                 <Submit label={x('filter')} />
@@ -154,6 +186,10 @@ export default async function ApInvoicesPage({ searchParams }: { searchParams: S
               <thead>
                 <tr>
                   <th scope="col">{column('reference')}</th>
+                  {/* 2026-10-06, by direction: the import application has a column
+                      of its own, so the Reference is the invoice's number alone. */}
+                  <th scope="col">{x('import_application')}</th>
+                  <th scope="col">{x('supplier_receipt_no')}</th>
                   <th scope="col">{column('posting_date')}</th>
                   <th scope="col">{column('due_date')}</th>
                   <th scope="col">{column('supplier_code')}</th>
@@ -168,7 +204,7 @@ export default async function ApInvoicesPage({ searchParams }: { searchParams: S
               <tbody>
                 {shown.length === 0 ? (
                   <tr>
-                    <td className={s.sapEmptyRow} colSpan={8}>
+                    <td className={s.sapEmptyRow} colSpan={10}>
                       {t('ap_invoices.none')}
                     </td>
                   </tr>
@@ -182,24 +218,22 @@ export default async function ApInvoicesPage({ searchParams }: { searchParams: S
                       >
                         <bdi dir="ltr">{row.invoiceNo}</bdi>
                       </Link>
-                      {row.payableNo ? (
-                        <>
-                          {' · '}
-                          <Link
-                            className={s.sapLink}
-                            href={`/payables/${encodeURIComponent(row.payableNo)}`}
-                            title={x('import_tracking')}
-                          >
-                            <bdi dir="ltr">{row.payableNo}</bdi>
-                          </Link>
-                        </>
+                    </td>
+                    <td>
+                      {row.payableNo ? <ProfileLink code={row.payableNo} kind="import" /> : null}
+                    </td>
+                    <td>
+                      {/* Our own number stands in when the supplier's was not typed; that is not theirs. */}
+                      {row.supplierInvoiceNo && row.supplierInvoiceNo !== row.invoiceNo ? (
+                        <bdi dir="auto">{row.supplierInvoiceNo}</bdi>
                       ) : null}
                     </td>
                     <td>
                       <bdi dir="ltr">{formatBusinessDate(row.invoiceDate, locale as Locale)}</bdi>
                     </td>
                     <td>
-                      <bdi dir="ltr">{formatBusinessDate(row.dueDate, locale as Locale)}</bdi>
+                      {/* Only once set on purpose — an advance's balance waits for its SWIFT (2026-10-07). */}
+                      <DueDateText date={row.dueDateSetAt ? row.dueDate : null} locale={locale} waiting={dueWaiting} />
                     </td>
                     <td>
                       <bdi dir="ltr">{row.supplierCode ?? '—'}</bdi>

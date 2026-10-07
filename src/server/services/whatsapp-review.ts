@@ -35,7 +35,7 @@ import { can, type Principal } from '../domain/permissions';
 import { profileHref } from '../domain/profiles';
 import { QUANTITY_FACTOR, parseQuantity } from '../domain/uom';
 import { money, quantity } from '../domain/whatsapp';
-import { DOCUMENT_FAMILIES, familyOf, tidyNumber, type DocumentFamily } from '../domain/whatsapp-do';
+import { DOCUMENT_FAMILIES, familyOf, numberShapes, prefixesOf, tidyNumber, type DocumentFamily } from '../domain/whatsapp-do';
 import * as approvals from './approvals';
 import { inSavepoint } from './whatsapp-sql';
 
@@ -327,7 +327,9 @@ function familiesNamed(kind: string): Key[] | 'extras' | null {
   const wanted = kind.trim().toLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ');
   if (!wanted) return null;
   // A prefix says exactly one family ("INV" is not every label with "inv" in it).
-  const byPrefix = DOCUMENT_FAMILIES.filter((family) => wanted === family.prefix.toLowerCase() || wanted.startsWith(`${family.prefix.toLowerCase()} `));
+  const byPrefix = DOCUMENT_FAMILIES.filter((family) =>
+    prefixesOf(family).some((prefix) => wanted === prefix.toLowerCase() || wanted.startsWith(`${prefix.toLowerCase()} `)),
+  );
   if (byPrefix.length > 0) return byPrefix.map((family) => family.key);
   const hits = DOCUMENT_FAMILIES.filter((family) => {
     const key = family.key.replace(/_/g, ' ');
@@ -359,7 +361,7 @@ export async function stuckDocuments(
   const kindWords = kind.toLowerCase();
   const wantsExtra = (words: RegExp) => !kind || (named === 'extras' && words.test(kindWords));
   if (kind && named === 'extras' && !/pay(ment)?\s*app|payapp|prospect|partner|customer|supplier|inbox|approval/.test(kindWords)) {
-    return `I do not know a kind of document called "${kind}". The kinds: ${DOCUMENT_FAMILIES.map((family) => `${family.label} (${family.prefix})`).join(', ')}; and "payment applications", "prospects", "inbox".`;
+    return `I do not know a kind of document called "${kind}". The kinds: ${DOCUMENT_FAMILIES.map((family) => `${family.label} (${prefixesOf(family).join(' / ')})`).join(', ')}; and "payment applications", "prospects", "inbox".`;
   }
 
   const families = DOCUMENT_FAMILIES.filter((family) => (Array.isArray(named) ? named.includes(family.key) : named === null));
@@ -717,7 +719,10 @@ async function reviewPurchaseInvoice(tx: Tx, doc: Row, today: string, found: Fin
 
   const due = day(doc.due_date);
   const dated = day(doc.invoice_date);
-  if (!due) found.warnings.push('It has no due date, so the payables ageing cannot say when it falls due.');
+  // No due date set on purpose yet: the balance of an advance falls due once the
+  // SWIFT is in, and the import application asks for it then (2026-10-07).
+  if (!doc.due_date_set_at) found.fine.push('no due date yet — it is set once the SWIFT is received; until then it is not due and not in the overdue');
+  else if (!due) found.warnings.push('It has no due date, so the payables ageing cannot say when it falls due.');
   else if (due === dated) found.warnings.push(`The due date is the invoice date (${dated}): it will show as due at once. If the supplier gave terms, the real date is set on its page.`);
   else if (due < dated) found.warnings.push(`The due date (${due}) is BEFORE the invoice date (${dated}).`);
   else found.fine.push(`due ${due}`);
@@ -880,7 +885,7 @@ export async function reviewDocument(tx: Tx, principal: Principal, raw: string, 
   if (!no) return 'Which document? Give its number.';
   const family = familyOf(no);
   if (!family) {
-    return `I cannot tell what kind of document ${no} is from its number. The kinds I can check: ${DOCUMENT_FAMILIES.map((one) => `${one.label} (${one.prefix}-…)`).join(', ')}.`;
+    return `I cannot tell what kind of document ${no} is from its number. The kinds I can check: ${DOCUMENT_FAMILIES.map((one) => `${one.label} (${numberShapes(one)})`).join(', ')}.`;
   }
   if (!can(principal, 'view', viewObject(family.key))) {
     return `This person's role does not include "${family.label}" (the permission view on ${viewObject(family.key)}), so it is not theirs to see. Tell them so, and that an administrator gives it on Settings → Administration → Roles.`;

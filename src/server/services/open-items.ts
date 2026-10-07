@@ -74,6 +74,13 @@ export interface OpenItem {
   readonly invoiceNo: string;
   readonly invoiceDate: string;
   readonly dueDate: string;
+  /**
+   * False for a purchase invoice whose due date nobody has set yet — the
+   * balance of an advance, waiting for its SWIFT (2026-10-07). Its `dueDate`
+   * is then only the column's default: it is shown as none, is never late,
+   * and sits in "Not yet due". Always true on the customer side.
+   */
+  readonly dueDateSet: boolean;
   /** What decided the due date. Null on an invoice raised before terms existed. */
   readonly paymentTermsCode: string | null;
   readonly paymentTermsName: string | null;
@@ -272,6 +279,7 @@ export async function openItems(
            i.${s.number}                             as "invoiceNo",
            i.${s.date}::text                         as "invoiceDate",
            i.due_date::text                          as "dueDate",
+           (i.due_date_set_at is not null)           as "dueDateSet",
            ${s.terms}                                as "paymentTermsCode",
            t.name                                    as "paymentTermsName",
            i.status::text                            as "status",
@@ -307,11 +315,15 @@ export async function openItems(
 
   return rows
     .map((row): OpenItem => {
-      const untilDue = daysBetween(asOf, row.dueDate);
+      // No due date set yet (a purchase invoice waiting for its SWIFT): not
+      // late, not falling due — "Not yet due" until somebody sets one.
+      const known = row.dueDateSet !== false;
+      const untilDue = known ? daysBetween(asOf, row.dueDate) : 0;
       const payments = row.payments ?? [];
       const last = payments.at(-1) ?? null;
       return {
         ...row,
+        dueDateSet: known,
         side,
         payments,
         credits: row.credits ?? [],
@@ -319,11 +331,11 @@ export async function openItems(
         // Zero, not a negative number, while it is still in time: "overdue by
         // -6 days" is not a sentence anybody reads correctly.
         daysOverdue: untilDue < 0 ? -untilDue : 0,
-        bucket: bucketFor(row.dueDate, asOf),
+        bucket: known ? bucketFor(row.dueDate, asOf) : 'current',
         lastPaymentDate: last?.paidOn ?? null,
         // How late the money actually was — the question a credit controller
         // asks about a customer who always pays, eventually.
-        daysLateAtLastPayment: last ? Math.max(0, daysBetween(row.dueDate, last.paidOn)) : null,
+        daysLateAtLastPayment: last && known ? Math.max(0, daysBetween(row.dueDate, last.paidOn)) : null,
       };
     })
     .filter((item) => {
@@ -331,9 +343,10 @@ export async function openItems(
       if (filter.overdueOnly && item.daysOverdue === 0) return false;
       // Coming up, not already gone: an invoice that fell due last week is
       // overdue, and answering "what falls due this week" with it is wrong.
+      // One with no due date yet falls due on no day at all.
       if (
         filter.dueWithinDays != null &&
-        (item.daysUntilDue < 0 || item.daysUntilDue > filter.dueWithinDays)
+        (!item.dueDateSet || item.daysUntilDue < 0 || item.daysUntilDue > filter.dueWithinDays)
       ) {
         return false;
       }
@@ -416,6 +429,7 @@ async function customerQuery(tx: Tx, asOf: string, branch: string | null, party:
            x.no                                       as "invoiceNo",
            x.doc_date::text                           as "invoiceDate",
            x.due_date::text                           as "dueDate",
+           true                                       as "dueDateSet",
            x.terms_code                               as "paymentTermsCode",
            t.name                                     as "paymentTermsName",
            x.status                                   as "status",

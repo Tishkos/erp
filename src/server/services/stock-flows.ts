@@ -60,6 +60,8 @@ export interface FlowFilter extends RegisterPaging {
   readonly to?: string | null;
   readonly warehouseCode?: string | null;
   readonly kind?: string | null;
+  /** The register's order: newest first (the default) or oldest first (2026-10-07). */
+  readonly sort?: 'newest' | 'oldest' | null;
 }
 
 /** The movement kinds each register shows, in the order the filter offers them. */
@@ -101,6 +103,8 @@ function hrefOf(row: Raw): string | null {
       return no ? `/payables/goods-returns/${encodeURIComponent(no)}` : null;
     case 'opening_stock':
       return no ? `/inventory/opening-stock/${encodeURIComponent(no)}` : null;
+    case 'manual_stock_addition':
+      return no ? `/inventory/manual-additions/${encodeURIComponent(no)}` : null;
     case 'stock_adjustment':
       return no ? `/inventory/stock-reconciliation/${encodeURIComponent(no)}` : '/inventory/stock-reconciliation';
     case 'stock_count':
@@ -148,6 +152,7 @@ export async function forScreen(tx: Tx, principal: Principal, direction: FlowDir
         (select return_no from goods_return where id::text = m.source_document_id and m.source_document_type = 'goods_return'),
         (select adjustment_no from stock_adjustment where id::text = m.source_document_id and m.source_document_type = 'stock_adjustment'),
         (select document_no from opening_stock where id::text = m.source_document_id and m.source_document_type = 'opening_stock'),
+        (select addition_no from manual_stock_addition where id::text = m.source_document_id and m.source_document_type = 'manual_stock_addition'),
         (select count_no from stock_count where id::text = m.source_document_id and m.source_document_type = 'stock_count'),
         (select receipt_no from container_receipt where id::text = m.source_document_id and m.source_document_type = 'container_receipt'),
         (select delivery_note_no from delivery_note where id::text = m.source_document_id and m.source_document_type = 'delivery_note'),
@@ -178,7 +183,7 @@ export async function forScreen(tx: Tx, principal: Principal, direction: FlowDir
                d.issue_document_no as "issueDocumentNo", d.payable_no as "payableNo", j.entry_no as "journalEntryNo",
                coalesce(u.display_name, u.email) as "raisedBy"
           ${from}
-         order by m.movement_date desc, m.created_at desc, m.id desc
+         ${filter.sort === 'oldest' ? sql`order by m.movement_date asc, m.created_at asc, m.id asc` : sql`order by m.movement_date desc, m.created_at desc, m.id desc`}
          limit ${limit} offset ${offset}`);
       return (result.rows as unknown as Raw[]).map((row) => {
         const quantity = row.quantity;

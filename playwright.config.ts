@@ -1,5 +1,30 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:3000';
+
+/**
+ * The application opens in Arabic for anybody who has not chosen a language
+ * (2026-10-07, by direction). The specs read English unless they say otherwise,
+ * so every context starts with the language cookie set to English — a spec that
+ * wants Arabic sets the cookie itself, as it always has (`i18n/config.ts` ›
+ * LOCALE_COOKIE).
+ */
+const ENGLISH = {
+  cookies: [
+    {
+      name: 'erp-locale',
+      value: 'en',
+      domain: new URL(BASE_URL).hostname,
+      path: '/',
+      expires: -1,
+      httpOnly: false,
+      secure: false,
+      sameSite: 'Lax' as const,
+    },
+  ],
+  origins: [],
+};
+
 /**
  * End-to-end tests — Phase 00.5 baseline.
  *
@@ -18,7 +43,8 @@ export default defineConfig({
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
 
   use: {
-    baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:3000',
+    baseURL: BASE_URL,
+    storageState: ENGLISH,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },

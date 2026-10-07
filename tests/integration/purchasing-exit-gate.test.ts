@@ -20,6 +20,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { ownerPool, resetTestData, seedBranch } from './setup';
+import { linkItemsToSuppliers } from './item-supplier';
 import { fundLedger, openingFundsAccount } from './funds';
 import { withScope } from '@/server/db/client';
 import * as authz from '@/server/services/authorization';
@@ -212,6 +213,9 @@ async function payingAccountBalance(): Promise<number> {
 }
 
 // ---------------------------------------------------------------------------
+
+// 0408 — an item is bought only from a supplier linked to it; this suite's items are every supplier's.
+beforeEach(linkItemsToSuppliers);
 
 describe('Phase 05 exit gate · the §26 scenario, end to end', () => {
   it('carries one purchase from a supplier spreadsheet to a settled ledger', async () => {

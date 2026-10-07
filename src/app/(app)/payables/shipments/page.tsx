@@ -26,6 +26,8 @@ import * as shipments from '@/server/services/shipments';
 import { businessToday } from '@/server/domain/business-date';
 import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
 import { savedViewsFor } from '@/server/saved-views-gate';
+import { RegisterFilter } from '@/components/admin/register-filter';
+import { registerDatesOf, registerDatesParams, registerDatesQuery } from '@/server/domain/register-dates';
 
 /**
  * Shipments — REQ-AP-001 §21.9: the B/Ls, newest first, each with its
@@ -55,11 +57,14 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Se
 
   // The person's saved views of this screen — and, on a bare arrival, their default one.
   const saved = await savedViewsFor('imports.shipments', searchParams);
+  // The Filter's window of B/L dates and the order — newest first unless asked (2026-10-07).
+  const dates = registerDatesOf(await searchParams);
   const { result } = await withCurrentUser(async (tx) => ({
-    result: await shipments.listBlsForScreen(tx, { search: outcome.q, page: outcome.page }),
+    result: await shipments.listBlsForScreen(tx, { search: outcome.q, page: outcome.page, dates }),
   }));
   const shown = result.rows;
-  const query = (p: number) => [outcome.q ? `q=${encodeURIComponent(outcome.q)}` : '', `page=${p}`].filter(Boolean).join('&');
+  const query = (p: number) =>
+    [outcome.q ? `q=${encodeURIComponent(outcome.q)}` : '', registerDatesQuery(dates), `page=${p}`].filter(Boolean).join('&');
   const cs = (code: string, name: string) => (locale !== 'en' && t.has(`cs.${code}`) ? t(`cs.${code}`) : name);
   const day = (value: string | null) => (value ? formatBusinessDate(value, locale as Locale) : '—');
 
@@ -67,7 +72,7 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Se
     <AdminPage
       actions={
         mayCreate ? (
-          <Link className="action" href="/payables/shipments/new">
+          <Link className="action action--primary" href="/payables/shipments/new">
             {t('new_bl')}
           </Link>
         ) : null
@@ -90,10 +95,12 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Se
             clearHref="/payables/shipments"
             clearLabel={admin('clear_search')}
             countLabel={admin('rows_shown', { count: result.total })}
+            hidden={registerDatesParams(dates)}
             placeholder={admin('search_placeholder')}
             q={outcome.q}
             searchLabel={admin('search')}
           >
+            <RegisterFilter dates={dates} keep={{ q: outcome.q }} path="/payables/shipments" />
             <SavedViewsMenu state={saved} />
           </ListToolbar>
           <div className={`${s.sapTableWrap} ${s.sapRegisterTableWrap}`}>

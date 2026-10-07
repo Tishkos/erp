@@ -251,7 +251,8 @@ test.describe('REQ-LOG-001 · the Logistics module', () => {
     await page.goto('/inventory/in-transit');
     await expect(page).toHaveURL(/\/logistics\/in-transit/);
     await expect(page.getByRole('heading', { level: 1, name: 'In-Transit Inventory' })).toBeVisible();
-    await expect(page.getByText('How to read the figures')).toBeVisible();
+    // No explanatory paragraph (2026-10-07: "the logistics module UI doesn't match the rest") — the columns say it.
+    await expect(page.getByText('How to read the figures')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: /Transit warehouses/ })).toBeVisible();
     await expect(page.getByRole('heading', { name: /Invoice Status Tracking/ })).toBeVisible();
     // The column heads make the four figures unmistakable.

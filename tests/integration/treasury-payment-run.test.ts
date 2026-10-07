@@ -21,6 +21,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { ownerPool, rejection, resetTestData, seedBranch } from './setup';
+import { linkItemsToSuppliers } from './item-supplier';
 import { withScope } from '@/server/db/client';
 import * as authz from '@/server/services/authorization';
 import * as po from '@/server/services/purchase-order';
@@ -417,6 +418,9 @@ async function batchReadyToApprove(cashCeilingIqd?: bigint) {
 // 07.2 · the proposal
 // ---------------------------------------------------------------------------
 
+// 0408 — an item is bought only from a supplier linked to it; this suite's items are every supplier's.
+beforeEach(linkItemsToSuppliers);
+
 describe('07.2 gate · the proposal includes only eligible approved items (§15)', () => {
   it('includes a posted, due invoice from an active supplier', async () => {
     await fund('100000');
@@ -488,6 +492,7 @@ describe('07.2 gate · the proposal includes only eligible approved items (§15)
       `insert into business_partner (code, legal_name, is_supplier, status, active)
        values ('SUP-003','Supplier Three', true, 'active', true) returning id`,
     );
+    await linkItemsToSuppliers();
     const invoice = await openInvoice({ supplier: rows[0].id });
 
     const built = await proposal();

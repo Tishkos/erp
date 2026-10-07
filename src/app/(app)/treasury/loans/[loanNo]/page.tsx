@@ -54,6 +54,7 @@ import { STATUS_CHIP, statusKey } from '../../../payables/payment-applications/s
 import { windowTone } from '../../../payables/window-tone';
 import { businessToday } from '@/server/domain/business-date';
 import { isNotFoundError } from '@/server/not-found';
+import { IntentDateField } from '@/components/admin/intent-date-field';
 
 /**
  * One bank loan — REQ-AP-001 §15.7, §21.10.
@@ -406,12 +407,10 @@ export default async function LoanPage({
                           <tr key={row?.id ?? `blank-${index}`}>
                             <td>{index + 1}</td>
                             <td>
-                              <input
+                              <IntentDateField
                                 aria-label={`${t('due_date')} ${index + 1}`}
-                                className={`${s.input} ${s.dateInput}`}
                                 defaultValue={row?.dueDate ?? ''}
                                 name={`due_${index}`}
-                                type="date"
                               />
                             </td>
                             <td>

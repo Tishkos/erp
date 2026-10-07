@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, admin as s } from '@/components/admin';
 import { ReportWindow } from './report-filter';
+import { DueDateText } from './due-date-text';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -15,6 +16,10 @@ import * as partners from '@/server/services/partners';
 import { businessToday } from '@/server/domain/business-date';
 import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
 import { savedViewsFor } from '@/server/saved-views-gate';
+import { AgeingChart } from '@/components/charts/ageing-chart';
+import { IntentSelect } from '@/components/admin/intent-select';
+import { IntentDateField } from '@/components/admin/intent-date-field';
+import { INTENT_FILTER_FIELD, INTENT_INPUT } from '@/components/admin/intent-field-classes';
 
 /**
  * Receivables and Payables — §15 and §16, written once.
@@ -204,15 +209,18 @@ export async function OpenItemsReport({
     if (item.daysOverdue > 0) {
       return <span className={s.sapWarn}>{t('open_items.overdue_by', { days: item.daysOverdue })}</span>;
     }
+    // No due date set yet (an advance's balance): not due on any day (2026-10-07).
+    if (!item.dueDateSet) return <span className="muted">{t('balance_due.waiting')}</span>;
     return <span>{t('open_items.due_in', { days: item.daysUntilDue })}</span>;
   };
 
   const reportFilter = (
     <form action={route} className={s.sapFilterBar} method="get">
-      <label className={s.sapFilterField}>
+      <label className={`${s.sapFilterField} ${INTENT_FILTER_FIELD}`}>
         <span className={s.sapLabel}>{t(`partners.role_${side}`)}</span>
         <input
           autoComplete="off"
+          className={INTENT_INPUT}
           defaultValue={asked}
           list={`${side}-ageing-parties`}
           name="code"
@@ -228,15 +236,15 @@ export async function OpenItemsReport({
       </label>
       <label className={s.sapFilterField}>
         <span className={s.sapLabel}>{t('reports.as_at_label')}</span>
-        <input defaultValue={asOf} name="as_at" required type="date" />
+        <IntentDateField defaultValue={asOf} name="as_at" required />
       </label>
       <label className={s.sapFilterField}>
         <span className={s.sapLabel}>{t('open_items.show')}</span>
-        <select defaultValue={show} name="show">
+        <IntentSelect defaultValue={show} name="show">
           <option value="all">{t('open_items.show_all')}</option>
           <option value="open">{t('open_items.show_open')}</option>
           <option value="overdue">{t('open_items.show_overdue')}</option>
-        </select>
+        </IntentSelect>
       </label>
       <button className={`${s.button} ${s.primary}`} type="submit">
         {t('stock_movements.filter')}
@@ -277,7 +285,8 @@ export async function OpenItemsReport({
       title={page(titleKey)}
       variant="sap"
     >
-
+      {/* What is owed, by how late, as a picture of every open item the ageing at the foot counts. */}
+      <AgeingChart className="mb-4" hint={t('statement_outstanding.as_at', { date: day(asOf) })} rows={everyItem} side={side} />
 
       <ReportWindow
         meta={t('statement_outstanding.as_at', { date: day(asOf) })}
@@ -337,7 +346,7 @@ export async function OpenItemsReport({
                       ) : null}
                     </td>
                     <td><bdi dir="ltr">{day(item.invoiceDate)}</bdi></td>
-                    <td><bdi dir="ltr">{day(item.dueDate)}</bdi></td>
+                    <td><DueDateText date={item.dueDateSet ? item.dueDate : null} locale={locale} waiting={t('balance_due.waiting')} /></td>
                     <td><bdi dir="auto">{item.paymentTermsName ?? item.paymentTermsCode ?? '?'}</bdi></td>
                     <td className={s.sapNum}><bdi dir="ltr">{money(item.totalIqd)}</bdi></td>
                     <td className={s.sapNum}><bdi dir="ltr">{money(item.paidIqd)}</bdi></td>

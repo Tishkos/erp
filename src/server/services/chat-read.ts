@@ -19,6 +19,7 @@ import {
   CHAT_PAGE_SIZE,
   ChatError,
   badgeTotal,
+  chosenStatusOf,
   isTyping,
   likePattern,
   messageStatus,
@@ -26,6 +27,7 @@ import {
   presenceOf,
   previewKind,
   searchTerm,
+  type ChosenStatus,
   type MessageStatus,
   type Presence,
 } from '../domain/chat';
@@ -173,12 +175,29 @@ async function presenceMap(tx: Tx, userIds: readonly string[], now: Date) {
   const rows = await tx.select().from(chatPresence).where(inArray(chatPresence.userId, [...userIds]));
   for (const row of rows) {
     const view = presenceOf(
-      { lastSeenAt: row.lastSeenAt.toISOString(), lastActiveAt: row.lastActiveAt?.toISOString() ?? null, busy: row.busy },
+      {
+        lastSeenAt: row.lastSeenAt.toISOString(),
+        lastActiveAt: row.lastActiveAt?.toISOString() ?? null,
+        busy: row.busy,
+        status: chosenStatusOf(row),
+      },
       now,
     );
     map.set(row.userId, { presence: view.state, lastSeenAt: view.lastSeenAt });
   }
   return map;
+}
+
+/**
+ * The dots for a page of people at once — one read, as the viewer: the people
+ * they share a conversation with (and themself) are known, nobody else is
+ * (the presence policy), so a screen draws no dot for them. For the screens
+ * outside the chat that show people's avatars (the users list, a user's page).
+ */
+export async function presenceOfUsers(tx: Tx, userIds: readonly string[]): Promise<Record<string, Presence>> {
+  const unique = [...new Set(userIds)].filter((id) => /^[0-9a-f-]{36}$/i.test(id)).slice(0, 500);
+  const map = await presenceMap(tx, unique, new Date());
+  return Object.fromEntries([...map].map(([id, view]) => [id, view.presence]));
 }
 
 const personOf = (
@@ -616,11 +635,24 @@ export interface SyncRequest {
   /** Whether the person is typing in the open conversation; absent leaves it as it was. */
   readonly typing?: boolean | null;
   readonly limit?: number | undefined;
+  /**
+   * The other conversations open as chat windows at the foot of the page (the
+   * one in front is `open`); their revisions are in `revs`. At most three.
+   */
+  readonly windows?: readonly string[] | undefined;
+}
+
+/** A chat window's share of the answer: as `thread` / `live` / `closed` are for the open conversation. */
+export interface SyncWindow {
+  readonly id: string;
+  readonly thread: ThreadView | null;
+  readonly live: { readonly id: string; readonly typing: string[]; readonly members: PersonView[] } | null;
+  readonly closed: boolean;
 }
 
 export interface SyncResponse {
   readonly now: string;
-  readonly me: { readonly userId: string; readonly name: string; readonly busy: boolean };
+  readonly me: { readonly userId: string; readonly name: string; readonly busy: boolean; readonly status: ChosenStatus };
   readonly badge: number;
   readonly conversations: ConversationRow[];
   /** Present when the open conversation moved since the page's revision. */
@@ -629,6 +661,8 @@ export interface SyncResponse {
   readonly live: { readonly id: string; readonly typing: string[]; readonly members: PersonView[] } | null;
   /** The open conversation is gone from this person (left, or removed). */
   readonly closed: string | null;
+  /** The chat windows asked for, in the order asked. */
+  readonly windows: SyncWindow[];
 }
 
 export async function sync(tx: Tx, ctx: ActorContext, request: SyncRequest): Promise<SyncResponse> {
@@ -669,41 +703,69 @@ export async function sync(tx: Tx, ctx: ActorContext, request: SyncRequest): Pro
   let live: SyncResponse['live'] = null;
   let closed: string | null = null;
   if (request.open) {
-    const row = conversations.find((c) => c.id === request.open);
-    if (!row) {
-      closed = request.open;
-    } else {
-      const known = request.revs[request.open];
-      if (known === undefined || known !== row.rev) {
-        thread = await threadOf(tx, ctx, request.open, { limit: request.limit ?? CHAT_PAGE_SIZE }, now);
-        live = { id: thread.id, typing: thread.typing, members: thread.members };
-      } else {
-        const members = await chat.activeMembers(tx, request.open);
-        const presence = await presenceMap(tx, members.map((m) => m.userId), now);
-        const typingRows = await tx
-          .select({ userId: chatParticipant.userId, until: chatParticipant.typingUntil })
-          .from(chatParticipant)
-          .where(and(eq(chatParticipant.conversationId, request.open), isNull(chatParticipant.leftAt)));
-        live = {
-          id: request.open,
-          typing: typingRows
-            .filter((r) => r.userId !== me(ctx) && isTyping(r.until?.toISOString(), now))
-            .map((r) => members.find((m) => m.userId === r.userId)?.name ?? '')
-            .filter(Boolean),
-          members: members.map((m) => personOf(presence, m.userId, m.name, m.role)),
-        };
-      }
-    }
+    const view = await liveViewOf(tx, ctx, conversations, request.open, request.revs[request.open], request.limit ?? CHAT_PAGE_SIZE, now);
+    if (view === null) closed = request.open;
+    else ({ thread, live } = view);
+  }
+
+  // The chat windows docked at the foot of other screens, each the same answer the open conversation gets.
+  const windows: SyncWindow[] = [];
+  for (const id of [...new Set(request.windows ?? [])].filter((w) => w !== request.open).slice(0, SYNC_WINDOWS_MAX)) {
+    const view = await liveViewOf(tx, ctx, conversations, id, request.revs[id], CHAT_PAGE_SIZE, now);
+    windows.push(view === null ? { id, thread: null, live: null, closed: true } : { id, ...view, closed: false });
   }
 
   return {
     now: now.toISOString(),
-    me: { userId: me(ctx), name: self?.name ?? '', busy: stored.busy },
+    me: { userId: me(ctx), name: self?.name ?? '', busy: stored.busy, status: stored.status },
     badge: badgeOf(conversations),
     conversations,
     thread,
     live,
     closed,
+    windows,
+  };
+}
+
+/** The most chat windows one poll carries (the dock shows three). */
+export const SYNC_WINDOWS_MAX = 3;
+
+/**
+ * One conversation the page shows: the thread when it moved since the page's
+ * revision, else who is typing and the members' presence. Null when it is no
+ * longer this person's.
+ */
+async function liveViewOf(
+  tx: Tx,
+  ctx: ActorContext,
+  conversations: readonly ConversationRow[],
+  id: string,
+  known: number | undefined,
+  limit: number,
+  now: Date,
+): Promise<{ thread: ThreadView | null; live: NonNullable<SyncResponse['live']> } | null> {
+  const row = conversations.find((c) => c.id === id);
+  if (!row) return null;
+  if (known === undefined || known !== row.rev) {
+    const thread = await threadOf(tx, ctx, id, { limit }, now);
+    return { thread, live: { id: thread.id, typing: thread.typing, members: thread.members } };
+  }
+  const members = await chat.activeMembers(tx, id);
+  const presence = await presenceMap(tx, members.map((m) => m.userId), now);
+  const typingRows = await tx
+    .select({ userId: chatParticipant.userId, until: chatParticipant.typingUntil })
+    .from(chatParticipant)
+    .where(and(eq(chatParticipant.conversationId, id), isNull(chatParticipant.leftAt)));
+  return {
+    thread: null,
+    live: {
+      id,
+      typing: typingRows
+        .filter((r) => r.userId !== me(ctx) && isTyping(r.until?.toISOString(), now))
+        .map((r) => members.find((m) => m.userId === r.userId)?.name ?? '')
+        .filter(Boolean),
+      members: members.map((m) => personOf(presence, m.userId, m.name, m.role)),
+    },
   };
 }
 
@@ -733,7 +795,7 @@ export async function initialView(tx: Tx, ctx: ActorContext, requested: string |
     openId = requested;
   }
   return {
-    me: { userId: me(ctx), name: self?.name ?? '', busy: stored?.busy ?? false },
+    me: { userId: me(ctx), name: self?.name ?? '', busy: stored?.busy ?? false, status: stored?.status ?? 'available' },
     badge: badgeOf(conversations),
     conversations,
     thread,
@@ -819,6 +881,8 @@ export interface PersonHit {
   readonly userId: string;
   readonly name: string;
   readonly email: string;
+  /** The dot their avatar wears: known only for the people one already talks to (the presence policy), else null. */
+  readonly presence: Presence | null;
 }
 
 /** Colleagues a conversation can be opened with: active, holding chat, never the asker. */
@@ -836,7 +900,10 @@ export async function searchPeople(tx: Tx, ctx: ActorContext, query: string, lim
        ${filter}
      order by u.display_name
      limit ${Math.min(limit, 50)}`);
-  return (result.rows as { id: string; name: string; email: string }[]).map((r) => ({ userId: r.id, name: r.name, email: r.email }));
+  const rows = result.rows as { id: string; name: string; email: string }[];
+  // Presence as the policy allows it: the people one already talks to; anybody else is not known (no dot).
+  const presence = await presenceMap(tx, rows.map((r) => r.id), new Date());
+  return rows.map((r) => ({ userId: r.id, name: r.name, email: r.email, presence: presence.get(r.id)?.presence ?? null }));
 }
 
 // ---------------------------------------------------------------------------

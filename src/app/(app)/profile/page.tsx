@@ -15,12 +15,15 @@ import {
   admin as s,
 } from '@/components/admin';
 import { RecordHistory } from '@/components/admin/history';
+import { LanguageChoice } from '@/components/language-choice';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { formatTimestamp, type Locale } from '@/i18n/config';
+import { OwnAvatar } from '@/components/chat/chat-avatar';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as users from '@/server/services/users';
 import { listRouteViews } from '@/server/services/saved-views';
-import { ACCENTS, PALETTES, accentOrDefault, paletteOrDefault } from '@domain/appearance';
+import { ACCENTS, PALETTES } from '@domain/appearance';
+import * as companyService from '@/server/services/company';
 import { changePassword, saveAvatar, saveMyAppearance, saveProfile } from './actions';
 
 /**
@@ -41,10 +44,11 @@ const CHOICE =
 const AVATAR = 'size-20 rounded-full border-0 bg-primary-subtle text-2xl font-semibold text-primary-subtle-fg';
 
 export default async function ProfilePage({ searchParams }: { searchParams: SearchParams }) {
-  const [t, sv, admin, locale, context, outcome, params] = await Promise.all([
+  const [t, sv, admin, shell, locale, context, outcome, params] = await Promise.all([
     getTranslations('profile'),
     getTranslations('savedViews'),
     getTranslations('admin'),
+    getTranslations('shell'),
     getLocale(),
     requireContext(),
     outcomeOf(searchParams),
@@ -57,7 +61,8 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
   );
   // The person's own saved views of screens (/profile/views): how many, and the way in.
   const viewCount = (await withCurrentUser((tx, c) => listRouteViews(tx, c.principal))).length;
-  const own = { palette: paletteOrDefault(user.uiPalette), accent: accentOrDefault(user.uiAccent) };
+  // What the person sees: their own choice, else everyone's default (0419), else Sand and Gold.
+  const own = await withCurrentUser((tx) => companyService.appearanceFor(tx, context.principal.userId));
   const fmt = (d: Date | null) => (d ? formatTimestamp(d.toISOString(), locale as Locale) : admin('none'));
   const live = sessions.filter((x) => !x.revokedAt && x.expiresAt > new Date()).length;
   const roleLabel = context.principal.isSuperUser
@@ -86,11 +91,13 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
           <Panel>
             {/* The panel is the card; the identity inside it is not a second one. */}
             <div className={cn(s.profileCard, 'gap-1.5 border-0 bg-transparent px-1 pb-1 pt-2 shadow-none')}>
-              {user.image ? (
-                <img alt="" className={cn(s.avatarLarge, s.profileAvatar, AVATAR)} src={user.image} />
-              ) : (
-                <span className={cn(s.avatarLarge, s.profileAvatar, AVATAR)}>{initials}</span>
-              )}
+              {/* With the dot of the status chosen in the account menu (2026-10-06). */}
+              <OwnAvatar
+                className={cn(s.avatarLarge, s.profileAvatar, AVATAR, 'grid place-items-center overflow-hidden [&_img]:size-full [&_img]:object-cover')}
+                dotClassName="bottom-1 end-1 size-4 ring-[3px]"
+                image={user.image}
+                initials={initials}
+              />
               <h2 className="mt-2 text-lg font-semibold text-fg">{user.displayName}</h2>
               <p className="text-sm text-muted-fg">{user.email}</p>
               <Pill label={roleLabel} on={true} />
@@ -169,6 +176,13 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
         </div>
 
         <div className={s.profileStack}>
+          {/* The interface language (by direction, 2026-10-06: "the language selection should be in profile
+              settings"), the same switch as the account menu's: this device's choice, applied at once. */}
+          <Panel title={shell('language')}>
+            <p className={s.sectionHint}>{shell('language_hint')}</p>
+            <LanguageChoice className="erp-user-panel__choices erp-profile-language" current={locale === 'ar' ? 'ar' : 'en'} />
+          </Panel>
+
           {/* Each account saves its own palette and accent, independently of
               other users and of the company record. */}
           <Panel title={admin('company.appearance')}>

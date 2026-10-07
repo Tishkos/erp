@@ -16,6 +16,7 @@
 import type { Tx } from '../db/client';
 import type { Principal } from '../domain/permissions';
 import { pickOne } from '../domain/pick';
+import { registerDatesOf } from '../domain/register-dates';
 import * as availability from './availability';
 import * as declarations from './customs-declarations';
 import * as customs from './customs-pd';
@@ -52,7 +53,13 @@ const COUNTERS: Readonly<Record<string, Counter>> = {
     (
       await registers.invoiceRegister(
         tx,
-        { q: p['q'] ?? null, view: p['view'] ?? null, minAmount: p['min_amount'] ?? null },
+        {
+          q: p['q'] ?? null,
+          view: p['view'] ?? null,
+          minAmount: p['min_amount'] ?? null,
+          importLink: p['import'] ?? null,
+          dates: registerDatesOf(p),
+        },
         today,
       )
     ).shown.length,

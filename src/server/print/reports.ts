@@ -191,7 +191,8 @@ async function outstandingTable(
         cells: {
           invoice: item.invoiceNo,
           invoice_date: item.invoiceDate,
-          due_date: item.dueDate,
+          // None until set on purpose: an advance's balance waits for its SWIFT (2026-10-07).
+          due_date: item.dueDateSet ? item.dueDate : null,
           terms: item.paymentTermsName ?? item.paymentTermsCode ?? '',
           total: item.totalIqd,
           paid: item.paidIqd,
@@ -202,7 +203,9 @@ async function outstandingTable(
           late:
             item.daysOverdue > 0
               ? m.admin('open_items.overdue_by', { days: item.daysOverdue })
-              : m.admin('open_items.due_in', { days: item.daysUntilDue }),
+              : !item.dueDateSet
+                ? m.admin('balance_due.waiting')
+                : m.admin('open_items.due_in', { days: item.daysUntilDue }),
         },
       })),
       empty: m.admin('open_items.nothing'),
@@ -933,7 +936,8 @@ export async function openItems(
           party: `${item.partyName} / ${item.partyCode}`,
           invoice: item.invoiceNo,
           invoice_date: item.invoiceDate,
-          due_date: item.dueDate,
+          // None until set on purpose: an advance's balance waits for its SWIFT (2026-10-07).
+          due_date: item.dueDateSet ? item.dueDate : null,
           terms: item.paymentTermsName ?? item.paymentTermsCode ?? '',
           total: item.totalIqd,
           paid: item.paidIqd,
@@ -949,7 +953,9 @@ export async function openItems(
                 : m.admin('open_items.paid_on_time')
               : item.daysOverdue > 0
                 ? m.admin('open_items.overdue_by', { days: item.daysOverdue })
-                : m.admin('open_items.due_in', { days: item.daysUntilDue }),
+                : !item.dueDateSet
+                  ? m.admin('balance_due.waiting')
+                  : m.admin('open_items.due_in', { days: item.daysUntilDue }),
         },
       })),
       empty: m.admin('open_items.nothing'),

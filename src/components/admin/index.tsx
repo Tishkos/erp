@@ -4,6 +4,8 @@ import { ArrowLeft, CheckCircle2, ChevronRight, Search, TriangleAlert } from 'lu
 import { rowMatches } from '@domain/register-filters';
 import { PageHeader, Panel, Workspace } from '@/components/ui';
 import styles from './admin.module.css';
+import { IntentDateField } from './intent-date-field';
+import { IntentSelect } from './intent-select';
 import { Submit } from './submit';
 
 export { styles as admin };
@@ -301,9 +303,21 @@ export function Field({
       </label>
       {type === 'textarea' ? (
         <textarea className={styles.textarea} defaultValue={defaultValue ?? ''} {...common} />
+      ) : type === 'date' ? (
+        // Intent UI's date picker over the native field the form posts (intent-date-field.tsx).
+        <IntentDateField
+          aria-describedby={common['aria-describedby']}
+          autoComplete={autoComplete}
+          defaultValue={defaultValue === null || defaultValue === undefined ? '' : String(defaultValue)}
+          id={id}
+          label={label}
+          name={name}
+          readOnly={readOnly}
+          required={required}
+        />
       ) : (
         <input
-          className={`${styles.input}${type === 'date' ? ` ${styles.dateInput}` : ''}`}
+          className={styles.input}
           defaultValue={defaultValue ?? ''}
           max={max}
           maxLength={maxLength}
@@ -366,27 +380,25 @@ export function Select({
       <label className={styles.label} htmlFor={id}>
         {label}
       </label>
-      <select
-        className={styles.select}
+      {/* Intent UI's dropdown over the native select the form posts
+          (intent-select.tsx); a multiple or sized list stays native. */}
+      <IntentSelect
+        aria-describedby={hint ? `${id}-hint` : undefined}
+        className={multiple || size ? styles.select : undefined}
         defaultValue={(defaultValue as string | string[] | undefined) ?? (multiple ? [] : '')}
+        emptyLabel={emptyLabel}
         id={id}
         multiple={multiple}
         name={name}
+        options={options}
         required={required}
         size={size}
-      >
-        {emptyLabel !== undefined && !multiple ? <option value="">{emptyLabel}</option> : null}
-        {options.map((option, index) => (
-          <option
-            disabled={option.disabled}
-            key={`${option.value}-${index}`}
-            value={option.value}
-          >
-            {option.label}
-          </option>
-        ))}
-      </select>
-      {hint ? <span className={styles.hint}>{hint}</span> : null}
+      />
+      {hint ? (
+        <span className={styles.hint} id={`${id}-hint`}>
+          {hint}
+        </span>
+      ) : null}
     </div>
   );
 }

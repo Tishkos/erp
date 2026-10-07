@@ -82,7 +82,8 @@ export async function PartnerList({
   const { shown, paymentTerms } = await withCurrentUser(async (tx) => ({
     // The rows and filters are `partnerRegister` — the pinned count on Home asks the same function.
     ...(await partnerRegister(tx, role, { q: outcome.q, status })),
-    paymentTerms: mayCreate ? await terms.listActive(tx) : [],
+    // Only a supplier's New form asks for terms (2026-10-06).
+    paymentTerms: mayCreate && role === 'supplier' ? await terms.listActive(tx) : [],
   }));
 
   return (
@@ -112,16 +113,23 @@ export async function PartnerList({
                     columns remain, and a partner that has them keeps them. */}
                 <Field label={t('partners.email')} name="email" type="email" />
                 <Field label={t('partners.phone')} name="phone" />
-                <Select
-                  emptyLabel={t('partners.no_terms')}
-                  hint={t('partners.terms_hint')}
-                  label={t('partners.payment_terms')}
-                  name="paymentTermsCode"
-                  options={paymentTerms.map((term) => ({
-                    value: term.code,
-                    label: `${term.code} · ${term.name}`,
-                  }))}
-                />
+                {/* A supplier is entered with its payment terms; a customer is
+                    not asked for them (2026-10-06, by direction: "remove payment
+                    terms for customers creation since they dont need to") — a
+                    sale to a customer with no terms falls due on its invoice
+                    date (`payment-terms.dueDateOn`). */}
+                {role === 'supplier' ? (
+                  <Select
+                    emptyLabel={t('partners.no_terms')}
+                    hint={t('partners.terms_hint')}
+                    label={t('partners.payment_terms')}
+                    name="paymentTermsCode"
+                    options={paymentTerms.map((term) => ({
+                      value: term.code,
+                      label: `${term.code} · ${term.name}`,
+                    }))}
+                  />
+                ) : null}
                 <Field label={t('partners.address')} name="address" type="textarea" wide />
               </Grid>
               <SubmitRow>

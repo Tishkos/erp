@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { keepEnglish } from './support/locale';
 
 /**
  * From the invoice to the statement, both sides, in a browser.
@@ -30,6 +31,7 @@ test.setTimeout(240_000);
 
 async function signIn(page: Page, user: { email: string; password: string }) {
   await page.context().clearCookies();
+  await keepEnglish(page.context());
   await page.goto('/sign-in');
   expect(['localhost', '127.0.0.1']).toContain(new URL(page.url()).hostname);
   await page.getByRole('textbox', { name: 'Email', exact: true }).fill(user.email);
@@ -46,6 +48,14 @@ async function press(page: Page, name: string, expected: string | RegExp) {
       : page.getByText(expected).first();
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    // The record streams in after its address changes (the route's loading
+    // state comes first): wait for the button or the outcome before asking.
+    await page
+      .getByRole('button', { name, exact: true })
+      .or(done())
+      .first()
+      .waitFor({ timeout: 30_000 })
+      .catch(() => {});
     if (await done().isVisible().catch(() => false)) return;
     const button = page.getByRole('button', { name, exact: true }).first();
     if ((await button.count()) === 0) break;
@@ -189,6 +199,20 @@ test.describe('a purchase invoice reaches the supplier statement', () => {
     await page.goto('/master-data/items/ITM-SEED');
     await itemAccounts(page);
 
+    // 0408 — an item is bought only from a supplier linked to it: the new
+    // supplier is added under the item's Bought from, on the item's page.
+    await page.goto('/master-data/items/ITM-SEED');
+    const link = page.locator('form:has(select[name="supplierId"])').first();
+    await expect(link).toBeVisible({ timeout: 60_000 });
+    const supplierOption = await link
+      .locator('select[name="supplierId"] option')
+      .filter({ hasText: supplierCode })
+      .first()
+      .getAttribute('value');
+    await link.locator('select[name="supplierId"]').selectOption(supplierOption!);
+    await link.getByRole('button', { name: 'Link supplier', exact: true }).click();
+    await expect(page.locator('tr').filter({ hasText: supplierCode }).first()).toBeVisible({ timeout: 60_000 });
+
     await page.goto('/payables/invoices/new');
     await expect(page.getByRole('heading', { name: 'New invoice' })).toBeVisible({
       timeout: 60_000,
@@ -221,16 +245,46 @@ test.describe('a purchase invoice reaches the supplier statement', () => {
     await page.locator('input[name="quantity_0"]').fill('3');
     await page.locator('input[name="unit_price_0"]').fill('2500');
     await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
-    // A local purchase: the Import box starts ticked since 2026-10-03.
+
+    // 2026-10-06 — the supplier's own receipt number, and the balance of the
+    // account chosen, read from the ledger, under it.
+    const receiptNo = `RCPT-${RUN}`;
+    await page.locator('input[name="supplier_invoice_no"]').fill(receiptNo);
+    await expect(page.locator('[data-account-balance]').first()).toContainText(/Balance: IQD [\d,]+/, { timeout: 30_000 });
+
+    // Payable in advance: with Import ticked it opens on "by percentage" with
+    // the box empty — no preset share.
+    const basis = page.locator('select[name="advance_basis"]');
+    await expect(basis).toHaveValue('percent');
+    await expect(page.locator('input[name="advance_percent"]')).toHaveValue('');
+    // By amount: 1,000 of 7,500 is 13.33%, and 6,500 is left to pay.
+    await basis.selectOption('amount');
+    await page.locator('input[name="advance_amount"]').fill('1000');
+    await expect(page.locator('[data-payable-amount]')).toContainText('That is 13.33% of the total');
+    await expect(page.locator('[data-left-to-pay]')).toContainText('IQD 6,500');
+
+    // A local purchase: the Import box starts ticked since 2026-10-03. Unticked,
+    // no account is chosen to pay it from, so nothing can be paid in front
+    // (2026-10-07: "if there is no bank account the payable upfront cannot be
+    // selected"): the selection is "none" and locked, the box not drawn at all.
     await page.locator('input[name="is_import"]').uncheck();
+    await expect(basis).toBeDisabled();
+    await expect(basis).toHaveValue('none');
+    await expect(page.locator('[data-advance-needs-account]')).toBeVisible();
+    await expect(page.locator('input[name="advance_percent"], input[name="advance_amount"]')).toHaveCount(0);
     await page.getByRole('button', { name: 'Create', exact: true }).click();
-    await page.waitForURL(/\/payables\/invoices\/API-/, { timeout: 90_000 });
+    // Numbered PUR- since 0409 (2026-10-06).
+    await page.waitForURL(/\/payables\/invoices\/PUR-/, { timeout: 90_000 });
 
     // Exact status words: the record page carries "Posted by" and
     // "Waiting for approval" as labels, and a loose match on those would
-    // report success without pressing anything.
-    await press(page, 'Send for approval', 'Pending approval');
+    // report success without pressing anything. The admin is a super user and
+    // raised this draft: no Send for approval — one press approves and posts
+    // it (2026-10-06, by direction).
+    await expect(page.getByRole('button', { name: 'Send for approval', exact: true })).toHaveCount(0);
     await press(page, 'Approve and post', 'Posted');
+    // The supplier's number is on the record.
+    await expect(page.getByText(receiptNo, { exact: true }).first()).toBeVisible();
 
     // The whole point: the supplier's own account, with the invoice on it.
     const rows = await statementOf(page, supplierCode, 'supplier');

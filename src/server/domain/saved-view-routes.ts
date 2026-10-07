@@ -30,6 +30,7 @@
  * view. Until its route is served an entry would only be shown as unavailable,
  * so none is declared for it.
  */
+import { REGISTER_DATE_PARAMS, REGISTER_DATE_SLOT } from './register-dates';
 import type { ViewableRoute } from './saved-views';
 
 const SHIPMENT_VIEW = { namespace: 'admin.shipments', prefix: 'view_' } as const;
@@ -53,7 +54,16 @@ export const VIEWABLE_ROUTES: readonly ViewableRoute[] = [
         labels: { namespace: 'admin.expenses', prefix: 'view_' },
       },
       min_amount: { kind: 'amount' },
+      // Linked to an import application or not (2026-10-06).
+      import: {
+        kind: 'enum',
+        values: ['linked', 'unlinked'],
+        labels: { namespace: 'admin.expenses', prefix: 'import_filter_' },
+      },
+      // The Filter: a window of invoice dates and the order (2026-10-07).
+      ...REGISTER_DATE_PARAMS,
     },
+    slots: [REGISTER_DATE_SLOT],
   },
   {
     // "Overdue suppliers": show=overdue, as of today (the screen's own default).
@@ -99,8 +109,18 @@ export const VIEWABLE_ROUTES: readonly ViewableRoute[] = [
     },
     slots: [{ id: 'as_at', kind: 'point', param: 'as_at' }],
   },
-  { key: 'sales.invoices', route: '/sales/ar-invoices', params: { q: { kind: 'text' } } },
-  { key: 'sales.receipts', route: '/sales/customer-receipts', params: { q: { kind: 'text' } } },
+  {
+    key: 'sales.invoices',
+    route: '/sales/ar-invoices',
+    params: { q: { kind: 'text' }, ...REGISTER_DATE_PARAMS },
+    slots: [REGISTER_DATE_SLOT],
+  },
+  {
+    key: 'sales.receipts',
+    route: '/sales/customer-receipts',
+    params: { q: { kind: 'text' }, ...REGISTER_DATE_PARAMS },
+    slots: [REGISTER_DATE_SLOT],
+  },
   {
     key: 'sales.customers',
     route: '/sales/customers',
@@ -131,7 +151,12 @@ export const VIEWABLE_ROUTES: readonly ViewableRoute[] = [
     },
     slots: [{ id: 'eta', kind: 'range', from: 'eta_from', to: 'eta_to' }],
   },
-  { key: 'imports.shipments', route: '/payables/shipments', params: { q: { kind: 'text' } } },
+  {
+    key: 'imports.shipments',
+    route: '/payables/shipments',
+    params: { q: { kind: 'text' }, ...REGISTER_DATE_PARAMS },
+    slots: [REGISTER_DATE_SLOT],
+  },
   {
     // "Imports in customs": the PD register's open view.
     key: 'imports.pd',
@@ -196,6 +221,7 @@ export const VIEWABLE_ROUTES: readonly ViewableRoute[] = [
       item: { kind: 'text' },
       warehouse: { kind: 'token' },
       document: { kind: 'token' },
+      sort: REGISTER_DATE_PARAMS.sort,
     },
     slots: [{ id: 'dates', kind: 'range', from: 'from', to: 'to' }],
   },

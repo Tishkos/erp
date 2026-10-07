@@ -4,6 +4,10 @@ import { AppShell } from '@/components/app-shell';
 // every signed-in page, including those — a loading skeleton, a refusal — that import no
 // screen component (the Intent UI redesign, 2026-10-06).
 import '@/components/admin/admin.module.css';
+import { TableLabels } from '@/components/admin/table-labels';
+import { ChatDock } from '@/components/chat/chat-dock';
+import { ResultSounds } from '@/components/result-sounds';
+import { Toasts } from '@/components/toasts/toast-region';
 import { optionalContext, withCurrentUser } from '@/server/session';
 import * as companyService from '@/server/services/company';
 import * as userAppearance from '@/server/services/user-appearance';
@@ -54,16 +58,25 @@ export default async function AuthenticatedLayout({ children }: { children: Reac
         async (tx) => ({
           colors: await companyService.appearanceFor(tx, context.principal.userId),
           settings: await userAppearance.settingsFor(tx, context.principal.userId),
+          camera: await userAppearance.isCameraSession(tx, context.sessionId),
         }),
         // HD2 / HD4 — the shell dresses a restricted session too; the page decides.
         { allowRestricted: true },
       ).catch(() => ({
         colors: fallback,
-        settings: { settings: DEFAULT_USER_APPEARANCE, saved: true },
+        settings: { settings: DEFAULT_USER_APPEARANCE, saved: true, followsCompany: false },
+        camera: false,
       }))
-    : { colors: fallback, settings: { settings: DEFAULT_USER_APPEARANCE, saved: true } };
+    : { colors: fallback, settings: { settings: DEFAULT_USER_APPEARANCE, saved: true, followsCompany: false }, camera: false };
   const { palette, accent } = appearance.colors;
-  const { settings, saved } = appearance.settings;
+  // `followsCompany`: no appearance of their own and the company has a default — nothing is adopted on load (0419).
+  const { saved, followsCompany } = appearance.settings;
+  // Noah's camera pictures the top bar's menus — the only menus it may press
+  // (`services/live-screenshot.ts` › MAY_PRESS) — so its own short-lived
+  // session is drawn with the top bar, whatever navigation the person chose.
+  const settings = appearance.camera
+    ? { ...appearance.settings.settings, navigation: 'top' as const }
+    : appearance.settings.settings;
 
   return (
     <div
@@ -73,14 +86,32 @@ export default async function AuthenticatedLayout({ children }: { children: Reac
       data-border-style={settings.borderStyle}
       data-component-size={settings.componentSize}
       data-density={settings.density}
+      data-header={settings.header}
+      data-motion={settings.motion}
+      data-navigation={settings.navigation}
       data-palette={palette}
       data-radius={settings.cornerStyle}
       data-shadow={settings.shadow}
+      data-side-colour={settings.sidebarColour}
+      data-side-groups={settings.sidebarGroups}
+      data-side-panel={settings.sidebar}
+      data-table-stripes={settings.tableStripes}
+      data-text-size={settings.textSize}
       data-width={settings.contentWidth}
     >
-      <AppShell initialAppearanceSettings={settings} appearanceSettingsSaved={saved}>
+      <AppShell
+        appearanceFollowsCompany={followsCompany}
+        appearanceSettingsSaved={saved}
+        initialAppearanceSettings={settings}
+      >
         {children}
       </AppShell>
+      <TableLabels />
+      {/* The chat windows at the foot of every screen, and the sounds a form's result makes (2026-10-06). */}
+      <ChatDock />
+      <ResultSounds camera={appearance.camera} />
+      {/* The pop-up notifications in the corner: a form's result, a new notification, a new message (2026-10-07). */}
+      <Toasts camera={appearance.camera} />
     </div>
   );
 }

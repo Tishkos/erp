@@ -38,6 +38,7 @@ import { containerChip } from '../status';
 import { windowTone } from '../../window-tone';
 import { businessToday } from '@/server/domain/business-date';
 import { isNotFoundError } from '@/server/not-found';
+import { IntentSelect } from '@/components/admin/intent-select';
 
 /**
  * One container — REQ-AP-001 §17.2, §18. The Purchase Invoice's window: the
@@ -380,9 +381,8 @@ export default async function ContainerPage({
                           return (
                             <tr key={index}>
                               <td>
-                                <select
+                                <IntentSelect
                                   aria-label={`${t('model')} ${index + 1}`}
-                                  className={s.select}
                                   defaultValue={line?.itemCode ?? ''}
                                   name={`item_${index}`}
                                 >
@@ -392,7 +392,7 @@ export default async function ContainerPage({
                                       {choice.label}
                                     </option>
                                   ))}
-                                </select>
+                                </IntentSelect>
                               </td>
                               <td>
                                 <input

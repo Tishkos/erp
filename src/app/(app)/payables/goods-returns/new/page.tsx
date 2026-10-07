@@ -19,6 +19,7 @@ import * as banks from '@/server/services/bank-cash-accounts';
 import * as gr from '@/server/services/goods-return';
 import { createGoodsReturn } from '../actions';
 import { businessToday } from '@/server/domain/business-date';
+import { IntentSelect } from '@/components/admin/intent-select';
 
 /**
  * Raising a Purchase Return — Operations build, block 10.
@@ -190,14 +191,14 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
                 />
                 <label className={s.field}>
                   <span className={s.label}>{t('goods_returns.offset')}</span>
-                  <select className={s.select} name="offset_kind" required>
+                  <IntentSelect name="offset_kind" required>
                     <option value="payable">{t('goods_returns.offset_payable')}</option>
                     <option value="bank">{t('goods_returns.offset_bank')}</option>
-                  </select>
+                  </IntentSelect>
                 </label>
                 <label className={s.field}>
                   <span className={s.label}>{t('goods_returns.bank_account')}</span>
-                  <select className={s.select} name="offset_bank_account_id">
+                  <IntentSelect name="offset_bank_account_id">
                     <option value="" />
                     {accounts
                       // Active, and its G/L account still there — one deleted
@@ -208,7 +209,7 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
                           {account.code} · {account.name}
                         </option>
                       ))}
-                  </select>
+                  </IntentSelect>
                 </label>
                 {/* IMPROVEMENT-002 — after a landed-cost lock the goods carry
                     freight, duty and clearance on top of the invoice price;

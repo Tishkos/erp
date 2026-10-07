@@ -25,11 +25,13 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/components/intent/cn';
-import { BarList, Chart, Legend, StackedBands } from '@/components/admin/charts';
+import { BarList, Chart, Legend, Sparkline, type Series } from '@/components/admin/charts';
 import { Band, BandTable, INK, NUMERIC_CELL, SeeAll } from '@/components/admin/dashboard-band';
-import { TrendBars } from '@/components/home/trend-chart';
+import { AreaTrend } from '@/components/charts/area-trend';
+import { Donut } from '@/components/charts/donut';
+import { sharesOf, shortMoney } from '@/components/charts/figures';
 import { directionOf, formatBusinessDate, formatMoney, formatQuantity, formatTimestamp, type Locale } from '@/i18n/config';
-import { chartNumber, moneyString, sumMoney } from '@/server/domain/dashboard-charts';
+import { chartNumber, daysInMonth, moneyString, sumMoney } from '@/server/domain/dashboard-charts';
 import type { Cell, ChartData, JourneyData, KpiData, Note, TableData } from '@/server/domain/dashboard-data';
 import type { DataFamily } from '@/server/domain/dashboard-widgets';
 import type { HomeWidget } from '@/server/services/home';
@@ -43,9 +45,10 @@ import type { HomeWidget } from '@/server/services/home';
  * reader's words and numbers — money through `formatMoney`, dates through
  * `formatBusinessDate` — so a figure is formatted exactly once, last.
  *
- * Server components throughout but for the trend chart (Intent's recharts bar
- * chart, `components/home/trend-chart.tsx`), which is handed plain data: the
- * plotted numbers and the figures already in the reader's words.
+ * Server components throughout but for the area trends (Intent's recharts
+ * area chart) and the ageing donut (`components/charts/`), which are handed
+ * plain data: the plotted numbers and the figures already in the reader's
+ * words.
  */
 
 // ---------------------------------------------------------------------------
@@ -190,29 +193,54 @@ const KPI_ICON: Readonly<Record<string, LucideIcon>> = {
  * the decimal string, `Number` being the last step before `Intl`) and the exact amount is the tile's title, as well
  * as the page it opens. Anything shorter is shown whole.
  */
-const COMPACT_FROM_DIGITS = 8;
-
 function KpiValue({ cell, x }: { readonly cell: Cell; readonly x: HomeText }): ReactNode {
   if (cell.t === 'money') {
-    const whole = cell.v.replace(/^-/, '').split('.')[0] ?? '';
-    if (whole.length >= COMPACT_FROM_DIGITS) {
-      const short = new Intl.NumberFormat(x.locale, { notation: 'compact', maximumFractionDigits: 2 }).format(Number(cell.v));
-      return (
-        // Not forced left to right: in Arabic the compact figure has a word in it ("1.25 مليار"), as a date does.
-        <bdi title={formatMoney(cell.v, cell.currency, x.locale)}>{`${short} ${cell.currency}`}</bdi>
-      );
-    }
+    const short = shortMoney(cell.v, cell.currency, x.locale);
+    // Not forced left to right: in Arabic the compact figure has a word in it ("1.25 مليار"), as a date does.
+    if (short.shortened) return <bdi title={short.exact}>{short.text}</bdi>;
   }
   return <CellView cell={cell} x={x} />;
 }
 
 /**
- * The primary figures: an Intent stat card each — the icon in its tinted chip,
- * the label, the figure, the note — opening the screen that proves it. A tile
- * whose widget has nothing to say shows a dash and says why in the widget's
- * own words — it never shows a zero that was not counted.
+ * The tiles that carry a sparkline, and the chart on the same page it is read from — only where that chart's
+ * series ends on exactly the tile's figure. *Sales this month* is this month's posted invoices, net, in the branch:
+ * the last point of the six-month *invoiced* series, read the same way. Nothing is fetched for it; without the
+ * chart on the page (it asks the same grant) there is no line, and no other tile is given one it has not got.
  */
-export function KpiRow({ widgets, x, served }: { readonly widgets: readonly HomeWidget[]; readonly x: HomeText; readonly served: (route: string) => boolean }) {
+const SPARK_FROM: Readonly<Partial<Record<string, { readonly chart: string; readonly series: 'first' | 'second' }>>> = {
+  sales_period: { chart: 'chart_sales_trend', series: 'first' },
+};
+
+function sparkFor(widget: HomeWidget, charts: readonly HomeWidget[]): { readonly values: readonly number[]; readonly months: number } | null {
+  const from = SPARK_FROM[widget.key];
+  if (!from) return null;
+  const chart = charts.find((one) => one.key === from.chart);
+  if (!chart || chart.outcome.state !== 'ready' || chart.outcome.data.kind !== 'chart') return null;
+  const spec = chart.outcome.data.chart;
+  if (spec.type !== 'columns' || spec.points.length < 2) return null;
+  return { values: spec.points.map((point) => chartNumber(point[from.series])), months: spec.points.length };
+}
+
+/**
+ * The primary figures: an Intent stat card each — the label and its glyph,
+ * the figure large, the note under it and, where the page already holds the
+ * figure's course, a sparkline beside it — opening the screen that proves it.
+ * A tile whose widget has nothing to say shows a dash and says why in the
+ * widget's own words — it never shows a zero that was not counted.
+ */
+export function KpiRow({
+  widgets,
+  x,
+  served,
+  charts = [],
+}: {
+  readonly widgets: readonly HomeWidget[];
+  readonly x: HomeText;
+  readonly served: (route: string) => boolean;
+  /** The page's chart widgets, for the sparklines a tile may borrow (`SPARK_FROM`). */
+  readonly charts?: readonly HomeWidget[];
+}) {
   if (widgets.length === 0) return null;
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
@@ -224,12 +252,14 @@ export function KpiRow({ widgets, x, served }: { readonly widgets: readonly Home
         let note: string | null = null;
         let href: string | null = null;
         let tone: 'plain' | 'warn' | 'quiet' | 'trouble' = 'plain';
+        let spark: ReturnType<typeof sparkFor> = null;
         if (outcome.state === 'ready' && outcome.data.kind === 'kpi') {
           const data: KpiData = outcome.data;
           value = <KpiValue cell={data.value} x={x} />;
           note = noteText(x, data.note);
           href = linkFor(data.href, served);
           if (data.tone === 'warn') tone = 'warn';
+          spark = sparkFor(widget, charts);
         } else if (outcome.state === 'unreadable') {
           note = x.t('admin.dashboard.unreadable', { band: title });
           tone = 'trouble';
@@ -240,40 +270,60 @@ export function KpiRow({ widgets, x, served }: { readonly widgets: readonly Home
         const Glyph = tone === 'warn' || tone === 'trouble' ? TriangleAlert : Icon;
         const body = (
           <>
-            <span
-              className={cn(
-                'grid size-10 shrink-0 place-items-center rounded-lg',
-                tone === 'warn' || tone === 'trouble'
-                  ? 'bg-warning-subtle text-warning-subtle-fg'
-                  : tone === 'quiet'
-                    ? 'bg-muted text-muted-fg'
-                    : 'bg-primary-subtle text-primary-subtle-fg',
-              )}
-            >
-              <Glyph aria-hidden="true" className="size-5" />
+            <span className="flex min-w-0 items-start justify-between gap-3">
+              <span className="flex min-w-0 items-center gap-1 pt-0.5 font-medium text-muted-fg text-sm">
+                <span className="min-w-0">{title}</span>
+                {href ? (
+                  <ArrowUpRight
+                    aria-hidden="true"
+                    className="size-3.5 shrink-0 opacity-50 transition group-hover:text-fg group-hover:opacity-100 motion-reduce:transition-none rtl:-scale-x-100"
+                  />
+                ) : null}
+              </span>
+              <span
+                className={cn(
+                  'grid size-9 shrink-0 place-items-center rounded-lg',
+                  tone === 'warn' || tone === 'trouble'
+                    ? 'bg-warning-subtle text-warning-subtle-fg'
+                    : tone === 'quiet'
+                      ? 'bg-muted text-muted-fg'
+                      : 'bg-primary-subtle text-primary-subtle-fg',
+                )}
+              >
+                <Glyph aria-hidden="true" className="size-[1.1rem]" />
+              </span>
             </span>
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className="text-muted-fg text-sm">{title}</span>
-              <strong className="mt-1 font-semibold text-2xl/8 text-fg tabular-nums">{value}</strong>
-              {note ? <span className="mt-1 text-muted-fg text-xs">{note}</span> : null}
+            <span className="flex min-w-0 items-end justify-between gap-3">
+              <span className="flex min-w-0 flex-col">
+                <strong
+                  className={cn(
+                    'font-semibold text-[1.65rem]/8 tabular-nums tracking-tight rtl:tracking-normal',
+                    tone === 'quiet' ? 'text-muted-fg' : 'text-fg',
+                  )}
+                >
+                  {value}
+                </strong>
+                {note ? <span className="mt-1 text-muted-fg text-xs">{note}</span> : null}
+              </span>
+              {spark ? <Sparkline id={widget.key} title={x.t('home.note.last_months', { count: spark.months })} values={spark.values} /> : null}
             </span>
           </>
         );
-        const card = 'relative flex min-w-0 items-start gap-3 rounded-xl border border-border bg-overlay p-4 text-overlay-fg shadow-xs';
+        const card = cn(
+          'relative flex min-w-0 flex-col gap-3 overflow-hidden rounded-xl border border-border bg-overlay p-4 text-overlay-fg shadow-xs',
+          // A figure that is a problem by its nature (money overdue, a loss) says so with a thin line along its top, as well as its glyph.
+          (tone === 'warn' || tone === 'trouble') && 'before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-warning-subtle-fg/60',
+        );
         return href ? (
           <Link
             className={cn(
               card,
-              'group no-underline outline-offset-2 transition hover:border-input hover:shadow-sm focus-visible:outline-2 focus-visible:outline-ring',
+              'group no-underline outline-offset-2 transition hover:border-input hover:shadow-sm focus-visible:outline-2 focus-visible:outline-ring motion-reduce:transition-none',
             )}
             href={href}
             key={widget.key}
           >
             {body}
-            <ArrowUpRight
-              aria-hidden="true"
-              className="size-4 shrink-0 text-muted-fg opacity-60 transition group-hover:text-fg group-hover:opacity-100 rtl:-scale-x-100"
-            />
           </Link>
         ) : (
           <div className={card} key={widget.key}>
@@ -292,11 +342,31 @@ export function KpiRow({ widgets, x, served }: { readonly widgets: readonly Home
 const monthName = (month: string, locale: Locale): string =>
   new Date(`${month}-01T00:00:00Z`).toLocaleString(locale, { month: 'short', timeZone: 'UTC' });
 
-/** The summary over each chart's table twin. `home.table` is not in the catalogues yet; until it is, the old word. */
+/** "October 2026" — a month as the tooltip and the table say it. */
+const monthLong = (month: string, locale: Locale): string =>
+  new Date(`${month}-01T00:00:00Z`).toLocaleString(locale, { month: 'long', year: 'numeric', timeZone: 'UTC' });
+
+/** The summary over each chart's table twin. */
 const tableLabel = (x: HomeText): string => (x.t.has('home.table') ? x.t('home.table') : 'Table');
 
 const SERIES_1 = '--chart-series-1';
 const SERIES_2 = '--chart-series-2';
+
+/** The ageing buckets' ordinal ramp, step 1 (not yet due) to 5 (over ninety days): later is darker. */
+const RAMP: Readonly<Record<number, string>> = {
+  1: 'var(--chart-ramp-1)',
+  2: 'var(--chart-ramp-2)',
+  3: 'var(--chart-ramp-3)',
+  4: 'var(--chart-ramp-4)',
+  5: 'var(--chart-ramp-5)',
+};
+
+/**
+ * How many rows a ranked chart's loader keeps (`rankedRows` / `balanceRows`, eight). A list shorter than that is
+ * every row there is, so each one's share of their sum is its share of the whole; a full list may be the top of a
+ * longer one, and a share "of the top eight" would read as a share of everything — so it is not said.
+ */
+const RANKED_CAP = 8;
 
 function ChartView({
   widget,
@@ -304,6 +374,7 @@ function ChartView({
   x,
   served,
   wide,
+  asOf,
 }: {
   readonly widget: HomeWidget;
   readonly data: ChartData;
@@ -311,16 +382,25 @@ function ChartView({
   readonly served: (route: string) => boolean;
   /** Takes the whole row: its axis needs the width, or it would otherwise sit alone beside a hole. */
   readonly wide: boolean;
+  /** The page's business date: the month it falls in is still going on. */
+  readonly asOf?: string | undefined;
 }) {
   const title = widgetTitle(x, widget);
   const hint = noteText(x, data.note) ?? undefined;
   const spec = data.chart;
   const link = linkFor(data.href, served);
   const money = (value: string) => formatMoney(value, 'IQD', x.locale);
+  const rtl = directionOf(x.locale) === 'rtl';
 
   if (spec.type === 'columns') {
-    const first = { label: x.t(`home.value.${spec.firstKey}`), token: SERIES_1 };
-    const second = { label: x.t(`home.value.${spec.secondKey}`), token: SERIES_2 };
+    // Each series' figure for the whole window, summed as scaled bigints, said in its legend chip and the table's foot.
+    const totals = [moneyString(sumMoney(spec.points.map((p) => p.first))), moneyString(sumMoney(spec.points.map((p) => p.second)))] as const;
+    const said = totals.map((total) => shortMoney(total, 'IQD', x.locale));
+    const first: Series = { label: x.t(`home.value.${spec.firstKey}`), token: SERIES_1, value: said[0]!.text, title: said[0]!.shortened ? said[0]!.exact : undefined };
+    const second: Series = { label: x.t(`home.value.${spec.secondKey}`), token: SERIES_2, value: said[1]!.text, title: said[1]!.shortened ? said[1]!.exact : undefined };
+    // The month the business date falls in, unless that date is its last day: its point is "so far", not the month.
+    const current = asOf && Number(asOf.slice(8, 10)) < daysInMonth(Number(asOf.slice(0, 4)), Number(asOf.slice(5, 7))) ? asOf.slice(0, 7) : null;
+    const monthTitle = (month: string) => (month === current ? x.t('home.chart.so_far', { month: monthLong(month, x.locale) }) : monthLong(month, x.locale));
     return (
       <Chart
         tableLabel={tableLabel(x)}
@@ -331,7 +411,7 @@ function ChartView({
             {spec.points.map((p) => (
               <tr key={p.month}>
                 <td>
-                  <bdi dir="ltr">{p.month}</bdi>
+                  <bdi>{monthTitle(p.month)}</bdi>
                 </td>
                 <td className={NUMERIC_CELL}>
                   <bdi dir="ltr">{money(p.first)}</bdi>
@@ -341,23 +421,32 @@ function ChartView({
                 </td>
               </tr>
             ))}
+            <tr className="bg-muted font-semibold">
+              <td>{x.t('home.chart.total')}</td>
+              <td className={NUMERIC_CELL}>
+                <bdi dir="ltr">{money(totals[0])}</bdi>
+              </td>
+              <td className={NUMERIC_CELL}>
+                <bdi dir="ltr">{money(totals[1])}</bdi>
+              </td>
+            </tr>
           </BandTable>
         }
         title={title}
         wide={wide}
       >
         <Legend series={[first, second]} />
-        <div className="mt-3 min-w-0">
-          <TrendBars
+        <div className="mt-4 min-w-0">
+          <AreaTrend
             locale={x.locale}
+            partialLast={spec.points.at(-1)?.month === current}
             points={spec.points.map((p) => ({
               label: monthName(p.month, x.locale),
-              first: chartNumber(p.first),
-              second: chartNumber(p.second),
-              firstText: money(p.first),
-              secondText: money(p.second),
+              title: monthTitle(p.month),
+              values: [chartNumber(p.first), chartNumber(p.second)],
+              texts: [money(p.first), money(p.second)],
             }))}
-            rtl={directionOf(x.locale) === 'rtl'}
+            rtl={rtl}
             series={[
               { label: first.label, color: `var(${SERIES_1})` },
               { label: second.label, color: `var(${SERIES_2})` },
@@ -371,6 +460,7 @@ function ChartView({
   if (spec.type === 'bars') {
     const label = (row: { label: string; labelKey: boolean }) => (row.labelKey ? x.t(`home.value.${row.label}`) : row.label);
     const shown = (value: string) => (spec.unit === 'money' ? money(value) : formatQuantity(value, x.locale));
+    const shares = spec.rows.length < RANKED_CAP ? sharesOf(spec.rows.map((row) => row.value), x.locale) : spec.rows.map(() => null);
     return (
       <Chart
         tableLabel={tableLabel(x)}
@@ -393,13 +483,19 @@ function ChartView({
         title={title}
         wide={wide}
       >
-        <BarList rows={spec.rows.map((row) => ({ key: row.key, label: label(row), value: chartNumber(row.value), text: shown(row.value) }))} />
+        <BarList
+          negativeLabel={x.t('home.chart.overdrawn')}
+          rows={spec.rows.map((row, index) => ({ key: row.key, label: label(row), value: chartNumber(row.value), text: shown(row.value), share: shares[index] }))}
+        />
       </Chart>
     );
   }
 
-  // Ageing: one stacked bar of ordered bands, led by the whole open amount (summed as scaled bigints). The words are the old Home's own.
+  // Ageing: a donut of ordered buckets around the whole open amount (summed as scaled bigints). The words are the old Home's own.
   const total = moneyString(sumMoney(spec.rows.map((row) => row.value)));
+  const whole = shortMoney(total, 'IQD', x.locale);
+  const shares = sharesOf(spec.rows.map((row) => row.value), x.locale);
+  const invoices = spec.rows.reduce((sum, row) => sum + row.count, 0);
   return (
     <Chart
       tableLabel={tableLabel(x)}
@@ -420,26 +516,34 @@ function ChartView({
               </td>
             </tr>
           ))}
+          <tr className="bg-muted font-semibold">
+            <td>{x.t('home.chart.total')}</td>
+            <td className={NUMERIC_CELL}>
+              <bdi dir="ltr">{countText(x, invoices)}</bdi>
+            </td>
+            <td className={NUMERIC_CELL}>
+              <bdi dir="ltr">{money(total)}</bdi>
+            </td>
+          </tr>
         </BandTable>
       }
       title={title}
       wide={wide}
     >
-      <div className="mb-4 flex flex-col">
-        <span className="text-muted-fg text-xs">{x.t('admin.dashboard.total_open')}</span>
-        <span className="font-semibold text-2xl/8 text-fg tabular-nums">
-          <bdi dir="ltr">{money(total)}</bdi>
-        </span>
-      </div>
-      <StackedBands
-        bands={spec.rows.map((row) => ({
+      <Donut
+        centreLabel={x.t('admin.dashboard.total_open')}
+        centreNote={x.t('home.note.open_invoices', { count: invoices })}
+        centreTitle={whole.shortened ? whole.exact : undefined}
+        centreValue={whole.text}
+        parts={spec.rows.map((row, index) => ({
           key: row.key,
           label: x.t(`admin.dashboard.${row.labelKey}`),
           value: chartNumber(row.value),
-          step: row.step,
+          color: RAMP[row.step] ?? RAMP[3]!,
           text: money(row.value),
+          share: shares[index] ?? '',
+          note: x.t('home.note.open_invoices', { count: row.count }),
         }))}
-        locale={x.locale}
       />
     </Chart>
   );
@@ -528,7 +632,18 @@ function JourneyView({ widget, data, x, served }: { readonly widget: HomeWidget;
  * chart with nothing behind it (or that could not be read) is not drawn as a
  * blank frame; it is named, with its reason, in the quiet band at the foot.
  */
-export function ChartsBand({ widgets, x, served }: { readonly widgets: readonly HomeWidget[]; readonly x: HomeText; readonly served: (route: string) => boolean }) {
+export function ChartsBand({
+  widgets,
+  x,
+  served,
+  asOf,
+}: {
+  readonly widgets: readonly HomeWidget[];
+  readonly x: HomeText;
+  readonly served: (route: string) => boolean;
+  /** The page's business date, so a month still going on is said to be "so far". */
+  readonly asOf?: string | undefined;
+}) {
   const ready = widgets.filter(
     (widget) => widget.outcome.state === 'ready' && (widget.outcome.data.kind === 'chart' || widget.outcome.data.kind === 'journey'),
   );
@@ -537,7 +652,7 @@ export function ChartsBand({ widgets, x, served }: { readonly widgets: readonly 
   ready.forEach((widget, index) => {
     const outcome = widget.outcome;
     if (outcome.state === 'ready' && outcome.data.kind === 'chart') {
-      drawn.push(<ChartView data={outcome.data} key={widget.key} served={served} wide={wide[index] === true} widget={widget} x={x} />);
+      drawn.push(<ChartView asOf={asOf} data={outcome.data} key={widget.key} served={served} wide={wide[index] === true} widget={widget} x={x} />);
     } else if (outcome.state === 'ready' && outcome.data.kind === 'journey') {
       drawn.push(<JourneyView data={outcome.data} key={widget.key} served={served} widget={widget} x={x} />);
     }

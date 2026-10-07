@@ -12,6 +12,8 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as banks from '@/server/services/banks';
 import * as customs from '@/server/services/customs-pd';
 import { registerPd } from '../actions';
+import { IntentSelect } from '@/components/admin/intent-select';
+import { IntentDateField } from '@/components/admin/intent-date-field';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,14 +61,14 @@ export default async function NewPdPage({ searchParams }: { searchParams: Search
       label: t('import'),
       control: true,
       value: (
-        <select aria-label={t('import')} defaultValue={preselected} name="payable_id" required>
+        <IntentSelect aria-label={t('import')} defaultValue={preselected} name="payable_id" required>
           <option value="" />
           {imports.map((row) => (
             <option key={row.id} value={row.id}>
               {`${row.payableNo} · ${row.reference} · ${row.supplierName}`}
             </option>
           ))}
-        </select>
+        </IntentSelect>
       ),
     },
     {
@@ -82,14 +84,14 @@ export default async function NewPdPage({ searchParams }: { searchParams: Search
     {
       label: t('registered'),
       control: true,
-      value: <input aria-label={t('registered')} defaultValue={today} name="registration_date" required type="date" />,
+      value: <IntentDateField aria-label={t('registered')} defaultValue={today} name="registration_date" required />,
     },
     {
       label: t('expires'),
       control: true,
       value: (
         <>
-          <input aria-label={t('expires')} name="expiry_date" required type="date" />
+          <IntentDateField aria-label={t('expires')} name="expiry_date" required />
           <span className={s.sapEnteredNote}>{t('expiry_hint')}</span>
         </>
       ),
@@ -98,21 +100,21 @@ export default async function NewPdPage({ searchParams }: { searchParams: Search
       label: t('bank'),
       control: true,
       value: (
-        <select aria-label={t('bank')} defaultValue="" name="bank_code">
+        <IntentSelect aria-label={t('bank')} defaultValue="" name="bank_code">
           <option value="">—</option>
           {bankRows.map((bank) => (
             <option key={bank.code} value={bank.code}>
               {bank.swiftBic ? `${bank.name} · ${bank.swiftBic}` : bank.name}
             </option>
           ))}
-        </select>
+        </IntentSelect>
       ),
     },
     {
       label: t('status'),
       control: true,
       value: (
-        <select aria-label={t('status')} defaultValue="submitted" name="status_code">
+        <IntentSelect aria-label={t('status')} defaultValue="submitted" name="status_code">
           {statuses
             .filter((status) => status.active && !status.isTerminal)
             .map((status) => (
@@ -120,7 +122,7 @@ export default async function NewPdPage({ searchParams }: { searchParams: Search
                 {ps(status.code, status.name)}
               </option>
             ))}
-        </select>
+        </IntentSelect>
       ),
     },
   ];

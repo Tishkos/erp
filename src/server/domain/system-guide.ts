@@ -10,7 +10,7 @@
  * Two sources, and neither is his memory:
  *
  *   * **The menu.** `MODULES` and `MENU` are what the top bar is drawn from, so
- *     a path he gives — "Payables → Supplier Balances → Suppliers" — is the
+ *     a path he gives — "Payables → Supplier Balances → Supplier Statements" — is the
  *     path on the screen, in both languages, with the address, and marked when
  *     the screen is not built yet or the asker's role cannot open it.
  *   * **The guide.** `docs/guide/*.md`, written screen by screen from the code:

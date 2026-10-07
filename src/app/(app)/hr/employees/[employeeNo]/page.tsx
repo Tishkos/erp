@@ -42,6 +42,7 @@ import {
   setEmployeeStatus,
   updateEmployeeIdentity,
 } from '../actions';
+import { IntentDateField } from '@/components/admin/intent-date-field';
 
 /**
  * One employee — REQ-HR-001 §4. Copies the Purchase Invoice page: the
@@ -760,7 +761,7 @@ export default async function EmployeePage({ params, searchParams }: { params: P
                           <Form action={returnEmployeeAsset}>
                             {hidden}
                             <input name="asset_id" type="hidden" value={e.id} />
-                            <input aria-label={`${x('equipment_returned_on')} ${e.description}`} className={s.sapCellField} defaultValue={today} name="returned_on" type="date" />
+                            <IntentDateField aria-label={`${x('equipment_returned_on')} ${e.description}`} compact defaultValue={today} name="returned_on" />
                             <input aria-label={`${x('equipment_return_condition')} ${e.description}`} className={s.sapCellField} name="condition" placeholder={x('equipment_return_condition')} />
                             <Submit label={x('equipment_return')} small tone="secondary" />
                           </Form>

@@ -17,6 +17,8 @@ import * as customs from '@/server/services/customs-pd';
 import * as payables from '@/server/services/payables';
 import * as shipments from '@/server/services/shipments';
 import { createBlAction } from '../actions';
+import { IntentSelect } from '@/components/admin/intent-select';
+import { IntentDateField } from '@/components/admin/intent-date-field';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,14 +87,14 @@ export default async function NewBlPage({ searchParams }: { searchParams: Search
           label: t('import'),
           control: true,
           value: (
-            <select aria-label={t('import')} defaultValue="" name="payable_id" required>
+            <IntentSelect aria-label={t('import')} defaultValue="" name="payable_id" required>
               <option value="" />
               {imports.map((row) => (
                 <option key={row.id} value={row.id}>
                   {`${row.payableNo} · ${row.reference} · ${row.supplierName}`}
                 </option>
               ))}
-            </select>
+            </IntentSelect>
           ),
         },
     ...(owner
@@ -111,14 +113,14 @@ export default async function NewBlPage({ searchParams }: { searchParams: Search
     {
       label: t('bl_date'),
       control: true,
-      value: <input aria-label={t('bl_date')} defaultValue={today} name="bl_date" required type="date" />,
+      value: <IntentDateField aria-label={t('bl_date')} defaultValue={today} name="bl_date" required />,
     },
     {
       label: t('eta'),
       control: true,
       value: (
         <>
-          <input aria-label={t('eta')} name="eta" required type="date" />
+          <IntentDateField aria-label={t('eta')} name="eta" required />
           <span className={s.sapEnteredNote}>{t('eta_hint')}</span>
         </>
       ),
@@ -131,14 +133,14 @@ export default async function NewBlPage({ searchParams }: { searchParams: Search
       label: t('port_of_discharge'),
       control: true,
       value: (
-        <select aria-label={t('port_of_discharge')} defaultValue="" name="port_of_discharge">
+        <IntentSelect aria-label={t('port_of_discharge')} defaultValue="" name="port_of_discharge">
           <option value="">—</option>
           {ports.map((port) => (
             <option key={port.code} value={port.code}>
               {port.name}
             </option>
           ))}
-        </select>
+        </IntentSelect>
       ),
     },
     ...(owner

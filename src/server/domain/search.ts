@@ -182,6 +182,31 @@ export interface SeriesInfo {
   readonly prefix: string;
 }
 
+/**
+ * Prefixes a series has issued numbers under and no longer does (0409): a
+ * purchase invoice was API- until 2026-10-06 and is PUR- since; the
+ * local-goods payable was PUR- and is LOC-. The numbers already issued keep
+ * their prefix, so "API-12" must still find serial 12 of the purchase
+ * invoices — read beside the series' current prefix.
+ */
+export const RETIRED_PREFIXES: Readonly<Record<string, readonly string[]>> = {
+  AP_INVOICE: ['API'],
+  PAYABLE_LOCAL_GOODS: ['PUR'],
+};
+
+/** The catalogue with each series' retired prefixes beside its current one. */
+export function withRetiredPrefixes(catalog: readonly SeriesInfo[]): SeriesInfo[] {
+  const out = [...catalog];
+  for (const series of catalog) {
+    for (const prefix of RETIRED_PREFIXES[series.key] ?? []) {
+      if (!out.some((row) => row.key === series.key && row.prefix.toUpperCase() === prefix)) {
+        out.push({ key: series.key, prefix });
+      }
+    }
+  }
+  return out;
+}
+
 export interface NumberShape {
   /** The letters the number begins with, upper case. Empty for a bare number. */
   readonly prefix: string;

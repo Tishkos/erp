@@ -19,6 +19,10 @@ import * as rates from '@/server/services/exchange-rates';
 import { businessToday } from '@/server/domain/business-date';
 import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
 import { savedViewsFor } from '@/server/saved-views-gate';
+import { AgeingChart } from '@/components/charts/ageing-chart';
+import { IntentSelect } from '@/components/admin/intent-select';
+import { IntentDateField } from '@/components/admin/intent-date-field';
+import { INTENT_FILTER_FIELD, INTENT_INPUT } from '@/components/admin/intent-field-classes';
 
 /**
  * Receivables Ageing — Receivables, 2026-10-04.
@@ -135,10 +139,11 @@ export async function ReceivablesAgeing({ searchParams }: { readonly searchParam
 
   const reportFilter = (
     <form action={route} className={s.sapFilterBar} method="get">
-      <label className={s.sapFilterField}>
+      <label className={`${s.sapFilterField} ${INTENT_FILTER_FIELD}`}>
         <span className={s.sapLabel}>{t('partners.role_customer')}</span>
         <input
           autoComplete="off"
+          className={INTENT_INPUT}
           defaultValue={asked}
           list="customer-ageing-parties"
           name="code"
@@ -154,39 +159,39 @@ export async function ReceivablesAgeing({ searchParams }: { readonly searchParam
       </label>
       <label className={s.sapFilterField}>
         <span className={s.sapLabel}>{column('branch_code')}</span>
-        <select defaultValue={branchAsked === '*' ? '*' : (branchCode ?? '*')} name="branch">
+        <IntentSelect defaultValue={branchAsked === '*' ? '*' : (branchCode ?? '*')} name="branch">
           <option value="*">{r('all_branches')}</option>
           {branchRows.map((row) => (
             <option key={row.code} value={row.code}>
               {`${row.code} · ${row.name}`}
             </option>
           ))}
-        </select>
+        </IntentSelect>
       </label>
       <label className={s.sapFilterField}>
         <span className={s.sapLabel}>{t('reports.as_at_label')}</span>
-        <input defaultValue={asOf} name="as_at" required type="date" />
+        <IntentDateField defaultValue={asOf} name="as_at" required />
       </label>
       <label className={s.sapFilterField}>
         <span className={s.sapLabel}>{r('currency')}</span>
-        <select defaultValue={currency} name="currency">
+        <IntentSelect defaultValue={currency} name="currency">
           <option value="">{r('all_currencies')}</option>
           {currencies.map((row) => (
             <option key={row.code} value={row.code}>
               {row.code}
             </option>
           ))}
-        </select>
+        </IntentSelect>
       </label>
       <label className={s.sapFilterField}>
         <span className={s.sapLabel}>{t('open_items.show')}</span>
-        <select defaultValue={show} name="show">
+        <IntentSelect defaultValue={show} name="show">
           {openItems.SHOW_VALUES.map((value) => (
             <option key={value} value={value}>
               {r(`show_${value}`)}
             </option>
           ))}
-        </select>
+        </IntentSelect>
       </label>
       <button className={`${s.button} ${s.primary}`} type="submit">
         {t('stock_movements.filter')}
@@ -255,6 +260,10 @@ export async function ReceivablesAgeing({ searchParams }: { readonly searchParam
           </div>
         ))}
       </div>
+
+      {/* What is owed, by how late, as a picture of the same open items the register lists (every item, as the
+          ageing table at the foot counts them — the filter chooses what is listed, never what counts). */}
+      <AgeingChart className="mb-4" hint={t('statement_outstanding.as_at', { date: day(asOf) })} rows={everyItem} side="customer" />
 
       <ReportWindow
         filter={reportFilter}

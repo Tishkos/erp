@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, FilterRow, Flash, ListToolbar, Select, Submit, SubmitRow, admin as s, matches } from '@/components/admin';
@@ -18,6 +17,7 @@ import * as warehouses from '@/server/services/warehouses';
 import { advanceShipment, setShipmentWatchers } from './actions';
 import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
 import { savedViewsFor } from '@/server/saved-views-gate';
+import { IntentSelect } from '@/components/admin/intent-select';
 
 /**
  * In-Transit Inventory — REQ-LOG-001 item 18. What the company owns and
@@ -100,14 +100,9 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
       variant="sap"
     >
       <Flash error={outcome.error} errorTitle={admin('error_title')} saved={outcome.saved} savedLabel={admin('saved')} />
-      <p className={`${s.sapNote} mb-4`}>
-        <strong>{t('legend_title')}</strong> {t('legend_in_transit')} {t('legend_received')} {t('legend_on_hand')} {t('legend_available')}{' '}
-        {visibleRoute('/inventory/availability') ? (
-          <Link className={s.sapLink} href="/inventory/availability">
-            {page('availability')}
-          </Link>
-        ) : null}
-      </p>
+      {/* No "how to read the figures" paragraph (2026-10-07, by direction: "the logistics module UI doesn't match
+          the rest"): a list screen is its header, its register and its paging, as every other one; the columns
+          say what they hold, and the guide (docs/guide) explains them. */}
 
       {/* ── By import and item — the ledger's layers (item 18) ─────────── */}
       <section aria-labelledby="in-transit-title" className={`${s.sapDoc} ${s.sapRegister} mb-5`}>
@@ -264,7 +259,6 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
             <span>{t('transit_ledger_title')}</span>
             <span className={s.sapTitleMeta}>{admin('rows_shown', { count: found.ledger.rows.length })}</span>
           </h2>
-          <p className={`${s.sapNote} m-0 px-4 py-3 sm:px-5`}>{t('transit_ledger_subtitle')}</p>
           <div className={s.sapTableWrap}>
             <table aria-labelledby="transit-ledger-title" className={s.sapTable}>
               <thead>
@@ -349,12 +343,6 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
               <span>{t('invoice_tracking_title')}</span>
               <span className={s.sapTitleMeta}>{admin('rows_shown', { count: shipmentsShown.length })}</span>
             </h2>
-            <p className={`${s.sapNote} m-0 px-4 py-3 sm:px-5`}>
-              {t('invoice_tracking_subtitle')}{' '}
-              <Link className={s.sapLink} href="/payables/containers">
-                {page('containers')}
-              </Link>
-            </p>
             <form className={s.filterBar} method="get">
               <FilterRow>
                 <Select
@@ -433,13 +421,13 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
                                 <input name="id" type="hidden" value={row.id} />
                                 <input name="to" type="hidden" value={next} />
                                 {next === 'in_bounded' ? (
-                                  <select aria-label={column('warehouse_name')} className={s.sapCellField} name="warehouse_code" required>
+                                  <IntentSelect aria-label={column('warehouse_name')} compact name="warehouse_code" required>
                                     {found.houses.map((house) => (
                                       <option key={house.code} value={house.code}>
                                         {house.code} · {house.name}
                                       </option>
                                     ))}
-                                  </select>
+                                  </IntentSelect>
                                 ) : null}
                                 <Submit label={`${admin('in_transit.advance')} ${label(next)}`} tone="secondary" variant="document" />
                               </form>

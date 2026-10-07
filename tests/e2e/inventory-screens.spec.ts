@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
+import { keepEnglish } from './support/locale';
 
 /**
  * IMPROVEMENT-002 — the inventory screens, in the browser, against the seeded
@@ -45,7 +46,7 @@ async function photograph(page: Page, route: string, name: string) {
   const width = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(width, `${name}: no horizontal scroll at 390px`).toBeLessThanOrEqual(390);
   await page.screenshot({ path: `${SHOTS}/${name}-mobile-ar.png`, fullPage: true });
-  await page.context().clearCookies({ name: 'erp-locale' });
+  await keepEnglish(page.context());
   await page.setViewportSize({ width: 1366, height: 900 });
   // Back in English, on the same screen, for whatever the test does next.
   await page.goto(route);

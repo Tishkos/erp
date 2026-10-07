@@ -41,14 +41,17 @@ import {
   assertBody,
   assertRetractReason,
   assertTitle,
+  chosenStatusOf,
   deriveMentions,
   isChatReaction,
+  isChosenStatus,
   isLocalHref,
   memberKeyOf,
   preview,
   shouldWritePresence,
   TYPING_TTL_MS,
   type ChatSystemEvent,
+  type ChosenStatus,
 } from '../domain/chat';
 import { can, type Principal } from '../domain/permissions';
 import * as attachments from './attachments';
@@ -860,6 +863,8 @@ export interface StoredPresence {
   readonly lastSeenAt: string;
   readonly lastActiveAt: string | null;
   readonly busy: boolean;
+  /** What the person chose in the account menu (0410). */
+  readonly status: ChosenStatus;
 }
 
 export async function presenceOfSelf(tx: Tx, ctx: ActorContext): Promise<StoredPresence | null> {
@@ -869,6 +874,7 @@ export async function presenceOfSelf(tx: Tx, ctx: ActorContext): Promise<StoredP
     lastSeenAt: row.lastSeenAt.toISOString(),
     lastActiveAt: row.lastActiveAt?.toISOString() ?? null,
     busy: row.busy,
+    status: chosenStatusOf(row),
   };
 }
 
@@ -899,15 +905,27 @@ export async function heartbeat(
     lastSeenAt: now.toISOString(),
     lastActiveAt: state.active ? now.toISOString() : (current?.lastActiveAt ?? null),
     busy: current?.busy ?? false,
+    status: current?.status ?? 'available',
   };
 }
 
-/** "Do not disturb": shown to the people the person talks to as Busy, until it is turned off. */
-export async function setBusy(tx: Tx, ctx: ActorContext, busy: boolean): Promise<void> {
+/**
+ * The status the person chose in the account menu — Available, Busy, Away or
+ * Appear offline (`domain/chat.presenceOf` says what others are shown). Kept
+ * until changed; `busy` follows it, so whatever still reads the flag agrees.
+ */
+export async function setStatus(tx: Tx, ctx: ActorContext, status: ChosenStatus): Promise<void> {
   await permit(ctx, 'view');
+  if (!isChosenStatus(status)) throw new ChatError('That is not a status.');
   const now = new Date();
+  const busy = status === 'busy';
   await tx
     .insert(chatPresence)
-    .values({ userId: me(ctx), lastSeenAt: now, lastActiveAt: now, busy })
-    .onConflictDoUpdate({ target: chatPresence.userId, set: { busy, lastSeenAt: now, lastActiveAt: now } });
+    .values({ userId: me(ctx), lastSeenAt: now, lastActiveAt: now, busy, status })
+    .onConflictDoUpdate({ target: chatPresence.userId, set: { busy, status, lastSeenAt: now, lastActiveAt: now } });
+}
+
+/** "Do not disturb" from the chat screen's own switch: Busy, or back to Available. */
+export async function setBusy(tx: Tx, ctx: ActorContext, busy: boolean): Promise<void> {
+  await setStatus(tx, ctx, busy ? 'busy' : 'available');
 }

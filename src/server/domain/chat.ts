@@ -11,8 +11,8 @@
  *              state (the table's CHECK says the same).
  *   unread     what a person has not seen, per conversation and in all — a
  *              muted conversation counts in its own row and not in the badge.
- *   presence   Online / Away / Busy / Offline from two timestamps and a flag;
- *              never stored, so it cannot be stale.
+ *   presence   Online / Away / Busy / Offline from two timestamps and the
+ *              status the person chose; never stored, so it cannot be stale.
  *   mentions   read out of the text against the conversation's members, so a
  *              client cannot claim to have mentioned someone it did not.
  */
@@ -190,10 +190,36 @@ export const PRESENCE_WINDOW_MS = 75_000;
 /** At the page but not touching it for five minutes is Away. */
 export const AWAY_AFTER_MS = 5 * 60_000;
 
+/**
+ * What the person chose in the account menu (2026-10-06, by direction: "an
+ * option … available busy away offline mode"). Stored (`chat_presence.status`,
+ * 0410); what others are shown is still worked out from it and the heartbeat:
+ *
+ *   available   Online while at the page, Away after five idle minutes;
+ *   busy        Busy (red) while at the page — and no message sounds;
+ *   away        Away (amber) while at the page, however active;
+ *   invisible   "Appear offline": everybody else sees Offline, with no "last
+ *               seen"; the person still receives everything as before.
+ *
+ * Gone from the page (no poll for 75 seconds) is Offline whatever was chosen.
+ */
+export const CHOSEN_STATUSES = ['available', 'busy', 'away', 'invisible'] as const;
+export type ChosenStatus = (typeof CHOSEN_STATUSES)[number];
+
+export function isChosenStatus(value: unknown): value is ChosenStatus {
+  return typeof value === 'string' && (CHOSEN_STATUSES as readonly string[]).includes(value);
+}
+
+/** The stored row's status, read leniently: a row written before 0410 says only whether it was busy. */
+export function chosenStatusOf(facts: { readonly status?: string | null; readonly busy: boolean }): ChosenStatus {
+  return isChosenStatus(facts.status) ? facts.status : facts.busy ? 'busy' : 'available';
+}
+
 export interface PresenceFacts {
   readonly lastSeenAt: string | null;
   readonly lastActiveAt: string | null;
   readonly busy: boolean;
+  readonly status?: ChosenStatus | null;
 }
 
 export interface PresenceView {
@@ -202,16 +228,31 @@ export interface PresenceView {
   readonly lastSeenAt: string | null;
 }
 
+/** How a person appears to the people they talk to. */
 export function presenceOf(facts: PresenceFacts | null | undefined, now: Date): PresenceView {
   if (!facts || facts.lastSeenAt === null) return { state: 'offline', lastSeenAt: null };
+  const chosen = chosenStatusOf(facts);
+  // Appearing offline gives nothing away, not even when they were last here.
+  if (chosen === 'invisible') return { state: 'offline', lastSeenAt: null };
   const seen = Date.parse(facts.lastSeenAt);
   if (Number.isNaN(seen)) return { state: 'offline', lastSeenAt: null };
   const t = now.getTime();
   if (t - seen > PRESENCE_WINDOW_MS) return { state: 'offline', lastSeenAt: facts.lastSeenAt };
-  if (facts.busy) return { state: 'busy', lastSeenAt: facts.lastSeenAt };
+  if (chosen === 'busy') return { state: 'busy', lastSeenAt: facts.lastSeenAt };
+  if (chosen === 'away') return { state: 'away', lastSeenAt: facts.lastSeenAt };
   const active = facts.lastActiveAt === null ? Number.NaN : Date.parse(facts.lastActiveAt);
   if (Number.isNaN(active) || t - active > AWAY_AFTER_MS) return { state: 'away', lastSeenAt: facts.lastSeenAt };
   return { state: 'online', lastSeenAt: facts.lastSeenAt };
+}
+
+/** How the person sees themself: what they chose, as the dot their own avatar wears. */
+export function ownPresenceOf(chosen: ChosenStatus): Presence {
+  return chosen === 'available' ? 'online' : chosen === 'invisible' ? 'offline' : chosen;
+}
+
+/** Message sounds are for a person who has not asked to be left alone. */
+export function mayChime(chosen: ChosenStatus | null | undefined): boolean {
+  return chosen !== 'busy';
 }
 
 /** The heartbeat is written at most this often, however fast the page polls. */

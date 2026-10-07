@@ -27,6 +27,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { ownerPool, resetTestData, seedBranch } from './setup';
+import { linkItemsToSuppliers } from './item-supplier';
 import { withScope } from '@/server/db/client';
 import * as authz from '@/server/services/authorization';
 import * as coa from '@/server/services/chart-of-accounts';
@@ -360,6 +361,9 @@ async function booksAgree() {
 }
 
 // ---------------------------------------------------------------------------
+
+// 0408 — an item is bought only from a supplier linked to it; this suite's items are every supplier's.
+beforeEach(linkItemsToSuppliers);
 
 describe('the Operations build, driven as one system', () => {
   it('keeps stock, ledger, subledger and reports agreeing through a whole cycle', async () => {

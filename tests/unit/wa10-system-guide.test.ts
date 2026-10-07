@@ -84,7 +84,8 @@ describe('the menu Noah reads is the menu the top bar draws', () => {
   it('finds a screen by its English name, its Arabic name, or part of either', () => {
     const suppliers = findScreens(all, 'suppliers')[0]!;
     expect(suppliers.route).toBe('/payables/suppliers');
-    expect(suppliers.en).toEqual({ module: en.module.payables, heading: en.heading.payables_suppliers, screen: en.screen.suppliers });
+    // Master Data — Financial's since 2026-10-06, at the old address (D-FX-1).
+    expect(suppliers.en).toEqual({ module: en.module.accounting, heading: en.heading.master_data, screen: en.screen.suppliers });
 
     const arabic = findScreens(all, ar.screen.ap_invoices!)[0]!;
     expect(arabic.route).toBe('/payables/invoices');
@@ -96,8 +97,8 @@ describe('the menu Noah reads is the menu the top bar draws', () => {
 
   it('says the path as module → heading → screen, in both languages, with the address', () => {
     const text = describeScreens(all, { baseUrl: 'https://erp.example', search: 'suppliers' });
-    expect(text).toContain(`${en.module.payables} → ${en.heading.payables_suppliers} → ${en.screen.suppliers}`);
-    expect(text).toContain(`${ar.module.payables} ← ${ar.heading.payables_suppliers} ← ${ar.screen.suppliers}`);
+    expect(text).toContain(`${en.module.accounting} → ${en.heading.master_data} → ${en.screen.suppliers}`);
+    expect(text).toContain(`${ar.module.accounting} ← ${ar.heading.master_data} ← ${ar.screen.suppliers}`);
     expect(text).toContain('https://erp.example/payables/suppliers');
   });
 

@@ -13,6 +13,7 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as pb from '@/server/services/project-budget';
 import * as ps from '@/server/services/project-system';
 import { createBudgetDocument } from '../actions';
+import { IntentSelect } from '@/components/admin/intent-select';
 
 /**
  * Raising a budget document — REQ-PM-001 §7. Copies the Sales Return's new
@@ -88,13 +89,13 @@ export default async function NewBudgetPage({ searchParams }: { searchParams: Se
             </div>
             <label className={s.field}>
               <span className={s.label}>{x('kind')}</span>
-              <select className={s.select} defaultValue={kind} name="kind">
+              <IntentSelect defaultValue={kind} name="kind">
                 {KINDS.map((value) => (
                   <option key={value} value={value}>
                     {x(`kind_${value}`)}
                   </option>
                 ))}
-              </select>
+              </IntentSelect>
               <span className={s.hint}>{x(`kind_${kind}_hint`)}</span>
             </label>
           </form>

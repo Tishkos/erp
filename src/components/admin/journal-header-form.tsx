@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import styles from './admin.module.css';
+import { IntentDateField } from '@/components/admin/intent-date-field';
 
 /**
  * The header of a draft journal — its two dates and its description — edited
@@ -70,12 +71,11 @@ export function JournalHeaderForm({
         <label className={styles.sapLabel} htmlFor="journal-posting-date">
           {labels.postingDate}
         </label>
-        <input
+        <IntentDateField
           id="journal-posting-date"
           onBlur={commit}
           onChange={(event) => setValues((v) => ({ ...v, postingDate: event.target.value }))}
           title={labels.postingDateHint}
-          type="date"
           value={values.postingDate}
         />
       </div>
@@ -83,11 +83,10 @@ export function JournalHeaderForm({
         <label className={styles.sapLabel} htmlFor="journal-document-date">
           {labels.documentDate}
         </label>
-        <input
+        <IntentDateField
           id="journal-document-date"
           onBlur={commit}
           onChange={(event) => setValues((v) => ({ ...v, documentDate: event.target.value }))}
-          type="date"
           value={values.documentDate}
         />
       </div>

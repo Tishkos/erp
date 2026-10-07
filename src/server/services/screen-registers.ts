@@ -17,27 +17,45 @@ import {
   type InvoiceRegisterFilter,
   type PartnerRegisterFilter,
 } from '../domain/register-filters';
+import { applyRegisterDates, NO_REGISTER_DATES, type RegisterDates } from '../domain/register-dates';
 import * as ap from './ap-invoice';
 import * as expenses from './expenses';
 import * as partners from './partners';
 import * as shipments from './shipments';
 
-/** Purchase Invoices: every invoice the reader may see with its payment state, and the rows the filters keep. */
-export async function invoiceRegister(tx: Tx, filter: InvoiceRegisterFilter, today: string) {
+/**
+ * Purchase Invoices: every invoice the reader may see with its payment state,
+ * the rows the filters keep, inside the Filter's window of invoice dates,
+ * newest first unless asked otherwise (the register is read whole, so the
+ * order is the whole register's, not a page's).
+ */
+export async function invoiceRegister(
+  tx: Tx,
+  filter: InvoiceRegisterFilter & { readonly dates?: RegisterDates },
+  today: string,
+) {
   const rows = await ap.list(tx);
   const withState = rows.map((row) => ({
     ...row,
     state: expenses.paymentState(
       {
         status: row.status,
-        dueDate: row.dueDate,
+        // Never overdue on a date nobody set — an advance's balance waits for its SWIFT (2026-10-07).
+        dueDate: row.dueDateSetAt ? row.dueDate : null,
         totalIqd: row.totalIqd,
         settledAmountIqd: row.settledAmountIqd,
       },
       today,
     ),
   }));
-  return { shown: filterInvoiceRegister(withState, filter) };
+  return {
+    shown: applyRegisterDates(
+      filterInvoiceRegister(withState, filter),
+      (row) => row.invoiceDate,
+      filter.dates ?? NO_REGISTER_DATES,
+      (row) => row.invoiceNo,
+    ),
+  };
 }
 
 /** Containers: the rows of the chosen view, then the search and the ETA window. */

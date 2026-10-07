@@ -63,13 +63,13 @@ A stock movement cannot be dated inside a closed accounting period. The refusal 
 The opening balance account and the Inventory Adjustment account are set by Finance on Accounting → General Ledger → Posting Mappings (خرائط الترحيل). The inventory account and the COGS account are set on each item.
 
 ## Availability (التوافر)
-Path: Inventory → Inventory & Warehouses → Availability   |   Arabic: المخزون ← المخزون والمستودعات ← التوافر
+Inventory → Stock & Availability → Availability   |   Arabic: المخزون ← المخزون والتوفّر ← التوافر
 Address: /inventory/availability
 Needs: `view` on `inventory_movement` to open; `execute` on `inventory_movement` to see and use **Issue stock**.
 What it is for: Shows what each warehouse holds, item by item — on hand, available to issue, reserved, in transit, in quarantine, damaged, returned, on order — with the unit cost and value. Every figure is added up from the stock ledger. It is also where stock can be issued out of a warehouse from a dialog.
 
 ### How to read and filter the list — Availability
-1. Open Inventory → Inventory & Warehouses → **Availability** (التوافر).
+1. Open Inventory → Stock & Availability → **Availability** (التوافر).
 2. There is one row per item per warehouse that has ever had a movement. Fifty rows a page; the page numbers are at the foot.
 3. To search, type in the box **Search this list** (ابحث في هذه القائمة) — it looks in the item code, item name, warehouse code and warehouse name — and press Enter. **Clear** (مسح) removes the search.
 4. To narrow, choose **Warehouse** (المخزن) (default **All warehouses** — كل المستودعات), **Category** (الفئة) (default **All categories** — كل الفئات), **Branch** (الفرع) (default **All branches** — كل الفروع), tick **Only items with stock available** (المواد المتاحة فقط) if wanted, then press **Filter** (تصفية).
@@ -124,14 +124,14 @@ The list itself is read-only. An issue from the dialog writes one stock movement
 - "Cost layers for … in … are short by … The quantity ledger and the FIFO layers disagree …" — the stock records are inconsistent; nothing was issued. Tell the accounting manager and open Inventory Checks.
 
 ## Opening Stock (رصيد أول المدة)
-Path: Inventory → Inventory & Warehouses → Opening Stock   |   Arabic: المخزون ← المخزون والمستودعات ← رصيد أول المدة
+Inventory → Receipts, Issues & Transfers → Opening Stock   |   Arabic: المخزون ← الاستلام والصرف والتحويل ← رصيد أول المدة
 Address: /inventory/opening-stock (record: /inventory/opening-stock/<number>)
 Needs: `view` on `opening_stock` to open; `create` and `submit` on `opening_stock` to raise one; `approve` on `opening_stock` and `execute` on `inventory_movement` to approve; `edit_draft` on `opening_stock` to add a note; `edit_draft` on `opening_stock` and `create` on `attachment` to attach a file; `print` / `export` on `opening_stock` for copies.
 What it is for: Brings in the stock the company starts with — the quantities and what they cost. One document is one warehouse with a line per item. Saving sends it for approval; approving puts the quantities into the stock ledger, creates the FIFO cost layers and posts the opening journal.
 
 ### How to raise an opening stock document — Opening Stock
 1. Make sure your active branch (top of the screen) is the branch of the warehouse; only that branch's normal, active warehouses are offered.
-2. Open Inventory → Inventory & Warehouses → **Opening Stock** (رصيد أول المدة) and press **New opening stock** (رصيد أول مدة جديد).
+2. Open Inventory → Receipts, Issues & Transfers → **Opening Stock** (رصيد أول المدة) and press **New opening stock** (رصيد أول مدة جديد).
 3. Choose the **Warehouse** (المخزن) and set the **Date** (التاريخ) (today by default).
 4. On the first line type the **Item Code** (رمز الصنف) or the **Item Name** (اسم الصنف) — each fills the other from the list of active stock items.
 5. Type the **Quantity** (الكمية) in the item's base unit and the **Total Price (IQD)** (القيمة الإجمالية (د.ع)) — the whole cost of that quantity. The **Average Unit Price (IQD)** (متوسط سعر الوحدة (د.ع)) is worked out for you.
@@ -179,14 +179,74 @@ Statuses: **Draft** (مسودة) → **Pending approval** (بانتظار الم
 - "Account … requires … Supply the missing value(s) and post again." — the account asks for an analysis value (such as a department) that this form does not carry; Finance must change the account's requirement or the mapping.
 - "A stock movement dated … cannot be written: the period is closed" or "No accounting period covers …" — the document date is in a closed period, or in a year not opened yet. See Closed accounting periods in Concepts — Inventory.
 
+## Manual Stock Additions (إضافات المخزون اليدوية)
+Inventory → Receipts, Issues & Transfers → Manual Stock Additions   |   Arabic: المخزون ← الاستلام والصرف والتحويل ← إضافات المخزون اليدوية
+Address: /inventory/manual-additions (sheet: /inventory/manual-additions/new; record: /inventory/manual-additions/<number>)
+Needs: `view` on `manual_stock_addition` to open; `create` to raise one; `edit_draft` to edit, return to draft or cancel one; `submit` to send it for approval; `approve` on `manual_stock_addition` and `execute` on `inventory_movement` to approve or reject; `create` to add a note; `create` on `manual_stock_addition` and on `attachment` to attach a file; `print` / `export` on `manual_stock_addition` for copies.
+What it is for: Puts stock onto the books that arrived without a purchase invoice — found in a store, returned without a document, brought over from an old system — at what it cost, with the reason written down for the audit. One document is one warehouse with a line per item. It is a draft until somebody sends it for approval; a second person approves it, and approving brings the stock in and posts its journal. Also opened from the Warehouses Report: **Add items manually** (إضافة أصناف يدويًا) and **Manually added items** (الأصناف المضافة يدويًا).
+
+### How to add items manually — Manual Stock Additions
+1. Make sure your active branch (top of the screen) is the branch of the warehouse; only that branch's main, active warehouses are offered (no transit or shipment-stage warehouse).
+2. Open Inventory → Receipts, Issues & Transfers → **Manual Stock Additions** (إضافات المخزون اليدوية) and press **Add items manually** (إضافة أصناف يدويًا) — or press the same button on the Warehouses Report; filtered to one warehouse, the report opens the sheet with that warehouse chosen.
+3. Choose the **Warehouse** (المستودع) and check the **Posting Date** (تاريخ الترحيل) (today by default; not a day in the future).
+4. Leave **Offset account** (الحساب المقابل) on **As configured** (حسب الإعداد) unless Finance has told you which account the value is credited to.
+5. Write the **Note / reason** (ملاحظة / سبب) — why the stock is being added. It is required and stays with the record.
+6. On the first line choose the **Item** (الصنف) (type to search), its **Unit** (الوحدة) — the base unit first, then the item's other units with what each holds — the **Quantity** (الكمية) in that unit and the **Unit price (IQD)** (سعر الوحدة (دينار)) — what one of that unit cost. The **Line value** (قيمة البند) and the **Total value** (إجمالي القيمة) are worked out as you type.
+7. A new empty line opens when you choose an item on the last one; ✕ (**Remove line** — حذف البند) drops a line.
+8. Press **Save as draft** (حفظ كمسودة). The system gives the document its number (MSA-branch-year-serial) and opens its record. Pressing twice saves it once.
+9. On the record press **Send for approval** (إرسال للموافقة). The approvers are told in their notifications and see it in **My Approvals**.
+
+### How to approve, reject or correct one — Manual Stock Additions
+1. Somebody who holds approve and who neither raised it nor sent it opens the record (from My Approvals or the list).
+2. Check the warehouse, the note and the lines, then press **Approve and post** (اعتماد وترحيل) — or write why in the box and press **Reject** (رفض).
+3. Whoever raised or sent it does not get Approve; the record says **You raised or sent this one, so somebody else approves it.**
+4. A rejected one shows who rejected it and why. Press **Return to draft** (إعادة إلى مسودة), then **Edit draft** (تعديل المسودة) to correct the sheet and **Save changes** (حفظ التعديلات), and send it again — or **Cancel** (إلغاء) it with a reason.
+5. A draft is changed with **Edit draft** and set aside with **Cancel** and a reason. Nothing is ever deleted.
+6. A super user's own sheet has **Save and approve** (حفظ واعتماد), and a super user's own draft has **Approve and post** instead of Send for approval: one press records both the sending and the approval.
+
+### How to open a record, search and print — Manual Stock Additions
+1. The list shows Number, Posting Date, Warehouse, Lines, Total value, Status and Created by, newest first. Type in **Search this list** (any part of the number, the warehouse, the note or who created it); filter by **Status** and **Warehouse** and press **Show** (عرض).
+2. Click the number to open the record: the fields, the status, the lines (Item Code, Item Name, Unit, Quantity, Unit price, Line value, In base unit), then **FIFO layers created** (طبقات FIFO المُنشأة) and **Journal entries** (قيود اليومية) with each debit and credit.
+3. The title bar carries the four icons — printer, paperclip, notes, clock — from the draft on. The printed copy shows the same fields, lines, layers and journal.
+
+### Fields — Manual Stock Additions
+- **Warehouse** (المستودع) — required; a main, active warehouse of your active branch. One warehouse per document.
+- **Posting Date** (تاريخ الترحيل) — required; today by default; not in the future. It is the date of the stock movements, of the FIFO layers and of the journal; it must be in an open period when the document is approved.
+- **Offset account** (الحساب المقابل) — optional. Empty: the value is credited to the account Finance mapped for the inventory adjustment (Posting Mappings → Item Reconciliation's `inventory.stock_adjustment` › `inventory_adjustment`, the same account a Stock Count surplus uses). Chosen: that account — any postable dinar account that is not a customer, supplier, loan or bank/cash account.
+- **Department** (القسم) — optional; default **None** (بدون). The department the journal is analysed by. Choose one when the offset account asks for a department (the refusal says "requires Department / Cost Centre").
+- **Note / reason** (ملاحظة / سبب) — required; up to 2,000 characters; kept for the audit.
+- **Item** (الصنف) — an active stock item. Items tracked by serial number are not offered (their serials are entered on Opening Stock or a Purchase Invoice). A batch-tracked item takes the document's number as its batch.
+- **Unit** (الوحدة) — one of the item's active units; the stock is received in the base unit (2 BOX of 24 come in as 48 EA). A quantity that does not convert exactly is refused.
+- **Quantity** (الكمية) — above zero, in the line's unit.
+- **Unit price (IQD)** (سعر الوحدة (دينار)) — above zero; what one of the line's unit cost.
+- **Line value** (قيمة البند) — not typed: Quantity × Unit price.
+
+### After you save — Manual Stock Additions
+Statuses: **Draft** (مسودة) → **Pending approval** (بانتظار الموافقة) → **Approved** (معتمد); **Rejected** (مرفوض) goes back to Draft; **Cancelled** (ملغى) is final. Nothing moves and nothing posts until approval. On approval: each line becomes one stock movement into the warehouse (Stock Movement type **Manual Addition** — إضافة يدوية) and one FIFO cost layer in the base unit, at the line value ÷ the base quantity, dated the posting date; and one journal entry is posted on the posting date — debit each item's inventory account, credit the offset account — equal to the layers. The warehouse's quantity, the Warehouses Report and the valuation include the stock at once. An approved addition cannot be changed or cancelled; stock added wrongly is taken out again with Item Reconciliation (Out) or a Stock Count.
+
+### Refusals — Manual Stock Additions
+- "Say why the stock is being added — the note is kept with the record for the audit." — write the Note / reason.
+- "… is not a main store …" / "… belongs to branch …" / "… is inactive …" — choose a main warehouse of your active branch, or switch branch first.
+- "The posting date … is after today." — stock is added on the day it is there.
+- "Line …: … is tracked by serial number …" — bring it in on Opening Stock or a Purchase Invoice.
+- "Line …: … names no inventory account …" — set the item's inventory account on the item first.
+- "… is not kept in … Add … to the item's units …" — choose one of the item's units, or add the unit on the item.
+- "Line … names … but not its quantity and unit price." / "enter a quantity above zero" / "enter the stock price" — complete or clear the line.
+- "… is the … control account …" / "… is a bank or cash account …" — choose another offset account, or leave it as configured.
+- "whoever raised it or sent it for approval cannot approve it." — somebody else who holds approve approves it.
+- "No accounting mapping is configured for the 'inventory_adjustment' line of 'inventory.stock_adjustment' …" — Finance has not mapped the inventory adjustment account; ask Finance to map it on Posting Mappings, or choose an offset account on the draft.
+- "Account … requires Department / Cost Centre. Supply the missing value(s) and post again." — the account asks for a department. A draft: Edit draft, choose the **Department**, save and send it again. One waiting for approval: the approver rejects it, its author returns it to draft, chooses the Department and sends it again. For any other analysis value, Finance changes the account's requirement or the mapping.
+- "the period is closed" / "No accounting period covers …" — the posting date is in a closed period or a year not opened; correct the date on the draft (Return to draft / Edit draft).
+- "Manual stock addition … is '…': only …" — it has already moved on (for example a second press); open it again to see where it stands.
+
 ## Stock Receipts (إيصالات المخزون)
-Path: Inventory → Inventory & Warehouses → Stock Receipts   |   Arabic: المخزون ← المخزون والمستودعات ← إيصالات المخزون
+Inventory → Receipts, Issues & Transfers → Stock Receipts   |   Arabic: المخزون ← الاستلام والصرف والتحويل ← إيصالات المخزون
 Address: /inventory/stock-receipts
 Needs: `view` on `stock_movement`.
 What it is for: A read-only register of everything that came into stock, taken from the stock ledger: goods receipts, opening stock, an import's arrival from transit, returns, stock found by a count or reconciliation, and reversed issues. Nothing is entered here — the documents do that. Transfers between warehouses are not listed (they are on the Transfer screen).
 
 ### How to read and filter the list — Stock Receipts
-1. Open Inventory → Inventory & Warehouses → **Stock Receipts** (إيصالات المخزون). Newest first, fifty rows a page.
+1. Open Inventory → Receipts, Issues & Transfers → **Stock Receipts** (إيصالات المخزون). Newest first, fifty rows a page.
 2. Search with **Search this list** (ابحث في هذه القائمة): item code, item name, warehouse code or document number.
 3. Narrow with **From** (من) and **To** (إلى) dates, **Warehouse** (المخزن) (default **All warehouses** — كل المستودعات) and **Kind** (النوع) (default **All kinds** — كل الأنواع), then press **Filter** (تصفية).
 4. Click the **Number** (الرقم) to open the document that moved the stock, the item code or warehouse to open its profile, the **Journal** (القيد) number to open the journal entry.
@@ -207,13 +267,13 @@ Nothing is saved on this screen; it is read-only. A row appears as soon as a doc
 - **Not available to you** (غير متاح لك) — you do not hold the permission to view stock movements; ask an administrator.
 
 ## Stock Issues (صرف المخزون)
-Path: Inventory → Inventory & Warehouses → Stock Issues   |   Arabic: المخزون ← المخزون والمستودعات ← صرف المخزون
+Inventory → Receipts, Issues & Transfers → Stock Issues   |   Arabic: المخزون ← الاستلام والصرف والتحويل ← صرف المخزون
 Address: /inventory/stock-issues
 Needs: `view` on `stock_movement`.
 What it is for: A read-only register of everything that left stock, taken from the stock ledger: sales, project material issues, returns to suppliers, write-offs and damage, stock counted short, and reversed receipts. Nothing is entered here. Transfers between warehouses are not listed.
 
 ### How to read and filter the list — Stock Issues
-1. Open Inventory → Inventory & Warehouses → **Stock Issues** (صرف المخزون). Newest first, fifty rows a page.
+1. Open Inventory → Receipts, Issues & Transfers → **Stock Issues** (صرف المخزون). Newest first, fifty rows a page.
 2. Search with **Search this list** (ابحث في هذه القائمة): item code, item name, warehouse code or document number.
 3. Narrow with **From** (من) and **To** (إلى) dates, **Warehouse** (المخزن) and **Kind** (النوع), then press **Filter** (تصفية).
 4. Click the **Number** (الرقم) to open the document, the item or warehouse to open its profile, the **Journal** (القيد) number to open the journal entry.
@@ -234,14 +294,14 @@ Nothing is saved on this screen; it is read-only. A row appears as soon as a doc
 - **Not available to you** (غير متاح لك) — you do not hold the permission to view stock movements; ask an administrator.
 
 ## Transfer (التحويل)
-Path: Inventory → Inventory & Warehouses → Transfer   |   Arabic: المخزون ← المخزون والمستودعات ← التحويل
+Inventory → Receipts, Issues & Transfers → Transfer   |   Arabic: المخزون ← الاستلام والصرف والتحويل ← التحويل
 Address: /inventory/transfers (one transfer: /inventory/transfers/<transfer number>)
 Needs: `view` on `warehouse_transfer` to open the list and a transfer's record; `create` on `warehouse_transfer` and `execute` on `inventory_movement` to make a transfer; `print` / `export` on `warehouse_transfer` for copies; `create` on `warehouse_transfer` to add a note or a file to a transfer's record.
 What it is for: Moves an item from one warehouse to another inside the same branch. Saving the form moves the stock at once — out of the first warehouse, into the second — at the cost it already carries. There is no request to approve and nothing stays "on the way".
 
 ### How to transfer stock between warehouses — Transfer
 1. Make sure your active branch (top of the screen) is the branch of both warehouses; only that branch's normal, active warehouses are offered.
-2. Open Inventory → Inventory & Warehouses → **Transfer** (التحويل) and press **New transfer** (تحويل جديد).
+2. Open Inventory → Receipts, Issues & Transfers → **Transfer** (التحويل) and press **New transfer** (تحويل جديد).
 3. **Item Name** (اسم الصنف): start typing and pick the item from the list. The name must match an item exactly; a half-typed name sends nothing and is refused.
 4. **From Warehouse** (من مستودع): the warehouse the stock leaves.
 5. **To Warehouse** (إلى مستودع): the warehouse it goes to. It must be a different one.
@@ -309,13 +369,13 @@ There is no approval and no status to move through: the transfer is done when it
 - **That page does not exist** (هذه الصفحة غير موجودة) on a transfer's address — no transfer has that number, or it belongs to a branch you are not assigned to. Open it from the list.
 
 ## Stock Movement (حركة المخزون)
-Path: Inventory → Inventory & Warehouses → Stock Movement   |   Arabic: المخزون ← المخزون والمستودعات ← حركة المخزون
+Inventory → Stock & Availability → Stock Movement   |   Arabic: المخزون ← المخزون والتوفّر ← حركة المخزون
 Address: /inventory/stock-movements
 Needs: `view` on `stock_movement`; `print` / `export` on `stock_movement` for copies.
 What it is for: A read-only list of every movement of stock in your active branch, In or Out, newest first, with the document that made it and who entered it. It is the stock ledger itself, line by line; the Warehouses Report is these lines added up.
 
 ### How to read and filter the list — Stock Movement
-1. Open Inventory → Inventory & Warehouses → **Stock Movement** (حركة المخزون). It shows the active branch only; switch branch at the top of the screen to see another.
+1. Open Inventory → Stock & Availability → **Stock Movement** (حركة المخزون). It shows the active branch only; switch branch at the top of the screen to see another.
 2. Set any of: **From** (من) and **To** (إلى) dates; **Item Name** (اسم الصنف) — type part of the name or of the code (**Name or code** — الاسم أو الرمز); **Warehouse** (المخزن) (default **All warehouses** — كل المستودعات; transit warehouses are in the list too); **Document** (المستند) — part of an invoice, return or transfer number.
 3. Press **Show** (عرض).
 4. The line above the table says how many there are: "Showing 1–200 of … movements, newest first". Two hundred a page; use **Older** (الأقدم) and **Newer** (الأحدث) to move.
@@ -342,13 +402,13 @@ Nothing is saved on this screen; it is read-only. A warning line at the top — 
 - **No movements in this range.** (لا توجد حركات في هذه الفترة.) — nothing matches the filters in the active branch; widen the dates or switch branch.
 
 ## Stock Ledger (دفتر المخزون)
-Path: Inventory → Inventory & Warehouses → Stock Ledger   |   Arabic: المخزون ← المخزون والمستودعات ← دفتر المخزون
+Inventory → Stock & Availability → Stock Ledger   |   Arabic: المخزون ← المخزون والتوفّر ← دفتر المخزون
 Address: /inventory/stock-ledger
 Needs: `view` on `stock_movement`; `print` / `export` on `stock_movement` for copies.
 What it is for: One item, warehouse by warehouse: the opening balance, every movement oldest first with the balance carried down after each, and the closing balance. It answers "why does the screen say this quantity?" — the closing balance is the same figure Availability and the Warehouses Report show. Read-only, active branch only.
 
 ### How to read an item's ledger — Stock Ledger
-1. Open Inventory → Inventory & Warehouses → **Stock Ledger** (دفتر المخزون), or press **Movements** (الحركات) on a row of Availability or of the Warehouses Report (the item and warehouse are then already chosen).
+1. Open Inventory → Stock & Availability → **Stock Ledger** (دفتر المخزون), or press **Movements** (الحركات) on a row of Availability or of the Warehouses Report (the item and warehouse are then already chosen).
 2. **Item Name** (اسم الصنف): required — type and pick the item from the list (shown as name · code).
 3. Optionally choose a **Warehouse** (المخزن) (default **All warehouses** — كل المستودعات) and **From** (من) / **To** (إلى) dates.
 4. Press **Show** (عرض).
@@ -374,14 +434,14 @@ Nothing is saved on this screen; it is read-only.
 - **Not available to you** (غير متاح لك) — you do not hold the permission to view stock movements.
 
 ## Stock Count (جرد المخزون)
-Path: Inventory → Inventory & Warehouses → Stock Count   |   Arabic: المخزون ← المخزون والمستودعات ← جرد المخزون
+Inventory → Counts & Valuation → Stock Count   |   Arabic: المخزون ← الجرد والتقييم ← جرد المخزون
 Address: /inventory/stock-count (record: /inventory/stock-count/<count number>)
 Needs: `view` on `stock_count` to open; `create` on `stock_count` to plan a count and to add notes; `execute` on `stock_count` to record the count or recount, request a recount, adjust the books, cancel, and (with `create` on `attachment`) attach files; `approve` on `stock_count` to approve the variance; adjusting also needs `execute` on `inventory_movement`; `print` / `export` on `stock_count` for copies.
 What it is for: The physical count of a warehouse. A count is planned (the book quantities are frozen at that moment), the counters record what they found on the lines, a recount can be asked for, a manager approves the difference, and then the books are adjusted to the count with a journal entry.
 
 ### How to plan a count — Stock Count
 1. Make sure your active branch (top of the screen) is the branch of the warehouse you will count. A count planned under another branch cannot be adjusted later.
-2. Open Inventory → Inventory & Warehouses → **Stock Count** (جرد المخزون) and press **Plan a count** (تخطيط جرد).
+2. Open Inventory → Counts & Valuation → **Stock Count** (جرد المخزون) and press **Plan a count** (تخطيط جرد).
 3. **Warehouse** (المخزن): the warehouse to count. Transit warehouses are not offered.
 4. **Planned on** (تاريخ التخطيط): today by default.
 5. **Scope** (النطاق): **Everything** (كل شيء) or **The warehouse** (المستودع) — all stock in that warehouse; **One item** (صنف واحد); or **One category** (فئة واحدة).
@@ -466,14 +526,14 @@ Nothing moves and nothing is posted until **Adjust the books**. Then, for every 
 - "Permission denied: '…' on 'stock_count' is not granted to this user." or "… 'execute' on 'inventory_movement' …" — you lack the permission for that step.
 
 ## Item Reconciliation (تسوية الأصناف)
-Path: Inventory → Inventory & Warehouses → Item Reconciliation   |   Arabic: المخزون ← المخزون والمستودعات ← تسوية الأصناف
+Inventory → Counts & Valuation → Item Reconciliation   |   Arabic: المخزون ← الجرد والتقييم ← تسوية الأصناف
 Address: /inventory/stock-reconciliation (one reconciliation: /inventory/stock-reconciliation/<reconciliation number>)
 Needs: `view` on `stock_reconciliation` to open the list and a reconciliation's record; `create` on `stock_reconciliation` and `execute` on `inventory_movement` to make one; `print` / `export` on `stock_reconciliation` for copies; `create` on `stock_reconciliation` to add a note or a file to a record; `view` on `journal_entry` to see the journal's lines on a record.
 What it is for: A quick correction of one item in one warehouse to bring the system's quantity to what is really on the shelf: **In** adds stock that was found, **Out** removes stock that is missing. It moves the stock and posts the value at once, with no approval. For counting a whole warehouse use Stock Count.
 
 ### How to make a reconciliation (adjustment) — Item Reconciliation
 1. Make sure your active branch (top of the screen) is the branch of the warehouse.
-2. Open Inventory → Inventory & Warehouses → **Item Reconciliation** (تسوية الأصناف) and press **New reconciliation** (تسوية جديدة).
+2. Open Inventory → Counts & Valuation → **Item Reconciliation** (تسوية الأصناف) and press **New reconciliation** (تسوية جديدة).
 3. Type the **Item Code** (رمز الصنف) or the **Item Name** (اسم الصنف) and pick the item; each box fills the other.
 4. Choose the **Warehouse** (المخزن).
 5. **In/Out** (إدخال/إخراج): **In** (إدخال) to add stock that was found, **Out** (إخراج) to remove stock that is missing.
@@ -550,13 +610,13 @@ The journal is dated the reconciliation date. The movement shows on Stock Moveme
 - No **Posting** table and a journal number that is not a link on a record — you do not hold `view` on `journal_entry`; the reconciliation is still complete.
 
 ## Inventory Checks (فحوصات المخزون)
-Path: Inventory → Inventory & Warehouses → Inventory Checks   |   Arabic: المخزون ← المخزون والمستودعات ← فحوصات المخزون
+Inventory → Counts & Valuation → Inventory Checks   |   Arabic: المخزون ← الجرد والتقييم ← فحوصات المخزون
 Address: /inventory/checks
 Needs: `view` on `inventory_movement`; `print` / `export` on `inventory_movement` for copies.
 What it is for: A read-only health check of the stock records: twelve checks, each shown as Healthy, Warning or Error with a figure and the lines behind it. It never repairs anything. A correction is made with the document that fits (Item Reconciliation, Stock Count, a reversal) or by the system administrator.
 
 ### How to read the checks — Inventory Checks
-1. Open Inventory → Inventory & Warehouses → **Inventory Checks** (فحوصات المخزون). The checks run at once, for today; the heading reads "Checks as of …" with a summary "… healthy · … warning · … error".
+1. Open Inventory → Counts & Valuation → **Inventory Checks** (فحوصات المخزون). The checks run at once, for today; the heading reads "Checks as of …" with a summary "… healthy · … warning · … error".
 2. Read the **State** (الحالة) of each row: **Healthy** (سليم) — nothing found; **Warning** (تحذير) — worth a look, the books are not wrong; **Error** (خطأ) — the stock records disagree with themselves.
 3. For a row that is not healthy, read **Figure** (الرقم) and **Detail** (التفاصيل) (the first eight lines are shown, then "… and N more"), and press **Open** (فتح) in the **Screen** (الشاشة) column to go to the screen that shows the same thing in full.
 4. Report every Error to the accounting manager. Nothing can be fixed from this screen.
@@ -585,13 +645,13 @@ Nothing is saved on this screen; it is read-only and keeps no history. A check t
 - **Not available to you** (غير متاح لك) — you do not hold the permission to view inventory movements; ask an administrator.
 
 ## Inventory Valuation (تقييم المخزون)
-Path: Inventory → Inventory & Warehouses → Inventory Valuation   |   Arabic: المخزون ← المخزون والمستودعات ← تقييم المخزون
+Inventory → Counts & Valuation → Inventory Valuation   |   Arabic: المخزون ← الجرد والتقييم ← تقييم المخزون
 Address: /inventory/valuation
 Needs: `view` on `inventory_movement`; `print` / `export` on `inventory_movement` for copies.
 What it is for: The stock position at any past date or today — quantity, unit cost and value per item and warehouse at FIFO — beside the General Ledger balance of the inventory accounts at the same date. Read-only. Use it for month-end and year-end figures and to compare stock with the accounts.
 
 ### How to run the valuation at a date — Inventory Valuation
-1. Open Inventory → Inventory & Warehouses → **Inventory Valuation** (تقييم المخزون).
+1. Open Inventory → Counts & Valuation → **Inventory Valuation** (تقييم المخزون).
 2. Set **As of** (بتاريخ) — today by default. A future date is refused.
 3. Optionally choose **Warehouse** (المخزن) (default **All warehouses** — كل المستودعات), **Category** (الفئة) (default **All categories** — كل الفئات) and **Branch** (الفرع) (default **All branches** — كل الفروع, meaning every branch you may see).
 4. Press **Run** (تشغيل).
@@ -622,17 +682,18 @@ Nothing is saved on this screen; it is read-only. Every figure is worked out fro
 - **No inventory account in view.** (لا حساب مخزون في النطاق.) — none of the items shown names an inventory account, so there is nothing to compare with the General Ledger.
 
 ## Warehouses Report (تقرير المستودعات)
-Path: Inventory → Inventory & Warehouses → Warehouses Report   |   Arabic: المخزون ← المخزون والمستودعات ← تقرير المستودعات
+Inventory → Counts & Valuation → Warehouses Report   |   Arabic: المخزون ← الجرد والتقييم ← تقرير المستودعات
 Address: /inventory/fifo-valuation
 Needs: `view` on `fifo_valuation` for the screen to appear in the menu; `view` on `inventory_movement` to open it; `print` / `export` on `inventory_movement` for copies.
 What it is for: The stock held now, valued at what it cost: a summary per warehouse and, below it, every item in every warehouse with its quantity, average unit cost and total cost. Read-only. Quantity is in units; Total Price is the FIFO cost in IQD — not a quantity and not a selling price. (The page's own Arabic title reads تقرير المخازن.)
 
 ### How to read the report and drill down — Warehouses Report
-1. Open Inventory → Inventory & Warehouses → **Warehouses Report** (تقرير المستودعات). It shows every branch you may see.
+1. Open Inventory → Counts & Valuation → **Warehouses Report** (تقرير المستودعات). It shows every branch you may see.
 2. The first table, **By warehouse** (حسب المستودع), has one line per active warehouse. Click a **Warehouse Code** to see only that warehouse's items; click the warehouse name to open its profile.
 3. The second table lists the items. Click an item or warehouse name to open its profile; press **Movements** (الحركات) at the end of a row to open the Stock Ledger for that item in that warehouse.
 4. To find an item, type part of its name or code in **Item Name** (اسم الصنف) (**Name or code** — الاسم أو الرمز); to keep one warehouse choose **Warehouse Name** (اسم المخزن) (default **All warehouses** — كل المخازن); then press **Search** (بحث). When a filter is set the By warehouse summary is hidden.
 5. **Print / Export** (طباعة / تصدير) at the top downloads the report with your filters.
+6. Beside it, **Add items manually** (إضافة أصناف يدويًا) opens the Manual Stock Additions sheet (with the warehouse chosen when the report is filtered to one), and **Manually added items** (الأصناف المضافة يدويًا) opens their list. They show to whoever may raise or read manual stock additions.
 
 ### Fields — Warehouses Report
 By warehouse (summary):
@@ -674,8 +735,9 @@ What it is for: The one record of each thing the company buys, stocks and sells.
 5. **Inventory account** (حساب المخزون): the asset account where its stock is held.
 6. **Sales account** (حساب المبيعات): the revenue account for its sales, or leave **Decided by posting rule** (تحدده قاعدة القيد).
 7. **COGS account** (حساب تكلفة المبيعات): the expense account its cost goes to when it is sold.
-8. Press **Create** (إنشاء). The system gives the item its code and opens its profile.
-9. On the profile, link at least one supplier (see "How to link suppliers") — until then the profile says "No supplier is linked yet, so this item cannot be ordered." — and add any other units.
+8. **Bought from (supplier)** (يُشترى من (المورد)): choose the supplier or suppliers it is bought from — optional; hold Ctrl (Cmd on a Mac) to choose more than one. The first in the list becomes its default supplier.
+9. Press **Create** (إنشاء). The system gives the item its code and opens its profile.
+10. An item is bought only from a supplier linked to it (since 2026-10-06): if none was chosen, link at least one on the profile (see "How to link suppliers") — until then the profile says "No supplier is linked yet, so this item cannot be bought — not on a purchase invoice, not on a purchase order." — and add any other units.
 
 ### How to open and change an item — Items
 1. In the list click the item's **Code** (الرمز). Search with **Search this list** (ابحث في هذه القائمة) by code, name or unit.
@@ -690,11 +752,12 @@ What it is for: The one record of each thing the company buys, stocks and sells.
 3. These are defaults offered on new invoice lines. Changing one does not change invoices already saved.
 
 ### How to link suppliers — Items
+The link is what may be bought: a purchase invoice line, a draft line and a purchase order line name only an item linked to their supplier, and the purchase invoice's lines offer only those items (since 2026-10-06). Pairs already bought before that day were linked by the release.
 1. On the profile, in **Bought from (N)** (يُشترى من), choose the supplier under **Add a supplier** (إضافة مورد). Only active partners with the supplier role are listed.
-2. Optionally type **Their code for it** (رمزه لديهم) — the code the supplier knows the item by.
+2. Optionally type **Their code for it** (رمزه لديهم) — the code the supplier knows the item by. It is shown under the item on that supplier's purchase invoice lines.
 3. Press **Link supplier** (ربط المورد). The first supplier linked becomes the **Default** (افتراضي).
 4. To change the default press **Make default** (اجعله الافتراضي) on another supplier's row.
-5. To remove a supplier press **Unlink** (فك الربط). If it was the default, the next supplier by code becomes the default.
+5. To remove a supplier type the reason in **Why … no longer sells it** (سبب توقّف … عن بيعه) on its row and press **Remove** (إزالة). The row stays, marked **Inactive** (غير نشط) with the reason; from then on the item cannot be bought from that supplier, and what was already bought stays as it is. If it was the default, the next supplier in use by code becomes the default. A supplier removed can be linked again with Link supplier.
 
 ### How to add a unit and its conversion (for example BOX = 24) — Items
 1. Make sure the unit (for example BOX) exists on Units of Measure and is active.
@@ -723,14 +786,15 @@ New item form:
 - **Inventory account** (حساب المخزون) — required; a posting account of type asset.
 - **Sales account** (حساب المبيعات) — optional; a posting account of type revenue.
 - **COGS account** (حساب تكلفة المبيعات) — required; a posting account of type expense.
+- **Bought from (supplier)** (يُشترى من (المورد)) — optional; one or more partners with the supplier role. The first in the list is its default supplier.
 - The item code is given by the system. Every item made here is a stock item tracked by batch.
 Profile:
 - **Name** (الاسم) — required.
 - **Selling price (IQD)** (سعر البيع (دينار عراقي)) — optional; not negative; per base unit; the default price on a new sales line.
 - **Buying price (IQD)** (سعر الشراء (دينار عراقي)) — optional, per supplier; not negative; per base unit; the default price on a new purchase line from that supplier.
-- **Add a supplier** (إضافة مورد) — a supplier to link. **Their code for it** (رمزه لديهم) — optional, up to 100 characters. **Default** (الافتراضي) — one supplier per item.
+- **Add a supplier** (إضافة مورد) — a supplier to link. **Their code for it** (رمزه لديهم) — optional, up to 100 characters. **Default** (الافتراضي) — one supplier per item. **Why … no longer sells it** — required to remove a supplier.
 - **Add unit** (إضافة وحدة) — an active unit the item does not have yet. **One unit holds** (تحتوي الوحدة الواحدة) — required; a number above zero and not 1; decimals allowed (up to 6). **Barcode** (الباركود) — optional. **Bought in** (تُشترى بـ) / **Sold in** (تُباع بـ) — the default unit for purchase and for sales; when none is ticked the base unit is the default. A purchase line can be written in any active unit of the item; a sales invoice line is written in the base unit.
-List columns: **Code** (الرمز), **Name** (الاسم), **Kind** (النوع) — **Stock item** (صنف مخزني) or **Service** (خدمة), **Base unit** (الوحدة الأساسية), **On hand** (المتوفر) — all normal warehouses together, "—" for a service, **Suppliers** (الموردون) — how many are linked, **Active** (نشط).
+List columns: **Code** (الرمز), **Name** (الاسم), **Kind** (النوع) — **Stock item** (صنف مخزني) or **Service** (خدمة), **Base unit** (الوحدة الأساسية), **On hand** (المتوفر) — all normal warehouses together, "—" for a service, **Supplier** (المورد) — the suppliers it is bought from (code · name, the default first; "None" when none is linked), **Active** (نشط). The search box finds an item by its supplier's code or name too.
 Kept on the item but with no field on these screens: the purchase account, tracking (serial / batch — always batch for items made here), warranty months, category, description, and the minimum stock level used by the Warehouses Report's Low stock column. They cannot be seen or changed from the Items screens.
 
 ### After you save — Items
@@ -742,6 +806,8 @@ An item has no approval: it is usable as soon as it is created — **Active** (�
 - "inventoryAccountId: must be an asset account", "cogsAccountId: must be an expense account", "salesAccountId: must be a revenue account", or "…: is a header, not a posting account" — choose a posting account of the right type.
 - "price: must not be negative" — type zero or more.
 - "supplierId: does not hold the supplier role" / "supplierId: is not linked to this item" — choose a supplier from the list.
+- "reason: is required to take a supplier off an item" — type why the supplier no longer sells it.
+- On a purchase invoice or a purchase order: "… is not linked to … : an item is bought only from the suppliers linked to it…" — link that supplier here (How to link suppliers), or buy the item from a supplier already linked.
 - "uomCode: is not an active unit of measure" — add or reactivate the unit on Units of Measure first.
 - "uomCode: is …'s base unit, which it already has at one" — the base unit is already there; choose another unit.
 - "uomCode: is already one of …'s units" — the item already has that unit.

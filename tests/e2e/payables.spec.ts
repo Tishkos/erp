@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { containerNo } from '../support/container-number';
+import { dateField } from './support/controls';
 import writeXlsxFile from 'write-excel-file/node';
 
 /**
@@ -124,7 +125,7 @@ test.describe('A22 · payables in a browser', () => {
     await stop.getByLabel('Reason').selectOption({ label: 'BANK — Bank internal approval' });
     await stop.getByLabel('Owner').selectOption({ index: 0 });
     await stop.getByRole('textbox', { name: 'Next action' }).fill('Call the trade desk');
-    await stop.getByRole('textbox', { name: 'Expected by' }).fill('2026-10-15');
+    await dateField(stop, 'Expected by').fill('2026-10-15');
     await stop.getByRole('button', { name: 'Record the stop' }).click();
     await expect(page.getByText('STOPPED: BANK', { exact: false }).filter({ visible: true }).first()).toBeVisible({
       timeout: 30_000,

@@ -7,6 +7,9 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import {
+  AArrowDown,
+  AArrowUp,
+  ALargeSmall,
   ArrowLeftRight,
   ClipboardList,
   BarChart3,
@@ -17,28 +20,44 @@ import {
   Check,
   ChevronDown,
   ChevronsUpDown,
+  CirclePause,
   Activity,
   Files,
   FolderKanban,
   Handshake,
+  Highlighter,
   Languages,
   LayoutDashboard,
+  List,
+  ListTree,
   LogOut,
   Mail,
   Menu,
+  PaintBucket,
   Palette,
+  PanelBottom,
+  PanelLeft,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelTop,
+  Pin,
+  PinOff,
+  Rows2,
+  Rows3,
   Settings,
   ShoppingBag,
   ShoppingCart,
+  Sparkles,
   Truck,
   UserCog,
   Users,
   X,
   type LucideIcon,
 } from 'lucide-react';
-import type { MenuItem, MenuSection } from '@domain/menu';
+import type { MenuSection } from '@domain/menu';
 import { MODULES, type ModuleKey } from '@domain/modules';
 import {
+  APPEARANCE_CHOICES,
   APPEARANCE_PRESETS,
   APPEARANCE_PRESET_SETTINGS,
   BORDER_STYLES,
@@ -51,8 +70,12 @@ import {
   type AppearancePreset,
   type UserAppearanceSettings,
 } from '@domain/appearance';
-import { isDelivered, routeFor } from '@domain/screens';
-import { saveMyAppearanceSettings } from '@/app/(app)/appearance-actions';
+import { routeFor } from '@domain/screens';
+import {
+  makeMyAppearanceEveryonesDefault,
+  resetEveryonesAppearanceDefault,
+  saveMyAppearanceSettings,
+} from '@/app/(app)/appearance-actions';
 import { Button, Panel } from '@/components/ui';
 /*
  * The monogram, not the full mark.
@@ -67,30 +90,32 @@ import { Button, Panel } from '@/components/ui';
 import mainLogo from '../../mainLogoMark.png';
 import { GlobalSearch } from './global-search';
 import { ChatCount, ChatGlyph, ChatPopover, useChatLabel } from './chat/chat-header';
+import { OwnAvatar } from './chat/chat-avatar';
 import { BellCount, BellGlyph, BellPopover, useBellLabel } from './notifications/notification-bell';
 import { switchBranch } from '@/app/(app)/actions';
+import { AccountMenuExtras } from './account-menu-extras';
+import { ErpDock } from './erp-dock';
+import { ErpSectionBar } from './erp-section-bar';
+import { LanguageChoice, switchLocale } from './language-choice';
+import { ModuleContents, type ModuleDefinition, type ModuleGroup } from './erp-nav-parts';
+import { ErpSidebar } from './erp-sidebar';
 
 type UtilityPanel = 'notifications' | 'messages' | 'user';
 
 /**
  * What the header gives up, in order, so the module names keep their size
  * beside the company's name (`fitNav`): the user's name beside the avatar,
- * the "Active branch" caption, the company's name, and last the chevrons.
- * Search is one icon throughout (by direction, 2026-10-04).
+ * the company's name, and last the chevrons. Search is one icon throughout
+ * (by direction, 2026-10-04). The Active branch and the language are in the
+ * account menu since 2026-10-06 ("move active branch into profile drop down
+ * menu … make more spaces"; "the language selection should be in profile
+ * settings"), so there is nothing of theirs to give up.
  */
 // The chevrons go last — after the company's name — by direction 2026-10-06 ("make sure the arrow icon appears").
-const HEADER_SQUEEZE = ['user', 'branch', 'name', 'chevrons'] as const;
+const HEADER_SQUEEZE = ['user', 'name', 'chevrons'] as const;
+/** With the modules in the side panel or the bottom bar, the bar gives up the user's name before a section goes behind More. */
+const SECTION_SQUEEZE = ['user'] as const;
 type OpenPopover = ModuleKey | UtilityPanel | null;
-
-interface ModuleDefinition {
-  readonly key: ModuleKey;
-  readonly icon: LucideIcon;
-  readonly sectionKeys: readonly string[];
-}
-
-interface ModuleGroup extends ModuleDefinition {
-  readonly sections: readonly MenuSection[];
-}
 
 interface ErpShellProps {
   readonly brand: string;
@@ -105,6 +130,14 @@ interface ErpShellProps {
   readonly sections: readonly MenuSection[];
   readonly initialAppearanceSettings: UserAppearanceSettings;
   readonly appearanceSettingsSaved: boolean;
+  /**
+   * The person has no appearance of their own and the company has a default
+   * (0419): nothing of this browser is adopted on load, so their row stays
+   * empty and keeps following the company's default.
+   */
+  readonly appearanceFollowsCompany?: boolean;
+  /** May set and reset everyone's default appearance (`configure` on the company). */
+  readonly mayConfigureCompanyAppearance?: boolean;
   /**
    * How many notifications the signed-in person has not read — what the bell
    * shows first. The list itself is fetched when the popover opens
@@ -121,16 +154,9 @@ interface ErpShellProps {
 type Accent = 'blue' | 'indigo' | 'teal' | 'orange';
 type Theme = 'light' | 'dark';
 
-interface AppearancePreferences {
+interface AppearancePreferences extends UserAppearanceSettings {
   readonly theme: Theme;
   readonly accent: Accent;
-  readonly appearance: UserAppearanceSettings['appearance'];
-  readonly density: UserAppearanceSettings['density'];
-  readonly cornerStyle: UserAppearanceSettings['cornerStyle'];
-  readonly contentWidth: UserAppearanceSettings['contentWidth'];
-  readonly borderStyle: UserAppearanceSettings['borderStyle'];
-  readonly shadow: UserAppearanceSettings['shadow'];
-  readonly componentSize: UserAppearanceSettings['componentSize'];
 }
 
 type PreferenceName = keyof AppearancePreferences;
@@ -158,6 +184,7 @@ const MODULE_ICONS: Readonly<Record<ModuleKey, LucideIcon>> = {
 const MODULE_DEFINITIONS: readonly ModuleDefinition[] = MODULES.map((module) => ({
   key: module.key,
   icon: MODULE_ICONS[module.key],
+  group: module.group,
   sectionKeys: module.sectionKeys,
 }));
 
@@ -172,19 +199,65 @@ const LEGACY_APPEARANCE_OPTIONS = {
   accent: ['blue', 'indigo', 'teal', 'orange'],
 } as const;
 
-const SETTING_OPTIONS = {
-  density: DENSITIES,
-  cornerStyle: CORNER_STYLES,
-  contentWidth: CONTENT_WIDTHS,
-  borderStyle: BORDER_STYLES,
-  shadow: SHADOW_STYLES,
-  componentSize: COMPONENT_SIZES,
-} as const satisfies {
-  readonly [Name in Exclude<keyof UserAppearanceSettings, 'appearance'>]: readonly string[];
+type SettingName = Exclude<keyof UserAppearanceSettings, 'appearance'>;
+
+/**
+ * The Appearance drawer's groups (2026-10-06: "make customization so good …
+ * clear groups"). Navigation first — what the person asked for — then the
+ * styles, then the settings a style starts from, then the reading switches no
+ * style touches.
+ */
+const NAVIGATION_SETTING_NAMES = ['navigation', 'sidebar', 'sidebarGroups', 'sidebarColour', 'header'] as const;
+const BASIC_SETTING_NAMES = ['cornerStyle', 'contentWidth'] as const;
+const TEXT_SETTING_NAMES = ['textSize', 'density', 'motion'] as const;
+const TABLE_SETTING_NAMES = ['tableStripes'] as const;
+const ADVANCED_SETTING_NAMES = ['borderStyle', 'shadow', 'componentSize'] as const;
+
+/** Each setting's legend in the `shell` messages. */
+const SETTING_TITLES: Readonly<Record<SettingName, string>> = {
+  density: 'density',
+  cornerStyle: 'radius',
+  contentWidth: 'width',
+  borderStyle: 'border_style',
+  shadow: 'shadow_style',
+  componentSize: 'component_size',
+  navigation: 'navigation_layout',
+  sidebar: 'sidebar_style',
+  sidebarGroups: 'sidebar_groups',
+  sidebarColour: 'sidebar_colour',
+  textSize: 'text_size',
+  header: 'header_behaviour',
+  motion: 'motion',
+  tableStripes: 'table_stripes',
 };
 
-const ADVANCED_SETTING_NAMES = ['borderStyle', 'shadow', 'componentSize'] as const;
-const BASIC_SETTING_NAMES = ['density', 'cornerStyle', 'contentWidth'] as const;
+/**
+ * The settings added on 2026-10-06 name their choices `<prefix>_<value>`
+ * ("Top bar", not a bare "top"); the older six use the value itself.
+ */
+const OPTION_LABEL_PREFIX: Partial<Readonly<Record<SettingName, string>>> = {
+  navigation: 'navigation',
+  sidebar: 'sidebar',
+  sidebarGroups: 'sidebar_groups',
+  sidebarColour: 'sidebar_colour',
+  textSize: 'text_size',
+  header: 'header',
+  motion: 'motion',
+  tableStripes: 'table_stripes',
+};
+
+/** A picture for each choice of the newer settings; the panel icons mirror in Arabic, as the panel does. */
+const OPTION_ICONS: Partial<Readonly<Record<SettingName, Readonly<Record<string, LucideIcon>>>>> = {
+  navigation: { top: PanelTop, side: PanelLeft, bottom: PanelBottom },
+  sidebar: { full: PanelLeftOpen, icons: PanelLeftClose },
+  sidebarGroups: { grouped: ListTree, plain: List },
+  sidebarColour: { default: PanelLeft, highlight: Highlighter, accent: PaintBucket },
+  textSize: { smaller: AArrowDown, default: ALargeSmall, larger: AArrowUp },
+  header: { sticky: Pin, static: PinOff },
+  motion: { full: Sparkles, reduced: CirclePause },
+  tableStripes: { on: Rows3, off: Rows2 },
+};
+const MIRRORED_OPTION_ICONS: ReadonlySet<LucideIcon> = new Set([PanelLeft, PanelLeftOpen, PanelLeftClose]);
 
 const PRESET_DESCRIPTIONS: Readonly<Record<AppearancePreset, string>> = {
   current: 'preset_current_description',
@@ -227,8 +300,8 @@ function isActiveHref(pathname: string, href: string): boolean {
  * module that actually lists the screen is the module that lights up. Routing
  * a screen under another module's path stays a thing you can do.
  */
-function activeLink(pathname: string, modules: readonly ModuleGroup[]): { readonly moduleKey: string; readonly href: string } | null {
-  let best: { moduleKey: string; href: string } | null = null;
+function activeLink(pathname: string, modules: readonly ModuleGroup[]): { readonly moduleKey: ModuleKey; readonly href: string } | null {
+  let best: { moduleKey: ModuleKey; href: string } | null = null;
   for (const module of modules) {
     for (const section of module.sections) {
       for (const item of section.items) {
@@ -280,6 +353,14 @@ const PREFERENCE_ATTRIBUTE = {
   borderStyle: 'data-border-style',
   shadow: 'data-shadow',
   componentSize: 'data-component-size',
+  navigation: 'data-navigation',
+  sidebar: 'data-side-panel',
+  sidebarGroups: 'data-side-groups',
+  sidebarColour: 'data-side-colour',
+  textSize: 'data-text-size',
+  header: 'data-header',
+  motion: 'data-motion',
+  tableStripes: 'data-table-stripes',
 } as const satisfies Record<PreferenceName, `data-${string}`>;
 
 function applyPreference(name: PreferenceName, value: PreferenceValue): void {
@@ -304,80 +385,15 @@ function savedSettingsFrom(value: AppearancePreferences): UserAppearanceSettings
     borderStyle: value.borderStyle,
     shadow: value.shadow,
     componentSize: value.componentSize,
+    navigation: value.navigation,
+    sidebar: value.sidebar,
+    sidebarGroups: value.sidebarGroups,
+    sidebarColour: value.sidebarColour,
+    textSize: value.textSize,
+    header: value.header,
+    motion: value.motion,
+    tableStripes: value.tableStripes,
   };
-}
-
-function PendingItem({ item }: { readonly item: MenuItem }) {
-  const page = useTranslations('page');
-  const pending = useTranslations('screen');
-
-  return (
-    <span
-      className="erp-menu-item erp-menu-item--pending"
-      title={pending('not_built')}
-    >
-      <span className="erp-menu-item__label">{page(item.key)}</span>
-    </span>
-  );
-}
-
-function ModuleContents({
-  module,
-  pathname,
-  activeHref,
-  onNavigate,
-}: {
-  readonly module: ModuleGroup;
-  readonly pathname: string;
-  /** The one deepest link that matches the path, worked out once by the shell. */
-  readonly activeHref: string | null;
-  readonly onNavigate: () => void;
-}) {
-  const nav = useTranslations('nav');
-  const page = useTranslations('page');
-  const pending = useTranslations('screen');
-
-  return (
-    <div className="erp-module-contents">
-      {module.sections.map((section) => (
-        <section className="erp-module-section" key={section.key}>
-          <h3 className="erp-module-section__title">{nav(section.key)}</h3>
-          <ul className="erp-module-section__list">
-            {section.items.map((item) => {
-              // Every item in the approved tree has an address: the one its
-              // module declared, or the one the screen catalogue derives. An
-              // item that is not built yet keeps its pending badge, so the
-              // tree says which pages are previews without refusing to open
-              // them — which is what it used to do, for 176 of 218 items.
-              const href = routeFor(item, section.key);
-              // Unbuilt means not delivered — not "its address is derived".
-              // Sales Invoices, Customer Receipts and every other built
-              // screen whose route comes from its key were drawn grey with
-              // "Not yet built" on them (found 2026-10-04).
-              const preview = !isDelivered(href);
-              return (
-                <li className="erp-module-section__item" key={item.key}>
-                  <Link
-                    // The one deepest link, not every link the path starts
-                    // with: Update from ASYCUDA lives under Customs
-                    // Pre-Declarations' address, so both used to read as the
-                    // open screen (reported 2026-10-02).
-                    aria-current={activeHref === href ? 'page' : undefined}
-                    className={`erp-menu-item erp-menu-item--link${preview ? ' erp-menu-item--preview' : ''}`}
-                    href={href}
-                    onClick={onNavigate}
-                    title={preview ? pending('not_built') : undefined}
-                  >
-                    <span className="erp-menu-item__label">{page(item.key)}</span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      ))}
-    </div>
-  );
 }
 
 export function ErpShell({
@@ -393,6 +409,8 @@ export function ErpShell({
   sections,
   initialAppearanceSettings,
   appearanceSettingsSaved,
+  appearanceFollowsCompany = false,
+  mayConfigureCompanyAppearance = false,
   unreadNotifications = 0,
   notificationZone = 'Asia/Baghdad',
   footer,
@@ -441,22 +459,67 @@ export function ErpShell({
   const chatEnabled = sections.some((section) => section.items.some((item) => item.key === 'chat'));
   const messagesLabel = useChatLabel(chatEnabled, shell('messages'));
 
+  // One save at a time, and only the latest choice after it: Next runs server
+  // actions one after another, so five quick presses used to queue five saves
+  // and a page left before the queue drained kept an earlier choice.
+  const saving = useRef<{ busy: boolean; next: UserAppearanceSettings | null }>({ busy: false, next: null });
   const persistAppearanceSettings = async (settings: UserAppearanceSettings) => {
     setAppearanceSaveState('saving');
-    try {
-      const result = await saveMyAppearanceSettings(settings);
-      setAppearanceSaveState(result.ok ? 'saved' : 'error');
-    } catch {
-      setAppearanceSaveState('error');
+    const queue = saving.current;
+    if (queue.busy) {
+      queue.next = settings;
+      return;
     }
+    queue.busy = true;
+    let current: UserAppearanceSettings | null = settings;
+    let ok = true;
+    while (current) {
+      queue.next = null;
+      try {
+        ok = (await saveMyAppearanceSettings(current)).ok;
+      } catch {
+        ok = false;
+      }
+      current = queue.next;
+    }
+    queue.busy = false;
+    setAppearanceSaveState(ok ? 'saved' : 'error');
+  };
+
+  // Everyone's default (0419): set from this person's appearance, or reset to
+  // the built-in one — each after a confirm, in this drawer.
+  const [companyStep, setCompanyStep] = useState<'idle' | 'confirm_make' | 'confirm_reset'>('idle');
+  const [companyState, setCompanyState] = useState<'idle' | 'working' | 'made' | 'reset' | 'error'>('idle');
+  const settleSaves = async () => {
+    // The choices pressed a moment ago reach the account first, so "mine" is what is on screen.
+    for (let waited = 0; saving.current.busy && waited < 50; waited += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  };
+  const changeCompanyDefault = async (kind: 'make' | 'reset') => {
+    setCompanyState('working');
+    await settleSaves();
+    try {
+      const result = kind === 'make' ? await makeMyAppearanceEveryonesDefault() : await resetEveryonesAppearanceDefault();
+      setCompanyState(result.ok ? (kind === 'make' ? 'made' : 'reset') : 'error');
+    } catch {
+      setCompanyState('error');
+    }
+    setCompanyStep('idle');
   };
 
   useLayoutEffect(() => {
     // Existing choices lived in this browser. Adopt them once for this
     // account, then the database is authoritative across devices and logins.
-    const settings: UserAppearanceSettings = appearanceSettingsSaved
+    // Only the seven layout settings ever lived in a browser; the navigation
+    // settings (0407) are the account's from the start. A person who follows
+    // the company's default (0419) adopts nothing: writing it into their row
+    // would make it theirs, and a later default would no longer reach them.
+    const adopt = !appearanceSettingsSaved && !appearanceFollowsCompany;
+    const settings: UserAppearanceSettings = !adopt
       ? initialAppearanceSettings
       : {
+          ...initialAppearanceSettings,
           appearance: readStoredPreference('data-appearance', APPEARANCE_PRESETS, initialAppearanceSettings.appearance),
           density: readStoredPreference('data-density', DENSITIES, initialAppearanceSettings.density),
           cornerStyle: readStoredPreference('data-radius', CORNER_STYLES, initialAppearanceSettings.cornerStyle),
@@ -475,13 +538,9 @@ export function ErpShell({
     (Object.keys(stored) as PreferenceName[]).forEach((name) => {
       applyPreference(name, stored[name]);
     });
-    if (!appearanceSettingsSaved) {
-      setAppearanceSaveState('saving');
-      void saveMyAppearanceSettings(settings).then((result) => {
-        setAppearanceSaveState(result.ok ? 'saved' : 'error');
-      }).catch(() => setAppearanceSaveState('error'));
-    }
-  }, [appearanceSettingsSaved, initialAppearanceSettings]);
+    if (adopt) void persistAppearanceSettings(settings);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the save queue is a ref; adopting runs once per server render.
+  }, [appearanceSettingsSaved, appearanceFollowsCompany, initialAppearanceSettings]);
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -515,9 +574,36 @@ export function ErpShell({
   const navRef = useRef<HTMLElement>(null);
   const fitNav = () => {
     const bar = barRef.current;
+    if (!bar) return;
     const nav = navRef.current;
     const list = nav?.firstElementChild;
-    if (!bar || !nav || !list) return;
+    if (!nav || !list) {
+      // The side panel or the bottom bar holds the modules (2026-10-06): the
+      // bar keeps the brand and the utilities, and gives up the same things,
+      // in the same order, only if even those do not fit. A phone keeps the
+      // phone's header, whichever layout was chosen.
+      if (window.matchMedia('(max-width: 35rem)').matches) {
+        delete bar.dataset.squeeze;
+        return;
+      }
+      // The open module's sections are in the bar: the user's name goes
+      // before any of them goes behind More (`data-need` is what all of them
+      // take, measured by erp-section-bar.tsx before this runs).
+      const sectionBar = bar.querySelector<HTMLElement>('.erp-sections');
+      if (sectionBar) {
+        const need = Number(sectionBar.dataset.need) || 0;
+        for (let given = 0; given <= SECTION_SQUEEZE.length; given += 1) {
+          bar.dataset.squeeze = SECTION_SQUEEZE.slice(0, given).join(' ');
+          if (sectionBar.clientWidth >= need) return;
+        }
+        return;
+      }
+      for (let given = 0; given <= HEADER_SQUEEZE.length; given += 1) {
+        bar.dataset.squeeze = HEADER_SQUEEZE.slice(0, given).join(' ');
+        if (bar.scrollWidth <= bar.clientWidth) return;
+      }
+      return;
+    }
     if (nav.clientWidth === 0) {
       // The phone layout: the drawer has the modules, the breakpoints the rest.
       delete bar.dataset.squeeze;
@@ -553,17 +639,13 @@ export function ErpShell({
     setMobileOpen(false);
   };
 
+  // The phone drawer's switch: the other language. The account menu and My profile use LanguageChoice; all three go through switchLocale.
   const changeLocale = () => {
     const nextLocale = currentLocale === 'ar' ? 'en' : 'ar';
-    document.cookie = `erp-locale=${nextLocale}; Path=/; Max-Age=31536000; SameSite=Lax`;
-    document.documentElement.lang = nextLocale;
-    document.documentElement.dir = nextLocale === 'ar' ? 'rtl' : 'ltr';
     setCurrentLocale(nextLocale);
     setOpenPopover(null);
     setMobileOpen(false);
-    // A full reload, not router.refresh(): every server component, the
-    // message bundle and the document direction must change together.
-    window.location.reload();
+    switchLocale(nextLocale);
   };
 
   const changeAppearanceSetting = (name: keyof UserAppearanceSettings, value: string) => {
@@ -592,9 +674,25 @@ export function ErpShell({
     setAppearanceOpen(true);
   };
 
-  // The branch control. One branch is a fact and is shown as one; more than
-  // one is a choice, and the picker submits itself — the whole layout re-reads
-  // under the new branch, which is the point of changing it.
+  // The drawer opens with the module of the open screen unfolded — from the
+  // menu button, and from the bottom bar's "More" on a phone.
+  const openMobileDrawer = () => {
+    setOpenPopover(null);
+    setOpenMobileModules(
+      modules
+        .filter((module) => module.key === activeKey)
+        .map((module) => module.key),
+    );
+    setMobileOpen(true);
+  };
+  const topBar = appearance.navigation === 'top';
+  // The module of the open screen, whose headings the bar shows when the modules are elsewhere.
+  const activeModule = topBar ? null : (modules.find((module) => module.key === activeKey) ?? null);
+
+  // The branch control of the phone drawer. One branch is a fact and is shown
+  // as one; more than one is a choice, and the picker submits itself — the
+  // whole layout re-reads under the new branch, which is the point of
+  // changing it. On a wider screen the account menu carries it (2026-10-06).
   const branchControl = (
     <div className="erp-branch" title={`${shell('branch')}: ${branchCode || '—'}`}>
       <Building2 className="erp-branch__icon" aria-hidden="true" />
@@ -625,23 +723,18 @@ export function ErpShell({
     </div>
   );
 
-  const renderAppearanceSetting = (name: keyof typeof SETTING_OPTIONS) => {
-    const titleKey = {
-      density: 'density',
-      cornerStyle: 'radius',
-      contentWidth: 'width',
-      borderStyle: 'border_style',
-      shadow: 'shadow_style',
-      componentSize: 'component_size',
-    }[name];
-    const values = SETTING_OPTIONS[name];
+  const renderAppearanceSetting = (name: SettingName) => {
+    const values: readonly string[] = APPEARANCE_CHOICES[name];
+    const prefix = OPTION_LABEL_PREFIX[name];
+    const icons = OPTION_ICONS[name];
 
     return (
-      <fieldset className="erp-preference" key={name}>
-        <legend className="erp-preference__legend">{shell(titleKey)}</legend>
+      <fieldset className={`erp-preference erp-preference--${name}`} key={name}>
+        <legend className="erp-preference__legend">{shell(SETTING_TITLES[name])}</legend>
         <div className={`erp-preference__options erp-preference__options--${name}`}>
           {values.map((value) => {
             const selected = appearance[name] === value;
+            const Icon = icons?.[value];
             return (
               <button
                 aria-pressed={selected}
@@ -652,8 +745,14 @@ export function ErpShell({
                 onClick={() => changeAppearanceSetting(name, value)}
                 type="button"
               >
-                <span>{shell(value)}</span>
-                {selected ? <Check aria-hidden="true" /> : null}
+                {Icon ? (
+                  <Icon
+                    aria-hidden="true"
+                    className={`erp-preference__icon${MIRRORED_OPTION_ICONS.has(Icon) ? ' erp-mirror-rtl' : ''}`}
+                  />
+                ) : null}
+                <span>{shell(prefix ? `${prefix}_${value}` : value)}</span>
+                {selected ? <Check aria-hidden="true" className="erp-preference__check" /> : null}
               </button>
             );
           })}
@@ -691,20 +790,14 @@ export function ErpShell({
               aria-label={shell('open_menu')}
               aria-expanded={mobileOpen}
               aria-controls="erp-mobile-drawer"
-              onClick={() => {
-                setOpenPopover(null);
-                setOpenMobileModules(
-                  modules
-                    .filter((module) => module.key === activeKey)
-                    .map((module) => module.key),
-                );
-                setMobileOpen(true);
-              }}
+              onClick={openMobileDrawer}
             >
               <Menu aria-hidden="true" />
             </button>
           </div>
 
+          {/* The side panel or the bottom bar is the one "Primary navigation" when chosen. */}
+          {topBar ? (
           <nav className="erp-nav" aria-label={shell('primary_navigation')} ref={navRef}>
             <ul className="erp-nav__list">
               {modules.map((module) => {
@@ -733,7 +826,6 @@ export function ErpShell({
                       <div className="erp-module-popover" id={panelId}>
                         <ModuleContents
                           module={module}
-                          pathname={pathname}
                           activeHref={active?.href ?? null}
                           onNavigate={closeNavigation}
                         />
@@ -744,10 +836,14 @@ export function ErpShell({
               })}
             </ul>
           </nav>
+          ) : activeModule ? (
+            // The open module's headings, after the brand and a thin line (by direction, 2026-10-06: "kinda like Odoo").
+            <ErpSectionBar activeHref={active?.href ?? null} module={activeModule} pathname={pathname} />
+          ) : (
+            <span aria-hidden="true" className="erp-sections-gap" />
+          )}
 
           <div className="erp-header__utilities">
-            {branchControl}
-
             <GlobalSearch sections={sections} />
             <button
               className="erp-icon-button"
@@ -772,17 +868,6 @@ export function ErpShell({
             </button>
 
             <button
-              className="erp-locale-toggle"
-              type="button"
-              aria-label={shell('language')}
-              title={currentLocale === 'ar' ? shell('english') : shell('arabic')}
-              onClick={changeLocale}
-            >
-              <Languages aria-hidden="true" />
-              <span>{currentLocale === 'ar' ? 'EN' : 'ع'}</span>
-            </button>
-
-            <button
               className="erp-user-trigger"
               type="button"
               aria-label={shell('user_menu')}
@@ -790,9 +875,7 @@ export function ErpShell({
               aria-controls="erp-user-panel"
               onClick={() => togglePopover('user')}
             >
-              <span className="erp-user-trigger__avatar" aria-hidden="true">
-                {image ? <img alt="" src={image} /> : initials}
-              </span>
+              <OwnAvatar className="erp-user-trigger__avatar" dotClassName="size-2.5" image={image} initials={initials} />
               <span className="erp-user-trigger__identity">
                 <strong className="erp-user-trigger__name">{displayName}</strong>
                 <small className="erp-user-trigger__role" title={roleLabel}>
@@ -818,10 +901,7 @@ export function ErpShell({
             id="erp-notifications-panel"
             aria-label={shell('notifications')}
           >
-            <div className="erp-utility-popover__heading">
-              <Bell aria-hidden="true" />
-              <h2>{shell('notifications')}</h2>
-            </div>
+            {/* The panel brings its own header (notifications/utility-panel.ts). */}
             <BellPopover onNavigate={closeNavigation} seed={bellSeed} />
           </section>
         ) : null}
@@ -832,14 +912,17 @@ export function ErpShell({
             id="erp-messages-panel"
             aria-label={shell('messages')}
           >
-            <div className="erp-utility-popover__heading">
-              <Mail aria-hidden="true" />
-              <h2>{shell('messages')}</h2>
-            </div>
             {chatEnabled ? (
+              // The panel brings its own header (notifications/utility-panel.ts).
               <ChatPopover onNavigate={closeNavigation} />
             ) : (
-              <p className="erp-utility-popover__empty">{shell('messages_empty')}</p>
+              <>
+                <div className="erp-utility-popover__heading">
+                  <Mail aria-hidden="true" />
+                  <h2>{shell('messages')}</h2>
+                </div>
+                <p className="erp-utility-popover__empty">{shell('messages_empty')}</p>
+              </>
             )}
           </section>
         ) : null}
@@ -851,27 +934,58 @@ export function ErpShell({
             aria-label={shell('user_menu')}
           >
             <div className="erp-user-panel__profile">
-              <span className="erp-user-panel__avatar" aria-hidden="true">
-                {image ? <img alt="" src={image} /> : initials}
-              </span>
+              <OwnAvatar className="erp-user-panel__avatar" image={image} initials={initials} />
               <div className="erp-user-panel__identity">
                 <strong>{displayName}</strong>
                 <span>{email}</span>
                 <small title={roleLabel}>{roleLabel}</small>
               </div>
             </div>
+            {/* The Active branch (by direction, 2026-10-06: "move active branch into profile drop down menu … make more spaces"):
+                what the session works in, and — with several — the others, each posting `branch` to the same action the bar's picker did. */}
+            <div aria-labelledby="erp-user-branch-title" className="erp-user-panel__part" role="group">
+              <p className="erp-user-panel__caption" id="erp-user-branch-title">
+                <Building2 aria-hidden="true" />
+                <span>{shell('branch')}</span>
+                <strong className="erp-user-panel__value" data-active-branch="">{branchCode || '—'}</strong>
+              </p>
+              {branchCodes.length > 1 ? (
+                <form action={switchBranch} className="erp-user-panel__choices" data-branch-switch="">
+                  {branchCodes.map((code) => {
+                    const chosen = code === branchCode;
+                    return (
+                      <button
+                        aria-pressed={chosen}
+                        className="erp-user-panel__choice"
+                        data-selected={chosen ? 'true' : 'false'}
+                        disabled={chosen}
+                        key={code}
+                        name="branch"
+                        type="submit"
+                        value={code}
+                      >
+                        <span dir="ltr">{code}</span>
+                        {chosen ? <Check aria-hidden="true" /> : null}
+                      </button>
+                    );
+                  })}
+                </form>
+              ) : null}
+            </div>
+            {/* The language (by direction, 2026-10-06: "the language selection should be in profile settings"): the two, the one in use marked. */}
+            <div aria-labelledby="erp-user-language-title" className="erp-user-panel__part" role="group">
+              <p className="erp-user-panel__caption" id="erp-user-language-title">
+                <Languages aria-hidden="true" />
+                <span>{shell('language')}</span>
+              </p>
+              <LanguageChoice current={currentLocale === 'ar' ? 'ar' : 'en'} onChoose={() => setOpenPopover(null)} />
+            </div>
+            <AccountMenuExtras />
             <nav className="erp-user-panel__menu" aria-label={shell('user_menu')}>
               <Link className="erp-user-panel__item" href="/profile" onClick={closeNavigation}>
                 <UserCog aria-hidden="true" />
                 <span>{shell('profile_settings')}</span>
               </Link>
-              <button className="erp-user-panel__item" type="button" onClick={changeLocale}>
-                <Languages aria-hidden="true" />
-                <span>
-                  {shell('language')}
-                  <small>{currentLocale === 'ar' ? shell('english') : shell('arabic')}</small>
-                </span>
-              </button>
               <button className="erp-user-panel__item" type="button" onClick={openAppearance}>
                 <Palette aria-hidden="true" />
                 <span>{shell('appearance')}</span>
@@ -952,7 +1066,6 @@ export function ErpShell({
                     </summary>
                     <ModuleContents
                       module={module}
-                      pathname={pathname}
                       activeHref={active?.href ?? null}
                       onNavigate={closeNavigation}
                     />
@@ -1032,6 +1145,16 @@ export function ErpShell({
             </div>
 
             <div className="erp-appearance-drawer__body">
+              <section aria-labelledby="erp-appearance-navigation-title" className="erp-appearance-section">
+                <div className="erp-appearance-section__heading">
+                  <h3 id="erp-appearance-navigation-title">{shell('appearance_group_navigation')}</h3>
+                  <p>{shell('appearance_group_navigation_hint')}</p>
+                </div>
+                <div className="erp-appearance-settings-grid">
+                  {NAVIGATION_SETTING_NAMES.map(renderAppearanceSetting)}
+                </div>
+              </section>
+
               <section aria-labelledby="erp-appearance-preset-title" className="erp-appearance-section">
                 <div className="erp-appearance-section__heading">
                   <h3 id="erp-appearance-preset-title">{shell('interface_style')}</h3>
@@ -1125,6 +1248,24 @@ export function ErpShell({
                 </div>
               </section>
 
+              <section aria-labelledby="erp-appearance-text-title" className="erp-appearance-section">
+                <div className="erp-appearance-section__heading">
+                  <h3 id="erp-appearance-text-title">{shell('appearance_group_text')}</h3>
+                </div>
+                <div className="erp-appearance-settings-grid">
+                  {TEXT_SETTING_NAMES.map(renderAppearanceSetting)}
+                </div>
+              </section>
+
+              <section aria-labelledby="erp-appearance-tables-title" className="erp-appearance-section">
+                <div className="erp-appearance-section__heading">
+                  <h3 id="erp-appearance-tables-title">{shell('appearance_group_tables')}</h3>
+                </div>
+                <div className="erp-appearance-settings-grid">
+                  {TABLE_SETTING_NAMES.map(renderAppearanceSetting)}
+                </div>
+              </section>
+
               <details className="erp-advanced-appearance">
                 <summary>{shell('advanced_appearance')}</summary>
                 <div className="erp-appearance-settings-grid">
@@ -1132,12 +1273,87 @@ export function ErpShell({
                 </div>
               </details>
 
+              {/* Everyone's default (0419): for whoever configures the company. */}
+              {mayConfigureCompanyAppearance ? (
+                <section aria-labelledby="erp-appearance-company-title" className="erp-appearance-section erp-appearance-company">
+                  <div className="erp-appearance-section__heading">
+                    <h3 id="erp-appearance-company-title">{shell('company_default_title')}</h3>
+                    <p>{shell('company_default_hint')}</p>
+                  </div>
+                  {companyStep === 'idle' ? (
+                    <div className="erp-appearance-company__actions">
+                      <button
+                        className="erp-appearance-company__button erp-appearance-company__button--primary"
+                        data-company-default="make"
+                        disabled={companyState === 'working'}
+                        onClick={() => setCompanyStep('confirm_make')}
+                        type="button"
+                      >
+                        {shell('company_default_make')}
+                      </button>
+                      <button
+                        className="erp-appearance-company__button"
+                        data-company-default="reset"
+                        disabled={companyState === 'working'}
+                        onClick={() => setCompanyStep('confirm_reset')}
+                        type="button"
+                      >
+                        {shell('company_default_reset')}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="erp-appearance-company__confirm" data-company-default-confirm={companyStep}>
+                      <p>{shell(companyStep === 'confirm_make' ? 'company_default_make_confirm' : 'company_default_reset_confirm')}</p>
+                      <div className="erp-appearance-company__actions">
+                        <button
+                          className="erp-appearance-company__button erp-appearance-company__button--primary"
+                          disabled={companyState === 'working'}
+                          onClick={() => void changeCompanyDefault(companyStep === 'confirm_make' ? 'make' : 'reset')}
+                          type="button"
+                        >
+                          {shell(companyStep === 'confirm_make' ? 'company_default_make_yes' : 'company_default_reset_yes')}
+                        </button>
+                        <button className="erp-appearance-company__button" onClick={() => setCompanyStep('idle')} type="button">
+                          {shell('company_default_cancel')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  <p aria-live="polite" className="erp-appearance-company__state" data-company-default-state={companyState}>
+                    {companyState === 'idle' ? null : shell(`company_default_state_${companyState}`)}
+                  </p>
+                </section>
+              ) : null}
+
               <p aria-live="polite" className="erp-appearance-save-state" role="status">
                 {shell(`appearance_save_${appearanceSaveState}`)}
               </p>
             </div>
           </aside>
         </div>
+      ) : null}
+
+      {appearance.navigation === 'side' ? (
+        <ErpSidebar
+          activeKey={activeKey}
+          grouped={appearance.sidebarGroups === 'grouped'}
+          header={appearance.header}
+          modules={modules}
+          onSidebarChange={(next) => changeAppearanceSetting('sidebar', next)}
+          pathname={pathname}
+          sidebar={appearance.sidebar}
+        />
+      ) : null}
+
+      {appearance.navigation === 'bottom' ? (
+        <ErpDock
+          activeHref={active?.href ?? null}
+          activeKey={activeKey}
+          modules={modules}
+          onMore={openMobileDrawer}
+          pathname={pathname}
+          sidebar={appearance.sidebar}
+        />
       ) : null}
 
       <main className="shell__main erp-main">{children}</main>

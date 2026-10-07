@@ -80,12 +80,12 @@ export default async function PdListPage({ searchParams }: { searchParams: Searc
       actions={
         <>
           {mayCreate ? (
-            <Link className="action" href="/payables/pd/new">
+            <Link className="action action--primary" href="/payables/pd/new">
               {t('register')}
             </Link>
           ) : null}
           {mayImport ? (
-            <Link className="action" href="/payables/pd/asycuda">
+            <Link className="action action--primary" href="/payables/pd/asycuda">
               {t('asycuda')}
             </Link>
           ) : null}

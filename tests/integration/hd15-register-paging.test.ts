@@ -265,15 +265,21 @@ describe('HD15 · payment applications', () => {
     );
     await pagesOf((page) => read((tx) => applications.listForScreen(tx, { page })), N);
 
-    // §21.7 — the longest-waiting SWIFT first, as the in-memory sort had it.
-    const first = await read((tx) => applications.listForScreen(tx, { page: 1 }));
-    expect(first.rows.slice(0, 3).map((row) => row.applicationNo)).toEqual([
-      'PA-HD15-0054',
-      'PA-HD15-0055',
-      'PA-HD15-0053',
-    ]);
-    expect(first.rows[0]!.daysWaiting).toBeGreaterThan(first.rows[1]!.daysWaiting!);
-    expect(first.rows[3]!.daysWaiting).toBeNull();
+    // Newest first (2026-10-07, by direction: "the tables first comes latest ones made for all"),
+    // no longer §21.7's longest-waiting first: an application's date is the day it was sent, else the
+    // day it was raised — so today's drafts lead and September's three SWIFTs close the last page.
+    const last = await read((tx) => applications.listForScreen(tx, { page: 2 }));
+    expect(last.rows.slice(-3).map((row) => row.applicationNo)).toEqual(['PA-HD15-0053', 'PA-HD15-0055', 'PA-HD15-0054']);
+    // The Filter's order, oldest first, puts the longest waiting first again; its window keeps the days asked.
+    const oldest = await read((tx) => applications.listForScreen(tx, { page: 1, dates: { from: null, to: null, sort: 'oldest' } }));
+    expect(oldest.rows.slice(0, 3).map((row) => row.applicationNo)).toEqual(['PA-HD15-0054', 'PA-HD15-0055', 'PA-HD15-0053']);
+    expect(oldest.rows[0]!.daysWaiting).toBeGreaterThan(oldest.rows[1]!.daysWaiting!);
+    expect(oldest.rows[3]!.daysWaiting).toBeNull();
+    const window = await read((tx) =>
+      applications.listForScreen(tx, { dates: { from: '2026-09-01', to: '2026-09-06', sort: 'newest' } }),
+    );
+    expect(window.total).toBe(2);
+    expect(window.rows.map((row) => row.applicationNo)).toEqual(['PA-HD15-0055', 'PA-HD15-0054']);
 
     const toSend = await read((tx) => applications.listForScreen(tx, { statuses: ['approved'] }));
     expect(toSend.total).toBe(12);

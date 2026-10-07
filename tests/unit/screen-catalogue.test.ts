@@ -121,8 +121,9 @@ describe('the screen catalogue covers the approved tree', () => {
     // Plus Chat (platform phase, Agent 1): one workspace screen; Cloud Files Settings (Agent 4): one;
     // Exceptions (Agent 7): one document screen; the ERP Control Center (Agent 9): one report screen.
     // + Automation (Agent 10): one settings screen; its rule and run pages sit behind it.
-    expect(allMenuItems()).toHaveLength(253);
-    expect(Object.keys(SCREENS)).toHaveLength(253);
+    // + Manual Stock Additions (2026-10-06): one document screen.
+    expect(allMenuItems()).toHaveLength(254);
+    expect(Object.keys(SCREENS)).toHaveLength(254);
   });
 
   it('uses only declared archetypes', () => {
@@ -153,7 +154,8 @@ describe('the screen catalogue covers the approved tree', () => {
     // + 1 (the ERP Control Center, a report; its Related records page is a drill-down of the screens it reads, not a menu item).
     // + 1 (Automation, a settings screen; the rule and run pages behind it are not menu items).
     // + 1 (Landed Costs became a document on 2026-10-06: the register and the import's landed-cost sheet behind it).
-    expect(total).toBe(370);
+    // + 2 (Manual Stock Additions, a document: the register and the record, 2026-10-06).
+    expect(total).toBe(372);
   });
 });
 
@@ -206,7 +208,8 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(253);
+    // 254: Manual Stock Additions (2026-10-06).
+    expect(screenRoutes().size).toBe(254);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -280,6 +283,8 @@ describe('every screen has one address', () => {
       // Operations build — block 7's Warehouses Report.
       '/inventory/fifo-valuation',
       '/inventory/items',
+      // Manual Stock Additions (2026-10-06).
+      '/inventory/manual-additions',
       // Block 7 — Opening Stock, Item Reconciliation, Stock Movement, Transfer.
       '/inventory/opening-stock',
       // The Stock Ledger (2026-09-27).

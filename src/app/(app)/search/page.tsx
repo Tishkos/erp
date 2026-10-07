@@ -13,6 +13,7 @@ import {
 } from '@/components/admin';
 import { type SearchParams } from '@/components/admin/params';
 import { SectionTabs } from '@/components/admin/section-tabs';
+import { SearchTypeIcon } from '@/components/search-type-icon';
 import { Pagination } from '@/components/ui';
 import { registerAllRecords } from '@/server/records';
 import { presentDeps, type SearchTranslator } from '@/server/search/deps';
@@ -128,13 +129,15 @@ export default async function SearchPage({ searchParams }: { searchParams: Searc
         <tbody>
           {group.rows.map((row) => (
             <tr key={row.id}>
-              <td>
-                <Link className={s.sapLink} href={row.href}>
+              <td className="whitespace-nowrap">
+                <Link className={`${s.sapLink} tabular-nums`} href={row.href}>
                   <bdi dir="auto">{row.number}</bdi>
                 </Link>
               </td>
               <td>
-                <bdi dir="auto">{row.title ?? '—'}</bdi>
+                <bdi className={row.title ? 'font-medium text-fg' : 'text-muted-fg'} dir="auto">
+                  {row.title ?? '—'}
+                </bdi>
               </td>
               <td>
                 <bdi dir="auto">{row.party ?? row.related ?? '—'}</bdi>
@@ -226,7 +229,10 @@ export default async function SearchPage({ searchParams }: { searchParams: Searc
         <section aria-labelledby="search-screen" className={`${s.sapDoc} ${s.sapRegister}`}>
           <div className={`${s.sapWindow} mb-5`}>
             <h2 className={s.sapTitle} id="search-screen">
-              <span>{t('types.screen')}</span>
+              <span className="inline-flex items-center gap-2.5">
+                <SearchTypeIcon className="size-7" type="screen" />
+                {t('types.screen')}
+              </span>
               <span className={s.sapTitleMeta}>{t('shown', { count: screens.length })}</span>
             </h2>
             <div className={`${s.sapTableWrap} ${s.sapRegisterTableWrap}`}>
@@ -245,7 +251,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Searc
                           {screen.label}
                         </Link>
                       </td>
-                      <td>{screen.section}</td>
+                      <td className="text-muted-fg">{screen.section}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -259,7 +265,10 @@ export default async function SearchPage({ searchParams }: { searchParams: Searc
         <section aria-labelledby={`search-${group.key}`} className={`${s.sapDoc} ${s.sapRegister}`} key={group.key}>
           <div className={`${s.sapWindow} mb-5`}>
             <h2 className={s.sapTitle} id={`search-${group.key}`}>
-              <span>{group.label}</span>
+              <span className="inline-flex items-center gap-2.5">
+                <SearchTypeIcon className="size-7" type={group.key} />
+                {group.label}
+              </span>
               <span className={s.sapTitleMeta}>
                 {group.more && !typeParam ? (
                   <Link className={s.sapLink} href={`/search?q=${encodeURIComponent(q)}&type=${encodeURIComponent(group.key)}`}>

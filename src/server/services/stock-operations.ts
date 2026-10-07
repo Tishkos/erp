@@ -815,6 +815,7 @@ export type MovementType =
   | 'transfer'
   | 'shipment'
   | 'reconciliation'
+  | 'manual_addition'
   | 'sales_return'
   | 'purchase_return'
   | 'other';
@@ -825,6 +826,8 @@ function movementType(kind: string, sourceType: string | null): MovementType {
   if (kind === 'delivery') return 'sale';
   if (kind === 'sales_return') return 'sales_return';
   if (kind === 'goods_return') return 'purchase_return';
+  // A Manual Stock Addition's receipt is an inventory adjustment in, named for its own document (0415).
+  if (sourceType === 'manual_stock_addition') return 'manual_addition';
   if (kind === 'count_adjustment') return 'reconciliation';
   if (kind === 'transfer_issue' || kind === 'transfer_receipt') {
     return sourceType === 'supplier_shipment' ? 'shipment' : 'transfer';
@@ -835,6 +838,8 @@ function movementType(kind: string, sourceType: string | null): MovementType {
 export interface MovementFilter {
   readonly from?: string | null;
   readonly to?: string | null;
+  /** The register's order: newest first (the default) or oldest first (2026-10-07). */
+  readonly sort?: 'newest' | 'oldest' | null;
   readonly itemCode?: string | null;
   /**
    * What a person typed into the item box, matched against the item's name and
@@ -939,7 +944,9 @@ function movementRows(ctx: ActorContext, filter: MovementFilter) {
                (select adjustment_no from stock_adjustment where id::text = m.source_document_id
                   and m.source_document_type = 'stock_adjustment'),
                (select document_no from opening_stock where id::text = m.source_document_id
-                  and m.source_document_type = 'opening_stock')
+                  and m.source_document_type = 'opening_stock'),
+               (select addition_no from manual_stock_addition where id::text = m.source_document_id
+                  and m.source_document_type = 'manual_stock_addition')
              ) as document_no
         from inventory_movement m
         join item i on i.code = m.item_code
@@ -1031,9 +1038,13 @@ export async function movements(
 
   const limit = Math.max(1, Math.min(filter.limit ?? 1000, 50_000));
   const offset = Math.max(0, filter.offset ?? 0);
+  const order =
+    filter.sort === 'oldest'
+      ? sql`order by movement_date asc, created_at asc, id asc`
+      : sql`order by movement_date desc, created_at desc, id desc`;
   const result = await tx.execute(sql`
     ${movementRows(ctx, filter)}
-     order by movement_date desc, created_at desc, id desc
+     ${order}
      limit ${limit} offset ${offset}
   `);
 

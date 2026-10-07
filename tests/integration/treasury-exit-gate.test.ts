@@ -107,14 +107,14 @@ async function fund(amountIqd: string, on: string) {
   }
 }
 
-/** An approved, posted A/P invoice — the debt the run will pay. */
+/** An approved, posted A/P invoice — the debt the run will pay, its due date set (a run never takes one without, 2026-10-07). */
 async function payable(dueDate: string, totalIqd: string) {
   const { rows } = await ownerPool.query(
     `insert into ap_invoice
-       (invoice_no, supplier_invoice_no, supplier_id, branch_code, invoice_date, due_date,
+       (invoice_no, supplier_invoice_no, supplier_id, branch_code, invoice_date, due_date, due_date_set_at,
         currency, total_iqd, settled_amount_iqd, status, created_by,
         non_po_justification, non_po_approved_by, non_po_approved_at)
-     values ($1,$2,$3,$4,'2026-02-01',$5,'IQD',$6,0,'posted',$7,
+     values ($1,$2,$3,$4,'2026-02-01',$5,now(),'IQD',$6,0,'posted',$7,
              'Exit-gate fixture invoice', $7, now()) returning id`,
     [
       `API-${(seq += 1)}`,

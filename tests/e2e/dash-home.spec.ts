@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { Pool } from 'pg';
+import { keepEnglish } from './support/locale';
 
 /**
  * Home and My Approvals — platform phase, Agent 2.
@@ -31,6 +32,7 @@ const RUN = Date.now().toString(36).toUpperCase().slice(-5);
 async function signIn(page: Page, email: string) {
   // Signing in as somebody else means being somebody else.
   await page.context().clearCookies();
+  await keepEnglish(page.context());
   await page.goto('/sign-in');
   await page.locator('input[name="email"]').fill(email);
   await page.locator('input[name="password"]').fill(PASSWORD);

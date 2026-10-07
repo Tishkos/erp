@@ -20,6 +20,8 @@ import * as warehouses from '@/server/services/warehouses';
 import { gapsFor } from '@domain/setup-gaps';
 import { createArInvoice, invoiceLineAvailability } from '../actions';
 import { businessToday } from '@/server/domain/business-date';
+import { IntentSelect } from '@/components/admin/intent-select';
+import { IntentDateField } from '@/components/admin/intent-date-field';
 
 /**
  * Raising a Sales Invoice — Operations build, block 5.
@@ -133,12 +135,11 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
       label: column('posting_date'),
       control: true,
       value: (
-        <input
+        <IntentDateField
           aria-label={column('posting_date')}
           defaultValue={today}
           name="invoice_date"
           required
-          type="date"
         />
       ),
     },
@@ -165,7 +166,7 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
       label: t('invoices.statement_account_customer'),
       control: true,
       value: (
-        <select
+        <IntentSelect
           aria-label={t('invoices.statement_account_customer')}
           defaultValue={mapped.receivable ?? ''}
           name="receivable_account_id"
@@ -178,7 +179,7 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
                 {`${account.code} · ${account.name}`}
               </option>
             ))}
-        </select>
+        </IntentSelect>
       ),
     },
     {
@@ -189,7 +190,7 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
         // here outranks every item's own Sales Account (block 1), so opening
         // on the mapping silently overrode them all. Blank means each line
         // posts to its item's account, then the mapping.
-        <select
+        <IntentSelect
           aria-label={t('invoices.revenue_account')}
           defaultValue=""
           name="revenue_account_id"
@@ -204,7 +205,7 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
                 {`${account.code} · ${account.name}`}
               </option>
             ))}
-        </select>
+        </IntentSelect>
       ),
     },
   ];

@@ -41,6 +41,7 @@ import {
 } from '../db/schema';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
 import * as trialBalance from './trial-balance';
+import { knownInvoiceDueSql } from './known-due-date';
 
 /** Which side of the ledger the party sits on. */
 export type PartySide = 'customer' | 'supplier' | 'bank';
@@ -78,6 +79,12 @@ export interface StatementDocument {
    * one, and a due date on them would be a date that means nothing.
    */
   readonly dueDate?: string | null;
+  /**
+   * A purchase invoice whose due date nobody has set yet — the balance of an
+   * advance waits for its SWIFT (2026-10-07). `dueDate` is then null, and the
+   * statement says why rather than leaving a bare dash.
+   */
+  readonly dueDateWaiting?: boolean;
 }
 
 export interface StatementLine {
@@ -193,7 +200,13 @@ const AP_INVOICE: DocumentSource = {
   kind: 'ap_invoice',
   find: (tx, ids) =>
     tx
-      .select({ id: apInvoice.id, number: apInvoice.invoiceNo, dueDate: apInvoice.dueDate })
+      .select({
+        id: apInvoice.id,
+        number: apInvoice.invoiceNo,
+        // None until it was set on purpose (2026-10-07).
+        dueDate: knownInvoiceDueSql(apInvoice.dueDate, apInvoice.dueDateSetAt),
+        dueDateWaiting: sql<boolean>`(${apInvoice.dueDateSetAt} is null)`,
+      })
       .from(apInvoice)
       .where(inArray(apInvoice.id, ids)),
 };
@@ -257,6 +270,7 @@ async function documentsFor(
         kind: source.kind,
         number: row.number,
         dueDate: 'dueDate' in row ? ((row as { dueDate: string | null }).dueDate ?? null) : null,
+        ...('dueDateWaiting' in row && (row as { dueDateWaiting: boolean }).dueDateWaiting ? { dueDateWaiting: true } : {}),
       });
     }
   }

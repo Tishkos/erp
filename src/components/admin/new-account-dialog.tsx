@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { Plus, TriangleAlert, X } from 'lucide-react';
 import styles from './admin.module.css';
+import { IntentSelect } from '@/components/admin/intent-select';
 
 /**
  * "New account" — the dialog, and the form inside it, in one client piece.
@@ -171,8 +172,7 @@ export function NewAccountDialog({
                 <label className={styles.label} htmlFor="new-account-parent">
                   {labels.parent}
                 </label>
-                <select
-                  className={styles.select}
+                <IntentSelect
                   id="new-account-parent"
                   name="parentId"
                   onChange={(event) => setParentId(event.target.value)}
@@ -184,7 +184,7 @@ export function NewAccountDialog({
                       {option.label}
                     </option>
                   ))}
-                </select>
+                </IntentSelect>
                 <span className={styles.hint}>{labels.parentHint}</span>
               </div>
               <div className={styles.field}>
@@ -207,8 +207,7 @@ export function NewAccountDialog({
                 <label className={styles.label} htmlFor="new-account-kind">
                   {labels.kind}
                 </label>
-                <select
-                  className={styles.select}
+                <IntentSelect
                   id="new-account-kind"
                   name="isGroup"
                   onChange={(event) => setKind(event.target.value)}
@@ -216,7 +215,7 @@ export function NewAccountDialog({
                 >
                   <option value="posting">{labels.kindPosting}</option>
                   <option value="group">{labels.kindGroup}</option>
-                </select>
+                </IntentSelect>
                 <span className={styles.hint}>{labels.kindHint}</span>
               </div>
 
@@ -239,8 +238,7 @@ export function NewAccountDialog({
                       <label className={styles.label} htmlFor={`new-account-${field}`}>
                         {labels.mappingTitles[statement]}
                       </label>
-                      <select
-                        className={styles.select}
+                      <IntentSelect
                         defaultValue=""
                         id={`new-account-${field}`}
                         key={`${field}-${accountType}`}
@@ -256,7 +254,7 @@ export function NewAccountDialog({
                             {line.label}
                           </option>
                         ))}
-                      </select>
+                      </IntentSelect>
                     </div>
                   ))}
                 </>

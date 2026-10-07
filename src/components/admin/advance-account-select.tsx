@@ -2,6 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { IntentSelect } from '@/components/admin/intent-select';
+
+/** Fired on the form (bubbling from the select) whenever the account chosen changes; `detail` is its id or ''. */
+export const ADVANCE_ACCOUNT_EVENT = 'erp:advance-account';
+
 export interface AdvanceAccount {
   readonly id: string;
   readonly code: string;
@@ -85,8 +90,15 @@ export function AdvanceAccountSelect({
     if (first !== chosen) setChosen(first);
   }, [chosen, currency, imported, offered]);
 
+  // Say what is chosen to the rest of the form — the advance's selection waits for an account (2026-10-07,
+  // by direction: "if there is no bank account the payable upfront cannot be selected"). A value set here by
+  // the defaults fires no input event of its own, so the form is told.
+  useEffect(() => {
+    box.current?.dispatchEvent(new CustomEvent(ADVANCE_ACCOUNT_EVENT, { bubbles: true, detail: chosen }));
+  }, [chosen]);
+
   return (
-    <select
+    <IntentSelect
       aria-label={label}
       name={name}
       onChange={(event) => {
@@ -102,6 +114,6 @@ export function AdvanceAccountSelect({
           {`${account.code} · ${account.name} (${account.currency})`}
         </option>
       ))}
-    </select>
+    </IntentSelect>
   );
 }

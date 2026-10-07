@@ -21,6 +21,8 @@ import * as counts from '@/server/services/stock-count';
 import * as departments from '@/server/services/departments';
 import * as recordNotes from '@/server/services/record-notes';
 import { adjustCount, approveVariance, cancelCount, recordCount, requestRecount } from '../actions';
+import { IntentSelect } from '@/components/admin/intent-select';
+import { IntentDateField } from '@/components/admin/intent-date-field';
 
 /**
  * One stock count — §9.6 on the existing engine. Copies the Purchase Invoice
@@ -191,13 +193,13 @@ export default async function StockCountRecordPage({ params, searchParams }: { p
               <form action={adjustCount}>
                 <Hidden name="id" value={count.id} />
                 <Hidden name="count_no" value={count.countNo} />
-                <input aria-label={t('adjusted_on')} defaultValue={today} name="adjusted_on" required type="date" />
-                <select aria-label={t('department')} name="department_code">
+                <IntentDateField aria-label={t('adjusted_on')} defaultValue={today} name="adjusted_on" required />
+                <IntentSelect aria-label={t('department')} name="department_code">
                   <option value="">{t('department')}</option>
                   {view.departments.map((d) => (
                     <option key={d.code} value={d.code}>{`${d.code} · ${d.name}`}</option>
                   ))}
-                </select>
+                </IntentSelect>
                 <Submit label={t('adjust')} variant="document" />
               </form>
             ) : null}
@@ -237,7 +239,7 @@ export default async function StockCountRecordPage({ params, searchParams }: { p
             {linesTable}
             <div className={s.sapFootActions}>
               <label>
-                {t('counted_on')} <input defaultValue={today} name="counted_on" required type="date" />
+                {t('counted_on')} <IntentDateField defaultValue={today} name="counted_on" required />
               </label>
               <Submit label={count.status === 'recount' ? t('record_recount') : t('record_count')} variant="document" />
             </div>

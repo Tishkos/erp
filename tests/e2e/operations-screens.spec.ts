@@ -236,6 +236,23 @@ test.describe('the Operations Build screens open', () => {
     await page.waitForURL(/\/(?:payables\/suppliers|sales\/customers)\/[^/?]+/, { timeout: 60_000 });
     supplierCode = mintedCode(page);
 
+    // 0408 — an item is bought only from a supplier linked to it: the
+    // administrator links the new supplier under the seed item's Bought from.
+    const linking = await browser.newContext();
+    const linker = await linking.newPage();
+    try {
+      await signIn(linker, ADMIN);
+      await linker.goto('/master-data/items/ITM-SEED');
+      const link = linker.locator('form:has(select[name="supplierId"])').first();
+      await expect(link).toBeVisible({ timeout: 60_000 });
+      const option = await link.locator('select[name="supplierId"] option').filter({ hasText: supplierCode }).first().getAttribute('value');
+      await link.locator('select[name="supplierId"]').selectOption(option!);
+      await link.getByRole('button', { name: 'Link supplier', exact: true }).click();
+      await expect(linker.locator('tr').filter({ hasText: supplierCode }).first()).toBeVisible({ timeout: 60_000 });
+    } finally {
+      await linking.close();
+    }
+
     await page.goto('/payables/invoices/new');
     await expect(page.getByRole('heading', { name: 'New invoice' })).toBeVisible();
 

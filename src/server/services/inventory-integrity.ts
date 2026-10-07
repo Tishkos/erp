@@ -150,6 +150,14 @@ export async function documentsWithoutLedger(tx: Tx): Promise<OrphanDocument[]> 
            and not exists (select 1 from inventory_movement m
                             where m.source_document_type = 'opening_stock'
                               and m.source_document_id = o.id::text)
+        union all
+        -- A Manual Stock Addition (0415): approved means received.
+        select 'manual_stock_addition', a.id::text, a.addition_no, a.branch_code
+          from manual_stock_addition a
+         where a.status = 'approved'
+           and not exists (select 1 from inventory_movement m
+                            where m.source_document_type = 'manual_stock_addition'
+                              and m.source_document_id = a.id::text)
       )
       select document_type as "documentType", document_id as "documentId",
              document_no as "documentNo", branch_code as "branchCode"
@@ -188,6 +196,7 @@ export async function ledgerWithoutDocument(tx: Tx): Promise<OrphanMovement[]> {
                when 'stock_adjustment'  then not exists (select 1 from stock_adjustment d where d.id::text = m.source_document_id)
                when 'opening_stock'     then not exists (select 1 from opening_stock d where d.id::text = m.source_document_id)
                when 'container_receipt' then not exists (select 1 from container_receipt d where d.id::text = m.source_document_id)
+               when 'manual_stock_addition' then not exists (select 1 from manual_stock_addition d where d.id::text = m.source_document_id)
                else false
              end
        order by m.created_at, m.id

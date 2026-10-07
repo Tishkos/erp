@@ -284,6 +284,7 @@ async function loadCandidates(tx: Tx, input: BuildProposalInput): Promise<Candid
       priority: businessPartner.paymentPriority,
       termsCode: businessPartner.paymentTermsCode,
       dueDate: apInvoice.dueDate,
+      dueDateSetAt: apInvoice.dueDateSetAt,
       invoiceDate: apInvoice.invoiceDate,
       currency: apInvoice.currency,
       documentStatus: apInvoice.status,
@@ -379,6 +380,8 @@ async function loadCandidates(tx: Tx, input: BuildProposalInput): Promise<Candid
         supplierCode: row.supplierCode,
         outstandingIqd: parseDecimal(row.outstandingIqd, 4n),
         dueDate: row.dueDate,
+        // An advance's balance has no due date until the SWIFT is in (2026-10-07).
+        dueDateSet: row.dueDateSetAt !== null,
         currency: row.currency,
         priority: row.priority,
         documentStatus: row.documentStatus,

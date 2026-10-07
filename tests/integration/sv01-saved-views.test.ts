@@ -148,7 +148,8 @@ beforeAll(async () => {
   clerk = await makeActor('clerk', { branches: [BGW], objects: ['ap_invoice'] });
   capped = await makeActor('capped', { branches: [BGW], objects: OBJECTS });
 
-  // Purchase invoices: two in Baghdad (one overdue, one not yet due), one in Erbil.
+  // Purchase invoices: two in Baghdad (one overdue, one not yet due), one in Erbil —
+  // their due dates set on purpose (`due_date_set_at`): one never set is overdue on no day (2026-10-07).
   ids.supplier = await one(
     `insert into business_partner (code, legal_name, is_supplier) values ('SUP-SV0001','Saved Views Supplier', true) returning id`,
     [],
@@ -156,8 +157,8 @@ beforeAll(async () => {
   const by = admin.principal.userId;
   const invoice = (no: string, branch: string, due: string, total: number) =>
     ownerPool.query(
-      `insert into ap_invoice (invoice_no, supplier_invoice_no, supplier_id, branch_code, invoice_date, due_date, total_iqd, created_by, receives_own_stock)
-       values ($1,$2,$3,$4,'2026-08-01',$5,$6,$7,true)`,
+      `insert into ap_invoice (invoice_no, supplier_invoice_no, supplier_id, branch_code, invoice_date, due_date, due_date_set_at, total_iqd, created_by, receives_own_stock)
+       values ($1,$2,$3,$4,'2026-08-01',$5,now(),$6,$7,true)`,
       [no, `SV-${no}`, ids.supplier, branch, due, total, by],
     );
   await invoice('API-BGW-2026-960001', BGW, '2026-09-01', 1250000);

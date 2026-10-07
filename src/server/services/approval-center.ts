@@ -342,6 +342,45 @@ async function serviceReceipts(tx: Tx, principal: Principal): Promise<ApprovalIt
   }));
 }
 
+/**
+ * Manual Stock Additions sent for approval (0415) — to whoever holds `approve`
+ * and neither raised nor sent the one in question (a super user excepted). The
+ * row opens the document; approving it there posts it.
+ */
+async function manualStockAdditions(tx: Tx, principal: Principal): Promise<ApprovalItem[]> {
+  if (!can(principal, 'approve', 'manual_stock_addition')) return [];
+  const rows = (
+    await tx.execute(sql`
+      select a.id, a.addition_no as "no", a.created_by as "createdBy", a.submitted_by as "submittedBy",
+             a.submitted_at as "since", coalesce(u.display_name, u.email) as "requester",
+             (select coalesce(sum(l.line_value_iqd), 0)::text from manual_stock_addition_line l where l.addition_id = a.id) as "total"
+        from manual_stock_addition a
+        left join app_user u on u.id = a.submitted_by
+       where a.status = 'submitted'
+       order by a.submitted_at
+       limit 100`)
+  ).rows as Row[];
+  return rows
+    .filter(
+      (row) =>
+        mayApproveSubmitted(principal, (row.createdBy as string | null) ?? null, true) &&
+        mayApproveSubmitted(principal, (row.submittedBy as string | null) ?? null, true),
+    )
+    .map((row) => ({
+      id: `manual_stock_addition:${row.id as string}`,
+      source: 'manual_stock_addition' as const,
+      documentType: 'manual_stock_addition',
+      documentNo: row.no as string,
+      href: `/inventory/manual-additions/${encodeURIComponent(row.no as string)}`,
+      requester: (row.requester as string | null) ?? null,
+      since: iso(row.since),
+      amount: { value: row.total as string, currency: 'IQD' },
+      stage: 'submitted',
+      action: 'approve' as const,
+      inline: null,
+    }));
+}
+
 async function hrItems(tx: Tx, ctx: CenterContext): Promise<ApprovalItem[]> {
   const reader = { principal: ctx.principal, branchCode: ctx.branchCode };
   const out: ApprovalItem[] = [];
@@ -471,6 +510,7 @@ export async function items(tx: Tx, ctx: CenterContext): Promise<CenterItems> {
   await run('payment_application', (sp) => paymentApplications(sp, principal), (value) => collected.push(...value));
   await run('ap_invoice', (sp) => purchaseInvoices(sp, principal), (value) => collected.push(...value));
   await run('service_receipt', (sp) => serviceReceipts(sp, principal), (value) => collected.push(...value));
+  await run('manual_stock_addition', (sp) => manualStockAdditions(sp, principal), (value) => collected.push(...value));
   await run('hr', (sp) => hrItems(sp, ctx), (value) => collected.push(...value));
 
   return { items: sortItems(collected), unroutable, failed };

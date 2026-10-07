@@ -13,6 +13,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { ownerPool, rejection, resetTestData, seedBranch } from './setup';
+import { linkItemsToSuppliers } from './item-supplier';
 import { withScope } from '@/server/db/client';
 import * as authz from '@/server/services/authorization';
 import * as po from '@/server/services/purchase-order';
@@ -144,6 +145,9 @@ function createOrder(lines: po.PurchaseLineInput[] = [line()]) {
 
 // ---------------------------------------------------------------------------
 
+// 0408 — an item is bought only from a supplier linked to it; this suite's items are every supplier's.
+beforeEach(linkItemsToSuppliers);
+
 describe('05.1 gate · one supplier per order', () => {
   it('holds the supplier on the header, so two is unrepresentable', async () => {
     // §8.3's first bullet, as a schema property rather than a rule: there is no
@@ -255,10 +259,13 @@ describe('05.1 gate · the supplier must be usable', () => {
  * screen showed it Active and the invoice's picker offered it.
  */
 describe('§6 · a supplier entered on the Suppliers screen', () => {
-  const orderFrom = (ctx: ActorContext, id: string) =>
-    withScope(scope(ctx), (tx) =>
+  // 0408 — the supplier just entered sells the item too, so the order is about the partner's status alone.
+  const orderFrom = async (ctx: ActorContext, id: string) => {
+    await linkItemsToSuppliers();
+    return withScope(scope(ctx), (tx) =>
       po.create(tx, ctx, { supplierId: id, branchCode: BAGHDAD, orderDate: '2026-02-01', lines: [line()] }),
     );
+  };
   const offered = async (code: string) =>
     (await withScope(scope(officer), (tx) => partners.listActiveInRole(tx, 'supplier'))).some(
       (row) => row.code === code,

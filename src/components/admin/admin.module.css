@@ -7687,6 +7687,411 @@
   }
 }
 
+/* ══ Section tabs on one line; tables that fit; cards on a phone ══════════
+   (2026-10-06, by direction: "make it extremely modern … most user friendly
+   … so good responsive — try to avoid the header tab and table scrollable".)
+
+   ── The section tabs ─────────────────────────────────────────────────────
+   One line at every width, never a scrollbar. `SectionTabsNav` measures the
+   row in the browser and moves what does not fit behind "More" at its end;
+   until it has (the server's row) anything past the edge is clipped, not
+   scrolled — sideways only, so the current tab's underline still shows. */
+.tabsBar,
+.sapPage .tabsBar {
+  position: relative;
+  display: flex;
+  flex-wrap: nowrap;
+  inline-size: 100%;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  overflow: visible;
+}
+
+.tabsBar:not([data-tabs-measured]) {
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
+.tabsBar > .tabItem {
+  flex: none;
+}
+
+/* Only when the current tab and More are all there is room for does a label
+   give way — onto a second line, never cut and never pushing the row wider. */
+.tabsBar[data-tabs-measured] > .tabItem[aria-current='page'] {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  white-space: normal;
+}
+
+.tabsMore {
+  position: relative;
+  display: flex;
+  flex: none;
+  margin-inline-start: auto;
+}
+
+.sapPage .tabsMoreButton,
+.tabsMoreButton {
+  gap: 0.375rem;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.sapPage .tabsMoreButton[aria-expanded='true'],
+.sapPage .tabsMoreButton[data-current-inside] {
+  color: var(--ui-fg);
+}
+
+.sapPage .tabsMoreButton[data-current-inside]::after {
+  background: var(--ui-primary);
+}
+
+.tabsMoreCount {
+  display: inline-grid;
+  min-inline-size: 1.25rem;
+  block-size: 1.25rem;
+  place-items: center;
+  padding-inline: 0.3125rem;
+  border-radius: 999px;
+  background: var(--ui-secondary);
+  color: var(--ui-muted-fg);
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.tabsMoreChevron {
+  inline-size: 1rem;
+  block-size: 1rem;
+  flex: none;
+  transition: transform 150ms ease;
+}
+
+.tabsMoreChevron[data-open] {
+  transform: rotate(180deg);
+}
+
+/* Intent's popover: the overlay surface, a hairline, rounded-xl, shadow-lg. */
+.tabsMenu {
+  position: absolute;
+  z-index: 40;
+  inset-block-start: calc(100% + 0.25rem);
+  inset-inline-end: 0;
+  display: grid;
+  gap: 0.125rem;
+  min-inline-size: 13rem;
+  max-inline-size: min(22rem, calc(100vw - 2rem));
+  max-block-size: min(26rem, 70vh);
+  margin: 0;
+  padding: 0.25rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-xl);
+  background: var(--ui-overlay);
+  color: var(--ui-fg);
+  box-shadow:
+    0 10px 15px -3px rgb(0 0 0 / 10%),
+    0 4px 6px -4px rgb(0 0 0 / 10%);
+  list-style: none;
+  animation: tabsMenuIn 120ms ease-out;
+}
+
+.tabsMenu[hidden] {
+  display: none;
+}
+
+@keyframes tabsMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(-0.25rem) scale(0.98);
+  }
+}
+
+.tabsMenu > li {
+  margin: 0;
+  padding: 0;
+}
+
+.tabsMenuItem,
+.sapPage .tabsMenuItem {
+  display: flex;
+  align-items: center;
+  min-block-size: 2.25rem;
+  padding: 0.375rem 0.625rem;
+  border-radius: var(--radius-lg);
+  color: var(--ui-fg);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.35;
+  text-decoration: none;
+  outline: none;
+}
+
+.tabsMenuItem:hover,
+.tabsMenuItem:focus-visible {
+  background: var(--ui-secondary);
+  color: var(--ui-fg);
+}
+
+.tabsMenuItem:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--ui-ring);
+}
+
+.tabsMenuItem[aria-current='page'] {
+  background: var(--ui-primary-subtle);
+  color: var(--ui-primary-subtle-fg);
+}
+
+/* The ruler: a box of no size that clips a row of every label, so the
+   labels are measured as drawn and widen nothing. */
+.tabsMeasure {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  inline-size: 0;
+  block-size: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.tabsMeasureRow {
+  display: flex;
+  inline-size: max-content;
+}
+
+.tabsMeasureRow > * {
+  flex: none;
+}
+
+@media (width < 90rem) {
+  .sapPage .tabsBar {
+    gap: 0;
+  }
+
+  .sapPage .tabItem {
+    padding-inline: 0.5rem;
+  }
+}
+
+@media (max-width: 40rem) {
+  .sapPage .tabsBar {
+    margin-block-end: 1rem;
+  }
+
+  .sapPage .tabItem {
+    padding-inline: 0.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tabsMenu,
+  .tabsMoreChevron {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* ── Tables that fit ───────────────────────────────────────────────────────
+   A register or a report is as wide as its words, not as wide as a floor
+   (`.sapTable` held every table at 76rem, a register at 58rem) and not as
+   wide as its longest line (every cell was `nowrap`). Text wraps between
+   words; figures, status chips and times keep to one line; a word is only
+   broken when it alone is wider than the cell could ever be. Typed line
+   grids (`.sapLineGrid`) keep their own measured columns, and still scroll
+   inside their frame when a phone is narrower than ten fields. */
+.sapTable:not(.sapLineGrid),
+.sapTable.sapRegisterTable:not(.sapLineGrid) {
+  min-inline-size: 0;
+}
+
+.sapTable:not(.sapLineGrid) :is(th, td) {
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.sapTable:not(.sapLineGrid) thead th {
+  text-wrap: balance;
+}
+
+/* `data-nowrap`: a code, a document number, an amount or a date, found by
+   `TableLabels` — wrapped, "INV-HQ-2026-" and "000001" read as two values. */
+.sapTable:not(.sapLineGrid) :is(td.sapNum, time, .status, .sapRegisterStatus, .sapStatus, [data-nowrap]) {
+  white-space: nowrap;
+}
+
+/* A laptop: the same columns a little closer, the outer edges kept. */
+@media (width < 90rem) {
+  .sapTable:not(.sapLineGrid) :is(th, td) {
+    padding-inline: 0.5rem;
+  }
+
+  .sapTable:not(.sapLineGrid) :is(th, td):first-child {
+    padding-inline-start: 0.875rem;
+  }
+
+  .sapTable:not(.sapLineGrid) :is(th, td):last-child {
+    padding-inline-end: 0.875rem;
+  }
+
+  /* Ten columns or more (the ageing, the statements' comparisons): a size
+     smaller and closer still, so they fit before anything has to scroll. */
+  .sapTable:not(.sapLineGrid):has(> thead > tr > :nth-child(10)) {
+    font-size: 0.8125rem;
+  }
+
+  .sapTable:not(.sapLineGrid):has(> thead > tr > :nth-child(10)) :is(th, td) {
+    padding-inline: 0.375rem;
+  }
+
+  .sapTable:not(.sapLineGrid):has(> thead > tr > :nth-child(10)) :is(th, td):first-child {
+    padding-inline-start: 0.75rem;
+  }
+
+  .sapTable:not(.sapLineGrid):has(> thead > tr > :nth-child(10)) :is(th, td):last-child {
+    padding-inline-end: 0.75rem;
+  }
+}
+
+/* ── A phone: each row a card ──────────────────────────────────────────────
+   A register or report of four columns or more (a line grid one types into
+   never; a table marked `data-table-keep` never) becomes a list of cards:
+   each cell a line "label … value", the label its column's heading, which
+   `TableLabels` (mounted once in the app layout) copies onto the cells as
+   `data-label`. The heading row stays for screen readers, out of sight. A
+   cell that spans columns (a total's caption, "Nothing to show") is its own
+   line without a label; a lone spanning cell is a heading between cards. */
+@media (max-width: 40rem) {
+  .sapTableWrap:has(> .sapTable > thead > tr > :nth-child(4)):not(:has(.sapLineGrid, .sapEntryRow, .sapCellField, [data-table-keep], td > :is(input:not([type='hidden'], [type='checkbox'], [type='radio']), select, textarea))) {
+    max-block-size: none;
+    overflow: visible;
+    padding: 0.75rem;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .sapTable:not(.sapLineGrid, [data-table-keep], [role='grid'], [role='treegrid'], [role='presentation']):not(:has(.sapEntryRow, .sapCellField, td > :is(input:not([type='hidden'], [type='checkbox'], [type='radio']), select, textarea))):has(> thead > tr > :nth-child(4)) {
+    display: block;
+    inline-size: 100%;
+    min-inline-size: 0;
+    background: transparent;
+
+    & > colgroup {
+      display: none;
+    }
+
+    & > caption {
+      display: block;
+      padding: 0 0.125rem 0.5rem;
+      text-align: start;
+    }
+
+    & > thead {
+      position: absolute;
+      inline-size: 1px;
+      block-size: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    & > thead th {
+      position: static;
+    }
+
+    & > :is(tbody, tfoot) {
+      display: grid;
+      gap: 0.625rem;
+    }
+
+    & > :is(tbody, tfoot) + :is(tbody, tfoot) {
+      margin-block-start: 0.625rem;
+    }
+
+    & > :is(tbody, tfoot) > tr {
+      display: block;
+      padding: 0.5rem 0.875rem;
+      border: 1px solid var(--ui-border);
+      border-radius: var(--radius-lg);
+      background: var(--ui-overlay);
+      box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+    }
+
+    & > tbody > tr.sapTotalRow,
+    & > tfoot > tr {
+      background: var(--ui-muted);
+    }
+
+    & > :is(tbody, tfoot) > tr > :is(td, th) {
+      display: flow-root;
+      position: static;
+      block-size: auto;
+      min-block-size: 0;
+      padding: 0.3125rem 0;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+      text-align: end;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    /* A card's value has half a phone; a long code may use the whole line. */
+    & :is(td, th) [data-nowrap] {
+      white-space: normal;
+    }
+
+    & > :is(tbody, tfoot) > tr > :is(td, th)[data-label]:not([data-label=''])::before {
+      content: attr(data-label);
+      float: inline-start;
+      max-inline-size: 50%;
+      margin-inline-end: 0.75rem;
+      color: var(--ui-muted-fg);
+      font-size: 0.8125rem;
+      font-weight: 500;
+      line-height: 1.5;
+      text-align: start;
+      overflow-wrap: break-word;
+    }
+
+    & > :is(tbody, tfoot) > tr > :is(td, th)[colspan]:not([colspan='1']) {
+      text-align: start;
+      font-weight: 600;
+    }
+
+    & > :is(tbody, tfoot) > tr > :is(td, th):is(:empty, [data-empty]) {
+      display: none;
+    }
+
+    & > tbody > tr > :first-child[data-label]:not([data-label='']) {
+      color: var(--ui-fg);
+      font-weight: 600;
+    }
+
+    /* A lone spanning cell between rows: a group's heading, not a card. */
+    & > tbody > tr:has(> :only-child[colspan]:not([colspan='1'])):not(:has(.sapEmptyRow)) {
+      padding: 0.25rem 0.125rem 0;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    & > tbody > tr > td.sapEmptyRow[colspan] {
+      block-size: auto !important;
+      padding-block: 1.25rem !important;
+      color: var(--ui-muted-fg);
+      font-weight: 400;
+      text-align: center !important;
+    }
+  }
+}
+
 /* ── Striped rows (2026-10-06, by direction: "for the table odd little
    highlight color and other normal for better visuality") ──────────────────
    Every table of the application: the odd rows a light tint of the accent,
@@ -7703,4 +8108,92 @@
   --ui-row-stripe: color-mix(in oklab, var(--ui-primary) 8%, var(--ui-overlay, var(--ui-bg)));
 }
 
+/* ── The side panel gives the page its height back (2026-10-06) ───────────
+   By direction: "in side panel … the tabs should move to navbar, make places
+   for its screen … almost half of the screen is taken by tabs and header".
+   With the modules in the side panel the top bar carries the open module's
+   headings (erp-section-bar.tsx), so the page's own section tabs are not
+   drawn, and its header is one tight row: the back link beside the title,
+   the subtitle small under it, the actions at the end. Top bar and bottom
+   bar, and every phone, keep the page exactly as it was. */
+@media (min-width: 35.0625rem) {
+  :global(.erp-root[data-navigation='side']) .tabsBar {
+    display: none;
+  }
+
+  :global(.erp-root[data-navigation='side']) .sapPage > .crumbs {
+    float: inline-start;
+    min-block-size: 2.5rem;
+    margin-block: 0;
+    margin-inline-end: 0.75rem;
+  }
+
+  /* The trail's last word is the title, which now stands right beside it. */
+  :global(.erp-root[data-navigation='side']) .sapPage > .crumbs .crumbTrail > strong {
+    display: none;
+  }
+
+  :global(.erp-root[data-navigation='side']) .sapPage > .sapPageHeader {
+    min-block-size: 2.5rem;
+    align-items: center;
+    gap: 0.75rem;
+    margin-block-end: 0.9rem;
+    padding-block-start: 0;
+  }
+
+  :global(.erp-root[data-navigation='side']) .sapPage > .sapPageHeader h1 {
+    font-size: 1.25rem;
+    line-height: 1.2;
+  }
+
+  :global(.erp-root[data-navigation='side']) .sapPage > .sapPageHeader p {
+    margin-block-start: 0.05rem;
+    font-size: 0.78rem;
+    line-height: 1.35;
+  }
+
+  /* What follows the header starts under the back link as well as the title. */
+  :global(.erp-root[data-navigation='side']) .sapPage > .sapPageHeader ~ * {
+    clear: both;
+  }
+}
+
+/* A register says its count once (2026-10-07, by direction: "two times
+   written 2 records"): where its window's title carries the count, the
+   toolbar's copy of it goes. A toolbar under a title without one keeps it. */
+.sapWindow:has(> .sapTitle .sapTitleMeta) .toolbarMeta > span:first-child {
+  display: none;
+}
+
+/* A search box's button wears the accent, as the primary buttons do — on
+   every register, the chat's lists and wherever else the toolbar's search is
+   drawn (2026-10-07, by direction: "search button is not blue … that button
+   should match the highlight colour — everywhere"). The selectors match the
+   heaviest earlier rule for the same button, so this one wins everywhere. */
+.toolbarSearch.toolbarSearch button,
+.sapPage.sapPage .toolbarSearch button,
+.sapRegister.sapRegister .toolbarSearch button {
+  border-color: var(--ui-primary);
+  background: var(--ui-primary);
+  color: var(--ui-primary-fg);
+}
+
+.toolbarSearch.toolbarSearch button:hover,
+.sapPage.sapPage .toolbarSearch button:hover,
+.sapRegister.sapRegister .toolbarSearch button:hover {
+  border-color: color-mix(in oklab, var(--ui-primary) 88%, var(--ui-fg));
+  background: color-mix(in oklab, var(--ui-primary) 88%, var(--ui-fg));
+  color: var(--ui-primary-fg);
+}
+
+.toolbarSearch.toolbarSearch button:focus-visible,
+.sapPage.sapPage .toolbarSearch button:focus-visible,
+.sapRegister.sapRegister .toolbarSearch button:focus-visible {
+  outline: 2px solid var(--ui-ring, var(--ui-primary));
+  outline-offset: 2px;
+}
+
+.toolbarSearch.toolbarSearch button svg {
+  color: currentColor;
+}
 }

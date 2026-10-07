@@ -29,6 +29,8 @@ import { formatMoney, type Locale } from '@/i18n/config';
 import { businessToday } from '@/server/domain/business-date';
 import { NEW_BANK } from '../form';
 import { createLoan } from '../actions';
+import { IntentSelect } from '@/components/admin/intent-select';
+import { IntentDateField } from '@/components/admin/intent-date-field';
 
 /**
  * A bank's offer, entered as its letter states it — by direction, 2026-10-03.
@@ -157,13 +159,13 @@ export default async function NewLoanPage({ searchParams }: { readonly searchPar
     values.map((value) => ({ value, label: t(`${prefix}${value}`) }));
 
   const select = (name: string, chosen: string, list: readonly { value: string; label: string }[], label: string) => (
-    <select aria-label={label} defaultValue={chosen} name={name}>
+    <IntentSelect aria-label={label} defaultValue={chosen} name={name}>
       {list.map((option) => (
         <option key={option.value} value={option.value}>
           {option.label}
         </option>
       ))}
-    </select>
+    </IntentSelect>
   );
 
   const fields: DocumentField[] = [
@@ -293,11 +295,10 @@ export default async function NewLoanPage({ searchParams }: { readonly searchPar
       label: t('expected_disbursement'),
       control: true,
       value: (
-        <input
+        <IntentDateField
           aria-label={t('expected_disbursement')}
           defaultValue={disbursementDate}
           name="expected_disbursement_date"
-          type="date"
         />
       ),
     },
@@ -433,7 +434,7 @@ export default async function NewLoanPage({ searchParams }: { readonly searchPar
       label: t('first_due'),
       control: true,
       value: (
-        <input aria-label={t('first_due')} defaultValue={firstDue} name="first_due_date" required type="date" />
+        <IntentDateField aria-label={t('first_due')} defaultValue={firstDue} name="first_due_date" required />
       ),
     },
     {
@@ -445,7 +446,7 @@ export default async function NewLoanPage({ searchParams }: { readonly searchPar
       label: t('grace_until'),
       control: true,
       value: (
-        <input aria-label={t('grace_until')} defaultValue={graceUntil} name="grace_until" type="date" />
+        <IntentDateField aria-label={t('grace_until')} defaultValue={graceUntil} name="grace_until" />
       ),
     },
   ];
@@ -543,11 +544,10 @@ export default async function NewLoanPage({ searchParams }: { readonly searchPar
                 <tr key={row.sequence}>
                   <td>{row.sequence}</td>
                   <td className={s.sapCellField}>
-                    <input
+                    <IntentDateField
                       aria-label={`${t('due_date')} ${row.sequence}`}
                       defaultValue={row.dueDate}
                       name={`due_date_${index}`}
-                      type="date"
                     />
                   </td>
                   <td className={`${s.sapCellField} ${s.sapNum}`}>

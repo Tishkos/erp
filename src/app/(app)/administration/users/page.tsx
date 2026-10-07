@@ -19,10 +19,12 @@ import {
 } from '@/components/admin';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { UserAvatar } from '@/components/chat/chat-avatar';
 import { Denied } from '@/components/denied';
 import { can, isCeo } from '@domain/permissions';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as branches from '@/server/services/branches';
+import * as chatRead from '@/server/services/chat-read';
 import * as departments from '@/server/services/departments';
 import * as hrSettings from '@/server/services/hr-settings';
 import * as roles from '@/server/services/roles';
@@ -46,13 +48,18 @@ export default async function UsersPage({ searchParams }: { searchParams: Search
   }
   const mayCreate = can(principal, 'create', users.PERMISSION_OBJECT);
 
-  const data = await withCurrentUser(async (tx) => ({
-    rows: await users.listAll(tx),
-    roles: isCeo(principal) ? await roles.listAll(tx) : [],
-    branches: mayCreate ? await branches.listAll(tx) : [],
-    departments: mayCreate ? await departments.listAll(tx) : [],
-    positions: mayCreate ? await hrSettings.positions(tx) : [],
-  }));
+  const data = await withCurrentUser(async (tx) => {
+    const rows = await users.listAll(tx);
+    return {
+      rows,
+      // The status dots, in one read: known for the people the viewer chats with (the presence policy), none for the rest.
+      presence: await chatRead.presenceOfUsers(tx, rows.map((row) => row.id)),
+      roles: isCeo(principal) ? await roles.listAll(tx) : [],
+      branches: mayCreate ? await branches.listAll(tx) : [],
+      departments: mayCreate ? await departments.listAll(tx) : [],
+      positions: mayCreate ? await hrSettings.positions(tx) : [],
+    };
+  });
 
   const shown = data.rows.filter((row) => matches(row, outcome.q));
 
@@ -188,11 +195,13 @@ export default async function UsersPage({ searchParams }: { searchParams: Search
                 <tr key={row.id}>
                   <td>
                     <Link className={admin.personCell} href={`/administration/users/${row.id}`}>
-                      {row.image ? (
-                        <img alt="" className={`${admin.avatarSmall} rounded-full border-0`} src={row.image} />
-                      ) : (
-                        <span className={`${admin.avatarSmall} size-7 rounded-full border-0 bg-primary-subtle text-xs font-semibold text-primary-subtle-fg`}>{row.displayName.slice(0, 1).toUpperCase()}</span>
-                      )}
+                      <UserAvatar
+                        className={`${admin.avatarSmall} grid size-7 place-items-center overflow-hidden rounded-full border-0 bg-primary-subtle text-xs font-semibold text-primary-subtle-fg [&_img]:size-full [&_img]:object-cover`}
+                        dotClassName="size-2.5"
+                        image={row.image}
+                        initials={row.displayName.slice(0, 1).toUpperCase()}
+                        presence={data.presence[row.id]}
+                      />
                       <span>{row.displayName}</span>
                     </Link>
                   </td>

@@ -224,6 +224,72 @@ export async function accountActivity(
   return result.rows as unknown as AccountActivityRow[];
 }
 
+/**
+ * One account's balance as the ledger holds it now — what a form shows under
+ * an account the moment it is chosen (2026-10-06, by direction: "i want to know
+ * the balance for each account we select … directly from the chart of
+ * accounts").
+ *
+ * The chart of accounts' own figure: every posted and reversed journal from the
+ * beginning, in every branch the reader's row security admits (the account's
+ * profile reads `accountActivity` the same way). In dinars always; in the
+ * account's own currency as well when it is kept in another one — summed from
+ * the lines entered in that currency, which on a one-currency account (D7) is
+ * every line. Added up by the database as exact numerics and returned as
+ * decimal strings; nothing here is a float.
+ */
+export interface AccountBalance {
+  readonly accountId: string;
+  readonly code: string;
+  readonly name: string;
+  readonly accountType: string;
+  /** The currency the account is kept in (`currency_restriction`), when it names one. */
+  readonly currency: string | null;
+  /** Debit less credit, dinars, signed. */
+  readonly balanceIqd: string;
+  /** Debit less credit in `currency`, signed; null for a dinar account. */
+  readonly balanceTxn: string | null;
+}
+
+export async function accountBalance(tx: Tx, accountId: string): Promise<AccountBalance | null> {
+  const result = await tx.execute(sql`
+    select a.id::text                as "accountId",
+           a.code                    as "code",
+           a.name                    as "name",
+           a.account_type::text      as "accountType",
+           a.currency_restriction    as "currency",
+           coalesce((
+             select sum(l.debit_iqd - l.credit_iqd)
+               from journal_line l
+               join journal_entry e on e.id = l.journal_entry_id
+              where l.account_id = a.id
+                and e.status in ('posted', 'reversed')
+           ), 0)::text               as "balanceIqd",
+           case when a.currency_restriction is null or a.currency_restriction = 'IQD' then null
+                else coalesce((
+                  select sum(l.debit_txn - l.credit_txn)
+                    from journal_line l
+                    join journal_entry e on e.id = l.journal_entry_id
+                   where l.account_id = a.id
+                     and e.status in ('posted', 'reversed')
+                     and l.currency = a.currency_restriction
+                ), 0)::text
+           end                       as "balanceTxn"
+      from chart_of_account a
+     where a.id = ${accountId}::uuid
+       and not a.is_group
+  `);
+  return (result.rows[0] as unknown as AccountBalance | undefined) ?? null;
+}
+
+/** The G/L account a bank or cash account is kept on — its balance is that account's. */
+export async function glAccountOfBankCash(tx: Tx, bankCashAccountId: string): Promise<string | null> {
+  const result = await tx.execute(sql`
+    select gl_account_id::text as "glAccountId" from bank_cash_account where id = ${bankCashAccountId}::uuid
+  `);
+  return (result.rows[0] as { glAccountId: string | null } | undefined)?.glAccountId ?? null;
+}
+
 export interface IntegrityIssue {
   readonly issue: string;
   readonly objectId: string;
