@@ -148,15 +148,25 @@ export default async function NewPaymentApplicationPage({ searchParams }: { sear
     {
       label: t('col_account'),
       control: true,
-      value: (
-        <IntentSelect aria-label={t('col_account')} defaultValue={pickers.accounts[0]?.id ?? ''} name="bank_cash_account_id" required>
-          {pickers.accounts.map((account) => (
-            <option key={account.id} value={account.id}>
-              {`${account.code} · ${account.name}${account.bankName ? ` · ${account.bankName}` : ''} — ${t('available_short')} ${money(account.availableIqd, 'IQD')}`}
-            </option>
-          ))}
-        </IntentSelect>
-      ),
+      // No account in the import's currency: say so and where to add one, rather than an empty
+      // required box that only refuses to send (2026-10-07: "the Paid from doesn't load").
+      value:
+        pickers.accounts.length === 0 ? (
+          <span className={s.sapEnteredNote}>
+            {t('no_paid_from', { currency: row.currency })}{' '}
+            <a className={s.sapLink} href="/master-data/bank-accounts">
+              {t('no_paid_from_link')}
+            </a>
+          </span>
+        ) : (
+          <IntentSelect aria-label={t('col_account')} defaultValue={pickers.accounts[0]?.id ?? ''} name="bank_cash_account_id" required>
+            {pickers.accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {`${account.code} · ${account.name}${account.bankName ? ` · ${account.bankName}` : ''} — ${t('available_short')} ${money(account.availableIqd, 'IQD')}`}
+              </option>
+            ))}
+          </IntentSelect>
+        ),
     },
     {
       // The supplier's accounts are set up and verified on its profile; the one in this import's currency is chosen.
@@ -211,7 +221,7 @@ export default async function NewPaymentApplicationPage({ searchParams }: { sear
       <form action={createApplication}>
         <input name="payable_no" type="hidden" value={row.payableNo} />
         <DocumentWindow
-          actions={<Submit label={t('create')} variant="document" />}
+          actions={pickers.accounts.length === 0 ? null : <Submit label={t('create')} variant="document" />}
           documentType={page('payment_applications')}
           fields={fields}
           fieldsAfterLines={[

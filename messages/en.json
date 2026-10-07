@@ -3498,6 +3498,8 @@
       "col_supplier": "Supplier",
       "col_method": "Method",
       "col_account": "Paid from",
+      "no_paid_from": "There is no bank or cash account in {currency} to pay from yet.",
+      "no_paid_from_link": "Add one on Bank Accounts",
       "col_amount": "Amount",
       "col_application_date": "Sent to bank",
       "col_days_waiting": "Days waiting",

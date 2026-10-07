@@ -3498,6 +3498,8 @@
       "col_supplier": "المورد",
       "col_method": "الطريقة",
       "col_account": "يُدفع من",
+      "no_paid_from": "لا يوجد بعد حساب بنكي أو نقدي بعملة {currency} للدفع منه.",
+      "no_paid_from_link": "أضف حساباً من شاشة الحسابات البنكية",
       "col_amount": "المبلغ",
       "col_application_date": "أُرسل إلى البنك",
       "col_days_waiting": "أيام الانتظار",
