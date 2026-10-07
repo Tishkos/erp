@@ -67,8 +67,11 @@ describe('Appendix A · the approved menu tree', () => {
     // Landed Costs are the twenty-ninth and thirtieth.
     // Transfers & Applications (by direction, 2026-10-06) — the import and
     // the payment applications as a module of their own — is the thirty-first.
-    expect(MENU).toHaveLength(31);
-    expect([...MENU.map((s) => s.ordinal)].sort((a, b) => a - b)).toEqual(Array.from({ length: 31 }, (_, i) => i + 1));
+    // Receivables, Inventory, Projects and HR became three headings each on
+    // 2026-10-07 (by direction: grouped by what they do, like Payables) — the
+    // thirty-second to thirty-ninth.
+    expect(MENU).toHaveLength(39);
+    expect([...MENU.map((s) => s.ordinal)].sort((a, b) => a - b)).toEqual(Array.from({ length: 39 }, (_, i) => i + 1));
   });
 
   it('names every required submenu of Finance — General Ledger', () => {
@@ -130,8 +133,9 @@ describe('§25 · navigation reflects permission, and is not the control', () =>
     // Twenty-five since Monitoring was added (2026-10-03); twenty-eight since
     // Master Data split into its four headings (2026-10-04).
     // Thirty since Logistics became four headings (REQ-LOG-001); thirty-one
-    // since Transfers & Applications (2026-10-06).
-    expect(visibleMenu(superUser)).toHaveLength(31);
+    // since Transfers & Applications (2026-10-06); thirty-nine since
+    // Receivables, Inventory, Projects and HR became three headings each (2026-10-07).
+    expect(visibleMenu(superUser)).toHaveLength(39);
   });
 
   it('shows a user only the sections they hold a grant in', () => {
