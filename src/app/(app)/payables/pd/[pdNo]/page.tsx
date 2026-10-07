@@ -141,6 +141,12 @@ export default async function PdPage({
       ),
     },
     { label: t('registered'), value: <bdi dir="ltr">{day(pd.registrationDate)}</bdi> },
+    { label: t('registration_year'), value: <bdi dir="ltr">{pd.registrationYear ?? '—'}</bdi> },
+    // The registration as the bank's platform shows it (0420): the four codes typed with it.
+    { label: t('importer_code'), value: <bdi dir="ltr">{pd.importerCode ?? '—'}</bdi> },
+    { label: t('financier'), value: <bdi dir="auto">{pd.financier ?? '—'}</bdi> },
+    { label: t('invoice_no'), value: <bdi dir="ltr">{pd.invoiceNo ?? '—'}</bdi> },
+    { label: t('declarant_code'), value: <bdi dir="ltr">{pd.declarantCode ?? '—'}</bdi> },
     { label: t('expires'), value: <bdi dir="ltr">{day(pd.expiryDate)}</bdi> },
     {
       label: t('days_left'),
@@ -291,6 +297,11 @@ export default async function PdPage({
                       name="bank_code"
                       options={found.bankRows.map((b) => ({ value: b.code, label: b.name }))}
                     />
+                    {/* The platform's codes carry over from the PD re-registered unless changed here (0420). */}
+                    <Field defaultValue={pd.importerCode ?? ''} label={t('importer_code')} maxLength={64} name="importer_code" />
+                    <Field defaultValue={pd.financier ?? ''} label={t('financier')} maxLength={64} name="financier" />
+                    <Field defaultValue={pd.invoiceNo ?? ''} label={t('invoice_no')} maxLength={64} name="invoice_no" />
+                    <Field defaultValue={pd.declarantCode ?? ''} label={t('declarant_code')} maxLength={64} name="declarant_code" />
                   </Grid>
                   <Field id="pd-reregister-note" label={t('note')} name="note" wide />
                   <SubmitRow>

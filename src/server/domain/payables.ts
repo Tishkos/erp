@@ -67,8 +67,15 @@ export interface StageFacts {
   readonly approvedInvoiceCount: number;
   /** Payment lane (build stage 3). */
   readonly instalmentPlanSet: boolean;
+  /** The first instalment's application is with the bank — Sent to the bank, Paid or Debited. */
   readonly firstInstalmentFunded: boolean;
-  /** Applications past draft, rejected and cancelled set aside — money asked of the bank. */
+  /**
+   * Applications the bank has: Sent to the bank, Paid, Debited. Not a draft,
+   * not one sent for approval, not one approved — by direction 2026-10-07
+   * ("approved by the super user doesn't mean the payment application is done
+   * and funded, until we get accepted"): approval reserves the company's
+   * money and asks nothing of the bank yet.
+   */
   readonly liveApplicationCount: number;
   readonly paymentSentCount: number;
   readonly fullyPaid: boolean;
@@ -134,9 +141,11 @@ export const STAGE_RULES: Readonly<Record<string, StageRule>> = Object.freeze({
   fully_paid: (f) => f.fullyPaid,
   closed_matched: (f) => f.fullyPaid && f.statementMatched,
 
-  // Funded: the first instalment applied for when the import has a plan;
-  // without one (the sponsor took the plan off the screen, 2026-10-02), any
-  // application asked of the bank — or the import already paid in full.
+  // Funded: the first instalment's application with the bank when the import
+  // has a plan; without one (the sponsor took the plan off the screen,
+  // 2026-10-02), any application the bank has accepted — Sent to the bank or
+  // Paid — or the import already paid in full. A submitted or approved
+  // application is not funded (2026-10-07, by direction).
   import_invoiced_funded: (f) =>
     f.postedInvoiceCount > 0 &&
     (f.instalmentPlanSet ? f.firstInstalmentFunded : f.liveApplicationCount > 0 || f.fullyPaid),

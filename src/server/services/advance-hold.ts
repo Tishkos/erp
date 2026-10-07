@@ -13,14 +13,16 @@
  * import is Paid (`payment-applications.confirm` calls `release`), when they
  * move to In Process and the import goes on as any other. A container cannot
  * be received out of the hold (`shipments.receive` asks `heldOf`): the goods
- * reach their warehouse through In Process, as every import's do.
+ * reach their warehouse through In Process, as every import's do. The hold is
+ * the import's and is released once: an invoice linked to the import after an
+ * application of it is Paid is not held (`advancePaid`).
  *
  * Nothing here posts: a move between two transit warehouses of one branch is
  * the same stock at the same cost (`inventory.relocate`).
  */
 import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
-import { apInvoice, apInvoiceLine, costLayer, inventoryMovement, warehouse } from '../db/schema';
+import { apInvoice, apInvoiceLine, costLayer, inventoryMovement, paymentApplication, warehouse } from '../db/schema';
 import { businessToday } from '../domain/business-date';
 import { parseDecimal } from '../domain/money';
 import { parseQuantity } from '../domain/uom';
@@ -48,6 +50,22 @@ export function holdWarehouseOf(tx: Tx, branchCode: string): Promise<string | nu
 /** The branch's In Process warehouse, where held goods go when the advance is paid. */
 export function inProcessWarehouseOf(tx: Tx, branchCode: string): Promise<string | null> {
   return stageWarehouseOf(tx, branchCode, 'in_process');
+}
+
+/**
+ * The import's advance is paid: a payment application of the import is Paid
+ * (confirmed) or Debited. A later invoice linked to such an import is not
+ * held — its goods go to In Process like any import's — because the hold is
+ * the import's, released once, and "linked purchases cannot go back to steps"
+ * (2026-10-07, by direction).
+ */
+export async function advancePaid(tx: Tx, payableId: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: paymentApplication.id })
+    .from(paymentApplication)
+    .where(and(eq(paymentApplication.payableId, payableId), inArray(paymentApplication.status, ['confirmed', 'debited'])))
+    .limit(1);
+  return Boolean(row);
 }
 
 /** The import's posted (and not reversed) invoices — the ones whose goods can be held. */

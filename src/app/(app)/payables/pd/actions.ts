@@ -16,6 +16,16 @@ const asycudaRecord = (runNo: string) => `${ASYCUDA}/${encodeURIComponent(runNo)
 const record = (pdNo: string, year?: string | number | null) =>
   `${LIST}/${encodeURIComponent(pdNo)}${year ? `?year=${year}` : ''}`;
 
+/** The platform's four codes as the form posts them (0420): importer_code, financier, invoice_no, declarant_code. */
+function platformFieldsFrom(formData: FormData) {
+  return {
+    importerCode: text(formData, 'importer_code') || null,
+    financier: text(formData, 'financier') || null,
+    invoiceNo: text(formData, 'invoice_no') || null,
+    declarantCode: text(formData, 'declarant_code') || null,
+  };
+}
+
 async function pdIdOf(tx: Parameters<Parameters<typeof runAdminAndReturn>[0]>[0], formData: FormData) {
   const year = Number(text(formData, 'year')) || null;
   return (await customs.viewByNo(tx, text(formData, 'pd_no'), year)).pd.id;
@@ -33,6 +43,7 @@ export async function registerPd(formData: FormData): Promise<void> {
         registrationDate: text(formData, 'registration_date'),
         expiryDate: text(formData, 'expiry_date'),
         bankCode: text(formData, 'bank_code') || null,
+        ...platformFieldsFrom(formData),
         statusCode: text(formData, 'status_code') || null,
         note: text(formData, 'note') || null,
       });
@@ -76,6 +87,7 @@ export async function reRegisterPd(formData: FormData): Promise<void> {
         registrationDate: text(formData, 'registration_date'),
         expiryDate: text(formData, 'expiry_date'),
         bankCode: text(formData, 'bank_code') || null,
+        ...platformFieldsFrom(formData),
         note: text(formData, 'note') || null,
       }),
     (value) => {

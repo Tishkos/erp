@@ -107,10 +107,36 @@ export interface RegisterInput {
   readonly registrationDate: string;
   readonly expiryDate: string;
   readonly bankCode?: string | null;
+  /**
+   * The registration as the bank's platform shows it (0420, 2026-10-07):
+   * رمز المستورد, المول, رقم الفاتورة, رمز المصرح. Typed as the platform
+   * prints them; each at most 64 characters; kept as text.
+   */
+  readonly importerCode?: string | null;
+  readonly financier?: string | null;
+  readonly invoiceNo?: string | null;
+  readonly declarantCode?: string | null;
   /** Usually Submitted; a PD entered late may start further along. */
   readonly statusCode?: string | null;
   readonly note?: string | null;
   readonly supersedesPdId?: string | null;
+}
+
+/** The platform's four codes, in the shape they are kept: trimmed, empty → null, no longer than a code is. */
+export const PLATFORM_FIELDS = ['importerCode', 'financier', 'invoiceNo', 'declarantCode'] as const;
+export type PlatformField = (typeof PLATFORM_FIELDS)[number];
+const PLATFORM_FIELD_MAX = 64;
+
+export function platformFieldsOf(input: Partial<Record<PlatformField, string | null | undefined>>): Record<PlatformField, string | null> {
+  const out = {} as Record<PlatformField, string | null>;
+  for (const field of PLATFORM_FIELDS) {
+    const value = input[field]?.trim() || null;
+    if (value && value.length > PLATFORM_FIELD_MAX) {
+      throw new PdValidationError(`${field} is ${value.length} characters; the platform's codes are at most ${PLATFORM_FIELD_MAX}.`);
+    }
+    out[field] = value;
+  }
+  return out;
 }
 
 export async function register(tx: Tx, ctx: ActorContext, input: RegisterInput) {
@@ -160,6 +186,7 @@ export async function register(tx: Tx, ctx: ActorContext, input: RegisterInput) 
     if (!known) throw new PdValidationError(`'${input.bankCode}' is not a bank.`);
     bankSwift = known.swiftBic;
   }
+  const platform = platformFieldsOf(input);
 
   const [created] = await tx
     .insert(customsPd)
@@ -171,6 +198,7 @@ export async function register(tx: Tx, ctx: ActorContext, input: RegisterInput) 
       expiryDate: input.expiryDate,
       bankCode: input.bankCode || null,
       bankSwift,
+      ...platform,
       statusCode,
       statusDate: input.registrationDate,
       supersedesPdId: input.supersedesPdId ?? null,
@@ -224,6 +252,7 @@ export async function register(tx: Tx, ctx: ActorContext, input: RegisterInput) 
       expiryDate: input.expiryDate,
       status: statusCode,
       bank: input.bankCode ?? null,
+      ...platform,
     },
     outcome: 'success',
     requestId: ctx.requestId ?? null,
@@ -445,6 +474,12 @@ export async function reRegister(
     ...input,
     payableId: old.payableId,
     bankCode: input.bankCode ?? old.bankCode,
+    // The platform's codes are the import's, not the registration's: carried
+    // to the new row unless the form says otherwise (0420).
+    importerCode: input.importerCode ?? old.importerCode,
+    financier: input.financier ?? old.financier,
+    invoiceNo: input.invoiceNo ?? old.invoiceNo,
+    declarantCode: input.declarantCode ?? old.declarantCode,
     supersedesPdId: old.id,
   });
   await events.record(tx, {
@@ -687,6 +722,12 @@ const pdColumns = {
   reference: payable.supplierReference,
   supplierName: businessPartner.legalName,
   bankName: bank.name,
+  bankSwift: customsPd.bankSwift,
+  // The platform's codes (0420), for the import's PD section and the register.
+  importerCode: customsPd.importerCode,
+  financier: customsPd.financier,
+  invoiceNo: customsPd.invoiceNo,
+  declarantCode: customsPd.declarantCode,
   branchCode: customsPd.branchCode,
   superseded: pdSuperseded,
 };
@@ -719,6 +760,11 @@ async function pdWhere(tx: Tx, filter: PdRegisterFilter, asOf: string) {
         payable.supplierReference,
         businessPartner.legalName,
         bank.name,
+        customsPd.bankSwift,
+        customsPd.importerCode,
+        customsPd.financier,
+        customsPd.invoiceNo,
+        customsPd.declarantCode,
         pdStatus.name,
         customsPd.statusCode,
         customsPd.lastNote,

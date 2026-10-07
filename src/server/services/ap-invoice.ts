@@ -1996,7 +1996,11 @@ export async function post(
   // By percentage or by amount (0411) — `invoiceAdvance` over the lines as they stand.
   const agreed = agreedAdvanceOf(invoice, lines);
   const agreesAdvance = invoice.isImport && Boolean(invoice.payableId) && agreed !== null;
-  const inProcessHouse = agreesAdvance ? await advanceHold.inProcessWarehouseOf(tx, invoice.branchCode) : null;
+  // An import whose advance is already Paid holds nothing more: a second
+  // invoice linked to it goes to In Process with the goods released before it
+  // (2026-10-07, by direction: "linked purchases cannot go back to steps").
+  const advanceAlreadyPaid = agreesAdvance && (await advanceHold.advancePaid(tx, invoice.payableId!));
+  const inProcessHouse = agreesAdvance && !advanceAlreadyPaid ? await advanceHold.inProcessWarehouseOf(tx, invoice.branchCode) : null;
   const holdsGoods = agreesAdvance && inProcessHouse !== null && lines.some((line) => line.warehouseCode === inProcessHouse);
   const holdHouse = holdsGoods ? await advanceHold.holdWarehouseOf(tx, invoice.branchCode) : null;
   if (holdsGoods && !holdHouse) {
@@ -2241,6 +2245,19 @@ export async function post(
       summary:
         `${invoice.invoiceNo} agrees ${advancePercent} in front, so its goods wait in ${holdHouse} — ` +
         'On Process (Without SWIFT) — until a payment application of this import is Paid; then they move to In Process.',
+      actorUserId: ctx.principal.userId,
+    });
+  } else if (advanceAlreadyPaid && invoice.payableId && advanceIqd !== null) {
+    // Said on the log, so nobody looks for goods in the hold that never went there.
+    await payableEvents.record(tx, {
+      payableId: invoice.payableId,
+      eventCode: 'FIELD_CHANGED',
+      sourceType: PERMISSION_OBJECT,
+      sourceId: id,
+      sourceNo: invoice.invoiceNo,
+      summary:
+        `${invoice.invoiceNo} agrees ${advancePercent} in front, but this import's advance is already paid — ` +
+        'its goods go to In Process with the goods released before them, not back to On Process (Without SWIFT).',
       actorUserId: ctx.principal.userId,
     });
   }

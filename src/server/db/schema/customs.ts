@@ -44,6 +44,15 @@ export const customsPd = pgTable(
     expiryDate: date('expiry_date').notNull(),
     bankCode: text('bank_code').references(() => bank.code),
     bankSwift: text('bank_swift'),
+    /**
+     * The registration as the bank's platform shows it (0420, 2026-10-07):
+     * رمز المستورد, المول, رقم الفاتورة, رمز المصرح — typed, kept as text,
+     * written once with the row like the dates and the bank.
+     */
+    importerCode: text('importer_code'),
+    financier: text('financier'),
+    invoiceNo: text('invoice_no'),
+    declarantCode: text('declarant_code'),
     statusCode: text('status_code')
       .notNull()
       .default('submitted')

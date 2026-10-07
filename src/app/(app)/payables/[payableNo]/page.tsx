@@ -1014,9 +1014,13 @@ export default async function PayablePage({
                 <thead>
                   <tr>
                     <th scope="col">{cp('pd_no')}</th>
-                    <th scope="col">{cp('bank')}</th>
                     <th scope="col">{cp('registered')}</th>
+                    <th scope="col">{cp('importer_code')}</th>
+                    <th scope="col">{cp('financier')}</th>
+                    <th scope="col">{cp('bank')}</th>
+                    <th scope="col">{cp('invoice_no')}</th>
                     <th scope="col">{cp('expires')}</th>
+                    <th scope="col">{cp('declarant_code')}</th>
                     <th className={s.sapNum} scope="col">
                       {cp('days_left')}
                     </th>
@@ -1027,7 +1031,7 @@ export default async function PayablePage({
                 <tbody>
                   {pds.length === 0 ? (
                     <tr>
-                      <td className={s.sapEmptyRow} colSpan={7}>
+                      <td className={s.sapEmptyRow} colSpan={11}>
                         {cp('none_for_import')}
                       </td>
                     </tr>
@@ -1043,13 +1047,25 @@ export default async function PayablePage({
                         </Link>
                       </td>
                       <td>
-                        <bdi dir="auto">{pd.bankName ?? '—'}</bdi>
-                      </td>
-                      <td>
                         <bdi dir="ltr">{day(pd.registrationDate)}</bdi>
                       </td>
                       <td>
+                        <bdi dir="ltr">{pd.importerCode ?? '—'}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="auto">{pd.financier ?? '—'}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="auto">{pd.bankName ? `${pd.bankName}${pd.bankSwift ? ` · ${pd.bankSwift}` : ''}` : '—'}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{pd.invoiceNo ?? '—'}</bdi>
+                      </td>
+                      <td>
                         <bdi dir="ltr">{day(pd.expiryDate)}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{pd.declarantCode ?? '—'}</bdi>
                       </td>
                       <td className={s.sapNum}>{pd.isTerminal || pd.superseded ? '—' : pd.daysLeft}</td>
                       <td>

@@ -56,6 +56,27 @@ export default async function NewPdPage({ searchParams }: { searchParams: Search
   const preselected = imports.find((row) => row.payableNo === chosen)?.id ?? '';
   const ps = (code: string, name: string) => (locale !== 'en' && t.has(`ps.${code}`) ? t(`ps.${code}`) : name);
 
+  // The invoice number the platform registers the PD against is the supplier's
+  // own — the import's reference — when the page was opened from the import.
+  const chosenImport = imports.find((row) => row.id === preselected) ?? null;
+  const code = (name: string, label: string, hint?: string, defaultValue?: string) => ({
+    label,
+    control: true,
+    value: (
+      <>
+        <input aria-label={label} autoComplete="off" defaultValue={defaultValue} dir="ltr" maxLength={64} name={name} type="text" />
+        {hint ? <span className={s.sapEnteredNote}>{hint}</span> : null}
+      </>
+    ),
+  });
+
+  /*
+   * The fields in the order the bank's platform lists them (2026-10-07, by
+   * direction, from a picture of its register): registration no. and date,
+   * importer code, financier, bank (its code, name and SWIFT come from the
+   * bank chosen), invoice no., expiry date, declarant code, status. The year
+   * is derived from the registration date and shown on the record.
+   */
   const fields: DocumentField[] = [
     {
       label: t('import'),
@@ -86,6 +107,26 @@ export default async function NewPdPage({ searchParams }: { searchParams: Search
       control: true,
       value: <IntentDateField aria-label={t('registered')} defaultValue={today} name="registration_date" required />,
     },
+    code('importer_code', t('importer_code'), t('importer_code_hint')),
+    code('financier', t('financier'), t('financier_hint')),
+    {
+      label: t('bank'),
+      control: true,
+      value: (
+        <>
+          <IntentSelect aria-label={t('bank')} defaultValue="" name="bank_code">
+            <option value="">—</option>
+            {bankRows.map((bank) => (
+              <option key={bank.code} value={bank.code}>
+                {bank.swiftBic ? `${bank.name} · ${bank.swiftBic}` : bank.name}
+              </option>
+            ))}
+          </IntentSelect>
+          <span className={s.sapEnteredNote}>{t('bank_hint')}</span>
+        </>
+      ),
+    },
+    code('invoice_no', t('invoice_no'), t('invoice_no_hint'), chosenImport?.reference ?? undefined),
     {
       label: t('expires'),
       control: true,
@@ -96,20 +137,7 @@ export default async function NewPdPage({ searchParams }: { searchParams: Search
         </>
       ),
     },
-    {
-      label: t('bank'),
-      control: true,
-      value: (
-        <IntentSelect aria-label={t('bank')} defaultValue="" name="bank_code">
-          <option value="">—</option>
-          {bankRows.map((bank) => (
-            <option key={bank.code} value={bank.code}>
-              {bank.swiftBic ? `${bank.name} · ${bank.swiftBic}` : bank.name}
-            </option>
-          ))}
-        </IntentSelect>
-      ),
-    },
+    code('declarant_code', t('declarant_code'), t('declarant_code_hint')),
     {
       label: t('status'),
       control: true,

@@ -51,6 +51,12 @@ export async function customsPd(ctx: BuildContext, pdNo: string): Promise<Built 
         { label: t('supplier'), value: found.owner ? `${found.owner.supplierName} (${found.owner.supplierCode})` : '—' },
         { label: t('bank'), value: found.bank ? `${found.bank.name}${pd.bankSwift ? ` · ${pd.bankSwift}` : ''}` : '—' },
         { label: t('registered'), value: day(pd.registrationDate), ltr: true },
+        { label: t('registration_year'), value: pd.registrationYear ? String(pd.registrationYear) : '—', ltr: true },
+        // The registration as the bank's platform shows it (0420).
+        { label: t('importer_code'), value: pd.importerCode ?? '—', ltr: true },
+        { label: t('financier'), value: pd.financier ?? '—' },
+        { label: t('invoice_no'), value: pd.invoiceNo ?? '—', ltr: true },
+        { label: t('declarant_code'), value: pd.declarantCode ?? '—', ltr: true },
         { label: t('expires'), value: day(pd.expiryDate), ltr: true },
         { label: t('days_left'), value: status.isTerminal ? '—' : String(found.daysLeft), ltr: true },
         { label: t('supersedes'), value: found.supersedes?.pdNo ?? '—', ltr: true },

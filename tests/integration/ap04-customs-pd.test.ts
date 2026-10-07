@@ -1,11 +1,12 @@
 /**
  * REQ-AP-001 Stage 4 — PD / ASYCUDA (§16).
  *
- *   A11 (PD half)  Sending a payment application for an import without a
- *                  validated PD is refused with a message naming the PD; a
- *                  manager's override is logged; the PD the bank paid against
- *                  is recorded on the application; a PD registered with
- *                  another bank refuses too.
+ *   A11 (PD half)  The PD check on a payment application names the PD and
+ *                  what is wrong with it — none registered, not validated,
+ *                  expired, another bank — as a warning on the record, and
+ *                  refuses nothing (2026-10-07, by direction: shown, never a
+ *                  stop); the PD the bank pays against is recorded on the
+ *                  application when there is one.
  *   A13 (REQ-APP A10)  A PD moved to an expired status requires a hold with
  *                  reason PD and allows re-registration; the old row is
  *                  unchanged and linked.
@@ -16,7 +17,9 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ownerPool, rejection } from './setup';
+import { eq } from 'drizzle-orm';
 import { withScope } from '@/server/db/client';
+import { paymentApplication } from '@/server/db/schema';
 import * as ap from '@/server/services/ap-invoice';
 import * as applications from '@/server/services/payment-applications';
 import * as customs from '@/server/services/customs-pd';
@@ -145,6 +148,29 @@ describe('§16.1 · the PD register', () => {
     expect(facts.livePdCount).toBe(1);
   });
 
+  it('keeps the registration as the bank’s platform shows it: importer code, financier, invoice no., declarant code (0420)', async () => {
+    const pd = await register({ importerCode: ' 70002390 ', financier: '32', invoiceNo: 'WMT2S014A', declarantCode: '2509106C' });
+    const { rows } = await ownerPool.query(`select importer_code, financier, invoice_no, declarant_code from customs_pd where id = $1`, [pd.id]);
+    expect(rows[0]).toEqual({ importer_code: '70002390', financier: '32', invoice_no: 'WMT2S014A', declarant_code: '2509106C' });
+    // On the import's PD section and the register, and found by the search.
+    const listed = await withScope(scope(world.clerk), (tx) => customs.list(tx, { payableId, view: 'all' }));
+    expect(listed[0]).toMatchObject({ importerCode: '70002390', financier: '32', invoiceNo: 'WMT2S014A', declarantCode: '2509106C' });
+    const found = await withScope(scope(world.clerk), (tx) => customs.listForScreen(tx, { search: '2509106C', view: 'all' }));
+    expect(found.rows.map((row) => row.pdNo)).toEqual(['9330']);
+    // Blank is nothing; a code longer than the platform's is refused.
+    const bare = await register({ pdNo: '9331', importerCode: '  ' });
+    expect((await ownerPool.query(`select importer_code from customs_pd where id = $1`, [bare.id])).rows[0].importer_code).toBeNull();
+    expect(await rejection(register({ pdNo: '9332', declarantCode: 'X'.repeat(65) }))).toMatch(/at most 64/);
+
+    // Re-registered: the codes travel with the import unless the form changes them.
+    await change(pd.id, 'rejected', '2026-09-04', 'Wrong HS code');
+    const fresh = await withScope(scope(world.clerk), (tx) =>
+      customs.reRegister(tx, world.clerk, pd.id, { pdNo: '9412', registrationDate: '2026-09-06', expiryDate: '2027-03-06', declarantCode: '2509107D' }),
+    );
+    const { rows: carried } = await ownerPool.query(`select importer_code, financier, invoice_no, declarant_code from customs_pd where id = $1`, [fresh.id]);
+    expect(carried[0]).toEqual({ importer_code: '70002390', financier: '32', invoice_no: 'WMT2S014A', declarant_code: '2509107D' });
+  });
+
   it('one registration per number and year; expiry before registration is refused', async () => {
     await register();
     expect(await rejection(register())).toMatch(/already registered/);
@@ -225,7 +251,7 @@ describe('§16.1 · the PD register', () => {
   });
 });
 
-describe('A11 · the bank pays only against a validated PD', () => {
+describe('A11 · the bank pays only against a validated PD — shown on the application, never a stop (2026-10-07)', () => {
   const draftAndApprove = async () => {
     const made = await withScope(scope(world.clerk), (tx) =>
       applications.create(tx, world.clerk, {
@@ -244,43 +270,57 @@ describe('A11 · the bank pays only against a validated PD', () => {
     withScope(scope(by), (tx) =>
       applications.send(tx, by, id, { applicationDate: '2026-09-10', overrideReason }),
     );
+  const pdCheck = async (id: string) =>
+    withScope(scope(world.clerk), async (tx) => {
+      const [row] = await tx.select().from(paymentApplication).where(eq(paymentApplication.id, id)).limit(1);
+      return (await applications.checksFor(tx, { ...row!, applicationDate: '2026-09-10' })).find((check) => check.code === 'pd_validated')!;
+    });
 
-  it('no PD, or one not validated: refused naming it; validated: sent, and the PD is recorded', async () => {
+  it('no PD, or one not validated: a warning that names it, and Send still goes; validated: the PD is recorded', async () => {
     await fund('5000000');
     const made = await draftAndApprove();
-    expect(await rejection(send(made.id))).toMatch(/No PD is registered/);
+    expect(await pdCheck(made.id)).toMatchObject({ outcome: 'warning', detail: expect.stringMatching(/No PD is registered/) });
 
     const pd = await register();
-    expect(await rejection(send(made.id))).toMatch(/PD 9330 is Submitted/);
+    expect(await pdCheck(made.id)).toMatchObject({ outcome: 'warning', detail: expect.stringMatching(/PD 9330 is Submitted/) });
 
     await change(pd.id, 'validated', '2026-09-08');
+    expect(await pdCheck(made.id)).toMatchObject({ outcome: 'pass' });
     await send(made.id);
-    const { rows } = await ownerPool.query(`select status, pd_id from payment_application where id = $1`, [made.id]);
-    expect(rows[0]).toEqual({ status: 'sent', pd_id: pd.id });
+    const { rows } = await ownerPool.query(`select status, pd_id, overridden_checks from payment_application where id = $1`, [made.id]);
+    expect(rows[0]).toEqual({ status: 'sent', pd_id: pd.id, overridden_checks: [] });
   });
 
-  it('a PD registered with another bank refuses; a manager may send anyway, logged', async () => {
+  it('with no PD at all a clerk sends without a reason, nothing is overridden, and no PD is recorded on it', async () => {
+    await fund('5000000');
+    const made = await draftAndApprove();
+    await send(made.id);
+    const { rows } = await ownerPool.query(`select status, pd_id, overridden_checks from payment_application where id = $1`, [made.id]);
+    expect(rows[0]).toEqual({ status: 'sent', pd_id: null, overridden_checks: [] });
+    expect(await codes()).not.toContain('CHECK_OVERRIDDEN');
+  });
+
+  it('a PD registered with another bank is a warning; Send goes and names no PD until one of the account’s bank is validated', async () => {
     await fund('5000000');
     const pd = await register({ bankCode: 'BNK-0001' });
     await change(pd.id, 'validated', '2026-09-08');
     const made = await draftAndApprove();
-    expect(await rejection(send(made.id))).toMatch(/registered with Mansour Bank .* from Arab Bank/);
-
-    await send(made.id, world.manager, 'Mansour transfers to Arab under the same PD, letter attached');
-    const { rows } = await ownerPool.query(
-      `select overridden_checks, pd_id from payment_application where id = $1`,
-      [made.id],
-    );
-    expect(rows[0]).toEqual({ overridden_checks: ['pd_validated'], pd_id: pd.id });
-    expect(await codes()).toContain('CHECK_OVERRIDDEN');
+    expect(await pdCheck(made.id)).toMatchObject({ outcome: 'warning', detail: expect.stringMatching(/registered with Mansour Bank .* from Arab Bank/) });
+    await send(made.id);
+    const { rows } = await ownerPool.query(`select overridden_checks, pd_id from payment_application where id = $1`, [made.id]);
+    // The PD the bank would pay against is still the one named: the warning says the banks differ.
+    expect(rows[0]).toEqual({ overridden_checks: [], pd_id: pd.id });
+    expect(await codes()).not.toContain('CHECK_OVERRIDDEN');
   });
 
-  it('an expired PD does not pay', async () => {
+  it('an expired PD is a warning, not a stop', async () => {
     await fund('5000000');
     const pd = await register({ expiryDate: '2026-09-09' });
     await change(pd.id, 'validated', '2026-09-05');
     const made = await draftAndApprove();
-    expect(await rejection(send(made.id))).toMatch(/PD 9330 expired on 2026-09-09/);
+    expect(await pdCheck(made.id)).toMatchObject({ outcome: 'warning', detail: expect.stringMatching(/PD 9330 expired on 2026-09-09/) });
+    await send(made.id);
+    expect((await ownerPool.query(`select status from payment_application where id = $1`, [made.id])).rows[0].status).toBe('sent');
   });
 });
 

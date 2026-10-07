@@ -148,9 +148,13 @@ export default async function PdListPage({ searchParams }: { searchParams: Searc
                   <th scope="col">{t('pd_no')}</th>
                   <th scope="col">{t('import')}</th>
                   <th scope="col">{t('supplier')}</th>
-                  <th scope="col">{t('bank')}</th>
                   <th scope="col">{t('registered')}</th>
+                  <th scope="col">{t('importer_code')}</th>
+                  <th scope="col">{t('financier')}</th>
+                  <th scope="col">{t('bank')}</th>
+                  <th scope="col">{t('invoice_no')}</th>
                   <th scope="col">{t('expires')}</th>
+                  <th scope="col">{t('declarant_code')}</th>
                   <th className={s.sapNum} scope="col">
                     {t('days_left')}
                   </th>
@@ -161,7 +165,7 @@ export default async function PdListPage({ searchParams }: { searchParams: Searc
               <tbody>
                 {shown.length === 0 ? (
                   <tr>
-                    <td className={s.sapEmptyRow} colSpan={9}>
+                    <td className={s.sapEmptyRow} colSpan={13}>
                       {t('none')}
                     </td>
                   </tr>
@@ -196,13 +200,25 @@ export default async function PdListPage({ searchParams }: { searchParams: Searc
                       <bdi dir="auto">{row.supplierName ?? '—'}</bdi>
                     </td>
                     <td>
-                      <bdi dir="auto">{row.bankName ?? '—'}</bdi>
-                    </td>
-                    <td>
                       <bdi dir="ltr">{formatBusinessDate(row.registrationDate, locale as Locale)}</bdi>
                     </td>
                     <td>
+                      <bdi dir="ltr">{row.importerCode ?? '—'}</bdi>
+                    </td>
+                    <td>
+                      <bdi dir="auto">{row.financier ?? '—'}</bdi>
+                    </td>
+                    <td>
+                      <bdi dir="auto">{row.bankName ? `${row.bankName}${row.bankSwift ? ` · ${row.bankSwift}` : ''}` : '—'}</bdi>
+                    </td>
+                    <td>
+                      <bdi dir="ltr">{row.invoiceNo ?? '—'}</bdi>
+                    </td>
+                    <td>
                       <bdi dir="ltr">{formatBusinessDate(row.expiryDate, locale as Locale)}</bdi>
+                    </td>
+                    <td>
+                      <bdi dir="ltr">{row.declarantCode ?? '—'}</bdi>
                     </td>
                     <td className={s.sapNum}>
                       {row.isTerminal || row.superseded ? (

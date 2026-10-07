@@ -93,6 +93,18 @@ describe('§6 · stage derivation', () => {
     expect(deriveStage(IMPORT, facts)).toBe('shipped');
   });
 
+  it('funded is the bank having the application, never a submit or an approval (2026-10-07)', () => {
+    const invoiced = { ...NO_FACTS, postedInvoiceCount: 1 };
+    // The service counts only applications the bank has in liveApplicationCount;
+    // a world where none is counted stays at Order confirmed whatever was approved.
+    expect(deriveStage(IMPORT, invoiced)).toBe('order_confirmed');
+    expect(deriveStage(IMPORT, { ...invoiced, liveApplicationCount: 1 })).toBe('invoiced_funded');
+    expect(deriveStage(IMPORT, { ...invoiced, liveApplicationCount: 1, paymentSentCount: 1 })).toBe('payment_in_progress');
+    // With a plan, the first instalment's application has to be with the bank.
+    expect(deriveStage(IMPORT, { ...invoiced, instalmentPlanSet: true, liveApplicationCount: 1 })).toBe('order_confirmed');
+    expect(deriveStage(IMPORT, { ...invoiced, instalmentPlanSet: true, firstInstalmentFunded: true })).toBe('invoiced_funded');
+  });
+
   it('R2 — an advance to a consultant: payment in progress while the service is unconfirmed', () => {
     const facts = { ...NO_FACTS, paymentSentCount: 1 };
     expect(deriveStage(SERVICE, facts)).toBe('payment_in_progress');

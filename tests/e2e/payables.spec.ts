@@ -242,7 +242,7 @@ test.describe('A22 · payables in a browser', () => {
     await signIn(manager, 'manager@example.com');
     await manager.goto(`/payables/payment-applications/${encodeURIComponent(applicationNo)}`);
     await manager.getByRole('button', { name: 'Approve — reserve funds' }).click();
-    await expect(manager.getByText('Approved — funds reserved').filter({ visible: true }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(manager.getByText('Approved — not with the bank yet').filter({ visible: true }).first()).toBeVisible({ timeout: 30_000 });
 
     await manager.getByRole('button', { name: 'Send to bank' }).click();
     const send = manager.getByRole('dialog');
@@ -251,7 +251,7 @@ test.describe('A22 · payables in a browser', () => {
       await override.fill(`Owner deposit arrives today ${RUN}`);
     }
     await send.getByRole('button', { name: 'Send to bank' }).click();
-    await expect(manager.getByText('Sent — not paid').filter({ visible: true }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(manager.getByText('Accepted by the bank — not paid').filter({ visible: true }).first()).toBeVisible({ timeout: 30_000 });
     await expect(manager.getByText('The money’s path')).toBeVisible();
 
     // The Confirm dialog says what it will post before it posts it.

@@ -60,23 +60,23 @@ What it is for: the register of every customs pre-declaration (PD) of every impo
 A PD always has one status, shown as a coloured chip. Each status decides whether the bank may pay against the PD (the record's box **Bank may pay against it** (يجوز للبنك الدفع مقابله) says **Yes** (نعم) or **No** (لا)).
 - **Submitted** (مقدَّم) — registered in ASYCUDA, waiting for customs. Does **not** release payment. The import counts as having a PD.
 - **Pre-approved** (موافقة مبدئية) — customs pre-approved it. Does **not** release payment yet.
-- **Validated** (مصادق عليه) — customs validated it. **Releases payment**: a payment application for the import passes its check **Validated PD** (تصريح مسبق معتمد) under "Checks before sending" (الفحوص قبل الإرسال), as long as the PD has not expired on the day of the application.
+- **Validated** (مصادق عليه) — customs validated it. **Releases payment**: a payment application for the import passes its check **Validated PD** (تصريح مسبق معتمد) under "Checks before sending" (الفحوص قبل الإرسال), as long as the PD has not expired on the day of the application. Since 2026-10-07 that check is shown on the application and never refuses it (the PD is registered on the bank's platform after the bank has the application); the status still says whether the bank may pay.
 - **Partially written off** (مشطوب جزئيًا) — part of the goods cleared against it. **Still releases payment** until it expires.
 - **Totally written off** (مشطوب كليًا) — everything cleared; the PD is settled with customs. Final. No further payment is released against it. When every standing PD of an import is totally written off (and every container is received), the import's landed cost can be locked.
 - **Rejected** (مرفوض) — customs refused it. Final. No payment. The import stops until the PD is re-registered.
 - **Expired (validated)** (منتهي (مصادق عليه)) and **Expired (partly written off)** (منتهي (مشطوب جزئيًا)) — set automatically the day after the expiry date for a Validated or a Partially written off PD. Final. No payment. Re-register it. (An Expired (partly written off) PD counts as finished for the import once nothing of the import is left in transit.)
-Extra payment rules, whatever the status: the PD must not have passed its **Expires** date on the day the bank is asked to pay; and when the PD names a bank and the paying bank account belongs to a different bank, payment is refused. What the payment application then says: "No PD is registered for this import — the bank pays only against a validated PD."; "PD 9330 is Submitted — the bank pays only against a validated PD."; "PD 9330 expired on 2026-09-30 — the bank pays only against a validated PD."; "PD 9330 is registered with Bank A and the money would leave from Bank B — pay from an account of the PD's bank."
+Extra payment rules, whatever the status: the PD must not have passed its **Expires** date on the day the bank is asked to pay; and when the PD names a bank and the paying bank account belongs to a different bank, the check warns. What the payment application then says (as **Check by hand**, never a refusal, since 2026-10-07): "No PD is registered for this import — the bank pays only against a validated PD."; "PD 9330 is Submitted — the bank pays only against a validated PD."; "PD 9330 expired on 2026-09-30 — the bank pays only against a validated PD."; "PD 9330 is registered with Bank A and the money would leave from Bank B — pay from an account of the PD's bank."
 A final status (Totally written off, Rejected, either Expired) cannot be changed. A rejected or expired PD is replaced by **Re-register**; the old PD stays as customs left it, marked **Re-registered** (أُعيد تسجيله).
 
 ### How to register a PD — Customs Pre-Declarations
 1. Open Logistics → Customs — ASYCUDA → Customs Pre-Declarations.
 2. Press **Register PD** (تسجيل تصريح) at the top of the page.
-3. Choose the **Import application** (معاملة الاستيراد), type the **PD no.** (رقم التصريح) exactly as ASYCUDA shows it, and enter **Registered** (تاريخ التسجيل) and **Expires** (ينتهي في) as ASYCUDA shows them.
-4. Optionally choose the **Bank** (البنك) the PD is registered with, the **Status** (الحالة) if the PD is already further than Submitted, and a **Note** (ملاحظة).
+3. Choose the **Import application** (معاملة الاستيراد), type the **PD no.** (رقم التصريح) exactly as the platform shows it, and enter **Registered** (تاريخ التسجيل) and **Expires** (ينتهي في) as it shows them.
+4. Type the registration's codes as the bank's platform lists them (since 2026-10-07): **Importer code** (رمز المستورد), **Financier** (المول), **Invoice no.** (رقم الفاتورة — filled with the import's reference when the page was opened from the import) and **Declarant code** (رمز المصرح). Optionally choose the **Bank** (البنك) the PD is registered with — its code, name and SWIFT come from the bank list — the **Status** (الحالة) if the PD is already further than Submitted, and a **Note** (ملاحظة).
 5. Press **Register PD**. The new PD's own page opens. An import may have several PDs.
 
 ### How to find a PD — Customs Pre-Declarations
-1. Type in **Search this list** — it looks in the PD number, import number, supplier's reference, supplier, bank, status, note, branch and the two dates.
+1. Type in **Search this list** — it looks in the PD number, import number, supplier's reference, supplier, bank and its SWIFT, importer code, financier, invoice no., declarant code, status, note, branch and the two dates.
 2. Or choose a **View** (العرض) and press **Show** (عرض): **Open (not final)** (المفتوحة (غير النهائية)) — the default; **Expiring within 45 days** (تنتهي خلال 45 يومًا) — the number is the company's warning window; **Final or superseded** (النهائية أو المستبدلة); **Holding list — not linked to an import** (قائمة الانتظار — غير مرتبطة بمعاملة استيراد); **All** (الكل).
 3. The list is sorted by expiry date, the soonest first. **Days left** (الأيام المتبقية) turns red inside the warning window.
 
@@ -96,7 +96,7 @@ To update many PDs at once from ASYCUDA's own list, use the screen Update from A
 
 ### How to re-register a rejected or expired PD — Customs Pre-Declarations
 1. Open the rejected or expired PD. Press **Re-register** (إعادة التسجيل) — shown only for a Rejected or Expired PD that has not been re-registered already.
-2. Enter the new **PD no.**, **Registered**, **Expires**, the **Bank** (the old PD's bank is offered) and a **Note**.
+2. Enter the new **PD no.**, **Registered**, **Expires**, the **Bank** (the old PD's bank is offered), the four platform codes (the old PD's are offered) and a **Note**.
 3. Press **Re-register**. The new PD opens; its box **Re-registration of** (إعادة تسجيل لـ) names the old one, and the old one shows **Re-registered as** (أُعيد تسجيله برقم).
 
 ### How to link a PD from the holding list to an import — Customs Pre-Declarations
@@ -116,7 +116,8 @@ Register PD (and Re-register) form:
 - **PD no.** (رقم التصريح) — required. "The ASYCUDA number, as customs issued it." Saved in capital letters. The same number may exist only once per registration year.
 - **Registered** (تاريخ التسجيل) — required; defaults to today. The PD's first status is dated this day.
 - **Expires** (ينتهي في) — required; must not be before Registered. "As ASYCUDA shows it — the validity is the customs office's, not computed." It drives Days left, the expiry warning and the automatic expiry.
-- **Bank** (البنك) — optional. On Register PD only the banks the company holds an account at are offered; on Re-register every active bank. If given, payments against the PD must leave from an account of this bank.
+- **Bank** (البنك) — optional. On Register PD only the banks the company holds an account at are offered; on Re-register every active bank. Its code, name and identifier (SWIFT) are the bank list's. If given, a payment against the PD from an account of another bank is warned about.
+- **Importer code** (رمز المستورد), **Financier** (المول), **Invoice no.** (رقم الفاتورة), **Declarant code** (رمز المصرح) — optional, each at most 64 characters, typed exactly as the bank's platform shows them (since 2026-10-07). Invoice no. is filled with the import's supplier reference when the page was opened from the import. On Re-register the old PD's codes are offered and kept unless changed.
 - **Status** (الحالة) — optional on Register PD only; default **Submitted**. Offers the non-final statuses (Submitted, Pre-approved, Validated, Partially written off) for a PD entered late.
 - **Note** (ملاحظة) — optional free text.
 Change status form:
@@ -124,8 +125,8 @@ Change status form:
 - **Date in ASYCUDA** (التاريخ في أسيكودا) — required; defaults to today; not before the registration date.
 - **From** (المصدر) — **Entered by hand** (default) or **ASYCUDA screenshot**.
 - **Note** (ملاحظة) — optional; becomes the PD's latest note.
-Boxes on the PD record: **PD no.**; **Status** with its date; **Import application**; **Supplier** (المورد); **Bank** (with its SWIFT code); **Registered**; **Expires**; **Days left** (red at 45 or fewer; "—" when final); **Bank may pay against it** (Yes / No); **Re-registration of**; **Re-registered as**; **Payments against this PD** (المدفوعات مقابل هذا التصريح — each payment application with its status and amount); **Note**.
-List columns: PD no., Import application (with the supplier's reference), Supplier, Bank, Registered, Expires, Days left, Status (with **Re-registered** under it when replaced), Note.
+Boxes on the PD record: **PD no.**; **Status** with its date; **Import application**; **Supplier** (المورد); **Bank** (with its SWIFT code); **Registered**; **Registration year** (سنة التسجيل); **Importer code**; **Financier**; **Invoice no.**; **Declarant code**; **Expires**; **Days left** (red at 45 or fewer; "—" when final); **Bank may pay against it** (Yes / No); **Re-registration of**; **Re-registered as**; **Payments against this PD** (المدفوعات مقابل هذا التصريح — each payment application with its status and amount); **Note**.
+List columns: PD no., Import application (with the supplier's reference), Supplier, Registered, Importer code, Financier, Bank (with its SWIFT), Invoice no., Expires, Declarant code, Days left, Status (with **Re-registered** under it when replaced), Note — the order the bank's platform lists them. The import's own PD section shows the same columns.
 
 ### After you save — Customs Pre-Declarations
 - A PD is not approved by anyone and posts nothing: no journal, no stock movement, no payable. It is a record of what customs says.

@@ -49,7 +49,7 @@ import {
   type StageRow,
 } from '../domain/payables';
 import { MONEY_SCALE, parseDecimal, say, toDecimalString } from '../domain/money';
-import { totals as paymentTotalsOf } from '../domain/payment-applications';
+import { isApplied, totals as paymentTotalsOf } from '../domain/payment-applications';
 import { formatQuantity, parseQuantity } from '../domain/uom';
 import type { ActorContext } from './chart-of-accounts';
 import * as audit from './audit';
@@ -451,11 +451,13 @@ export async function gatherFacts(tx: Tx, payableId: string): Promise<StageFacts
     livePdCount,
     allPdsWrittenOff: allPdsWrittenOff || pdsDone,
     instalmentPlanSet: instalmentIds.length > 0,
-    liveApplicationCount: applications.filter((a) => a.status !== 'draft').length,
+    // With the bank — the Sent to the bank paper, Paid, Debited. Submitted and
+    // approved are the company's own steps and fund nothing (2026-10-07).
+    liveApplicationCount: applications.filter((a) => isApplied(a.status)).length,
     firstInstalmentFunded:
       instalmentIds.length > 0 &&
-      applications.some((a) => a.instalmentId === instalmentIds[0] && a.status !== 'draft'),
-    paymentSentCount: applications.filter((a) => ['sent', 'confirmed', 'debited'].includes(a.status)).length,
+      applications.some((a) => a.instalmentId === instalmentIds[0] && isApplied(a.status)),
+    paymentSentCount: applications.filter((a) => isApplied(a.status)).length,
     fullyPaid: paymentTotals.fullyPaid,
     allPaymentsConfirmed:
       (paidApplications.length > 0 || direct.length > 0) &&

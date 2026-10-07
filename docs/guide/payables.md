@@ -87,7 +87,7 @@ The steps are read from the documents and the status log; nothing on this block 
 ### Stages of an import — Import Applications
 The stage is worked out by the system from the documents; nobody sets it by hand. The stage shown is the highest-numbered one whose condition is true, so stages can be skipped (a payment sent before the PD is registered shows "Payment in progress"). On the rail, the current stage is highlighted (tooltip "now" — الآن), a stage whose condition holds reads "this is true of the import now" (هذا صحيح على الاستيراد الآن), the others "not yet" (لم يحدث بعد). Stage names are stored as set up in Payables Settings and are shown in English:
 1. **Order confirmed** — the application exists.
-2. **Invoiced + funded** — an invoice of the import is posted, and a payment application has been approved or sent (or the import is already fully paid).
+2. **Invoiced + funded** — an invoice of the import is posted, and the bank has accepted a payment application — the Sent to the bank paper, or Paid (or the import is already fully paid). An application that is only sent for approval or approved does not fund the import (2026-10-07).
 3. **PD registered** — at least one live customs PD (not rejected, not expired, not replaced by a re-registration).
 4. **Payment in progress** — at least one payment application is sent, paid or debited.
 5. **Shipment** — at least one container is recorded on a bill of lading.
@@ -167,8 +167,8 @@ For an import agreed in a foreign currency and fully paid in it, a note may appe
 ### How to register a PD from the import — Import Applications
 Needs: `create` on `customs_pd`; the import must be open.
 1. In **PD / ASYCUDA** press **Register PD** (تسجيل تصريح). A page of its own opens (since 2026-10-06), with the import already chosen; the PD list's **Register PD** opens the same page with the import to choose.
-2. Fill: **PD no.** (رقم التصريح) — required, the ASYCUDA number as customs issued it; **Registered** (تاريخ التسجيل) — required; **Expires** (ينتهي في) — required, as ASYCUDA shows it; **Bank** (البنك) — optional; **Status** (الحالة) — opens on Submitted (مقدَّم); **Note** (ملاحظة).
-3. Press **Register PD**. The PD opens on its own page — you are not sent back to the import. On the import it then appears in the section's table: PD no., Bank, Registered, Expires, Days left (الأيام المتبقية), Status, Note. Click the PD number to open it on its own page (Logistics).
+2. Fill, in the order the bank's platform lists them (since 2026-10-07): **PD no.** (رقم التصريح) — required, the registration number as the platform shows it; **Registered** (تاريخ التسجيل) — required; **Importer code** (رمز المستورد); **Financier** (المول); **Bank** (البنك) — optional, its code, name and SWIFT from the bank list; **Invoice no.** (رقم الفاتورة) — filled with the import's reference; **Expires** (ينتهي في) — required, as the platform shows it; **Declarant code** (رمز المصرح); **Status** (الحالة) — opens on Submitted (مقدَّم); **Note** (ملاحظة).
+3. Press **Register PD**. The PD opens on its own page — you are not sent back to the import. On the import it then appears in the section's table: PD no., Registered, Importer code, Financier, Bank (with its SWIFT), Invoice no., Expires, Declarant code, Days left (الأيام المتبقية), Status, Note. Click the PD number to open it on its own page (Logistics).
 
 ### How to record a bill of lading from the import — Import Applications
 Needs: `create` on `bill_of_lading`; the import must be open.
@@ -709,11 +709,11 @@ Needs: `create` on `payment_application`.
 
 ### The checks before sending — Payment Applications
 Four checks are shown, each with a result: **OK** (سليم), **Refuses Send** (يمنع الإرسال), **Check by hand** (يُتحقق يدويًا) or **Not applicable** (لا ينطبق).
-- **Validated PD** (تصريح مسبق معتمد) — the import must have a validated customs PD ("the bank pays only against a validated PD").
+- **Validated PD** (تصريح مسبق معتمد) — whether the import has a validated customs PD ("the bank pays only against a validated PD"). Shown as **Check by hand** when there is none: since 2026-10-07 this check never refuses Send, because the PD is registered on the bank's platform after the bank has the application.
 - **Funds available** (توفر الأموال) — the paying account's available balance covers the amount.
 - **Verified supplier account** (حساب مورد معتمد) — for SWIFT and transfers a supplier bank account must be named, belong to this supplier and be verified on the supplier's profile. Not needed for cash or cheque.
 - **Instalment trigger** (شرط القسط) — only for an application tied to an instalment (for example "against the B/L" needs a B/L recorded on the import).
-The checks run again with the day's figures when you press Send.
+The checks run again with the day's figures when you press Send. Only Funds, Verified supplier account and Instalment trigger can refuse it.
 
 ### How to send for approval — Payment Applications
 Needs: `submit` on `payment_application`.
@@ -722,11 +722,11 @@ Needs: `submit` on `payment_application`.
 ### How to approve — Payment Applications
 Needs: `approve` on `payment_application`.
 1. A person other than the one who prepared it opens the application that was **sent for approval** and presses **Approve — reserve funds** (اعتماد — حجز المبلغ). The button is not shown to the person who prepared the application. The approver may instead press **Reject** with a reason.
-2. The status becomes "Approved — funds reserved" (معتمد — المبلغ محجوز): the amount is held on the paying account (its Available goes down) and, if a loan funds it, the loan is drawn.
+2. The status becomes "Approved — not with the bank yet" (معتمد — لم يصل البنك بعد): the amount is held on the paying account (its Available goes down) and, if a loan funds it, the loan is drawn. **Approval is the company's own step and funds nothing** (2026-10-07, by direction): the import's stage stays where it was until the bank accepts the application — the Sent to the bank paper.
 
 ### The papers move it — Payment Applications
 Since 2026-10-06, after approval every step is a **paper**: you attach the file and say what it is, and the application moves with it. The paperclip asks **What is this paper?** (ما هذه الورقة؟) with the choices the application's state allows, and the action row has a button for each next step:
-- **Sent to the bank** (أُرسلت إلى البنك) — on an Approved application: the paper that went to the bank → the application waits for the bank ("Sent — not paid").
+- **Sent to the bank** (أُرسلت إلى البنك) — on an Approved application: the bank's acceptance of the application → the application waits for the SWIFT ("Accepted by the bank — not paid"), and the import counts as funded ("Invoiced + funded") from here.
 - **Paid** (مدفوعة) — on a Sent application: the SWIFT copy (MT103) or the bank's confirmation → posted as below, and any goods of the import held in On Process (Without SWIFT) for its advance move to In Process.
 - **Rejected / cancelled** (مرفوضة / ملغاة) — on an Approved application it is cancelled, on a Sent one rejected (the bank refused it); a reason is required. The import's log says so, and goods held for its advance stay where they are.
 - **Other** (أخرى) — any other paper; nothing moves.
@@ -736,8 +736,8 @@ The **Papers — what each one is** (الأوراق — ما كل ورقة) tabl
 Needs: `execute` on `payment_application`; sending although a check fails also needs `approve` on `payment_application`.
 1. On an Approved application press **Sent to the bank — attach the paper** (أُرسلت إلى البنك — أرفق الورقة).
 2. Fill **Sent to bank** (أُرسل إلى البنك) — required, the date the file went, today by default; **Bank reference** (مرجع البنك) — optional, the bank's file or application number; choose the file.
-3. If a check fails, Send is refused. A user who may approve payment applications sees the box **Send anyway because…** (أرسل رغم ذلك لأن…) listing the failing checks; typing a reason there sends it anyway, and the reason is kept on the application and in the import's log.
-4. Press the button. The status becomes "Sent — not paid" (أُرسل — غير مدفوع) — for a SWIFT, "SWIFT pending — not paid" (سويفت معلّق — غير مدفوع). The days-waiting clock starts, and the dinar value is recalculated at the rate of that date (it is recalculated once more at the confirmation date when the payment is posted).
+3. If Funds, Verified supplier account or Instalment trigger fails, Send is refused. A user who may approve payment applications sees the box **Send anyway because…** (أرسل رغم ذلك لأن…) listing the failing checks; typing a reason there sends it anyway, and the reason is kept on the application and in the import's log. The Validated PD check is shown and never refuses.
+4. Press the button. The status becomes "Accepted by the bank — not paid" (قبِله البنك — غير مدفوع) — for a SWIFT, "Accepted by the bank — SWIFT pending, not paid" (قبِله البنك — سويفت معلّق، غير مدفوع). The days-waiting clock starts, and the dinar value is recalculated at the rate of that date (it is recalculated once more at the confirmation date when the payment is posted).
 
 ### How to confirm the payment — Payment Applications
 Needs: `post` on `payment_application`.
@@ -769,14 +769,14 @@ Either way the reservation on the account is released, a loan draw goes back to 
 - Reject — **Why rejected** (سبب الرفض): required. Cancel — **Why cancelled** (سبب الإلغاء): required.
 
 ### After you save — Payment Applications
-- Draft (مسودة) → Sent for approval (أُرسل للموافقة) → Approved — funds reserved (معتمد — المبلغ محجوز) → Sent — not paid (أُرسل — غير مدفوع) → Paid (مدفوع) → Debit final (خُصم نهائيًا); or Rejected (مرفوض) / Cancelled (ملغى) before it is paid.
+- Draft (مسودة) → Sent for approval (أُرسل للموافقة) → Approved — not with the bank yet (معتمد — لم يصل البنك بعد) → Accepted by the bank — not paid (قبِله البنك — غير مدفوع) → Paid (مدفوع) → Debit final (خُصم نهائيًا); or Rejected (مرفوض) / Cancelled (ملغى) before it is paid.
 - Nothing is posted until **Confirm**. Confirm posts, dated the confirmation date and at that day's rate: a supplier payment (debit Supplier payable, credit Bank) allocated to the import's owing invoices oldest first — or a supplier advance (debit Supplier advance, credit Bank) when no invoice is posted yet. The reservation is released.
-- Each step is written to the import's status log and the import's stage is recalculated (for example to Payment in progress once an application is sent). When the import becomes fully paid the log says "Fully paid", and for a foreign-currency import the exchange difference is booked.
+- Each step is written to the import's status log and the import's stage is recalculated — to "Invoiced + funded" and "Payment in progress" once the bank has accepted an application (the Sent to the bank paper), never on submit or approve. When the import becomes fully paid the log says "Fully paid", and for a foreign-currency import the exchange difference is booked.
 
 ### Refusals — Payment Applications
 - "… : the person who prepared a payment application cannot approve it — approving it reserves company money (§5.2)." — a second person approves (a Super User may approve alone).
 - "… is 'draft' and cannot become 'sent'. A payment application moves draft → approved → sent → confirmed → debited; it is rejected or cancelled, with a reason, before it is confirmed." — the step does not fit the current status.
-- "… cannot go to the bank: … Fix the cause, or a manager may send it anyway with a reason, which is logged." — a check fails; the sentence in the middle says which. Typical causes: "No PD is registered for this import — the bank pays only against a validated PD."; "… has … IQD available against … IQD — deposit or draw the money first."; "Name the supplier bank account the money goes to."; "… is not verified — approve it on the supplier first."; "…: no B/L is recorded on the import yet — the bank pays this one against the B/L."
+- "… cannot go to the bank: … Fix the cause, or a manager may send it anyway with a reason, which is logged." — a check fails; the sentence in the middle says which. Typical causes: "… has … IQD available against … IQD — deposit or draw the money first."; "Name the supplier bank account the money goes to."; "… is not verified — approve it on the supplier first."; "…: no B/L is recorded on the import yet — the bank pays this one against the B/L." (A missing PD — "No PD is registered for this import — the bank pays only against a validated PD." — is shown on the record and refuses nothing.)
 - "Give the date the file went to the bank." — fill Sent to bank.
 - "… can no longer pay USD." — the paying account was closed or its currency changed since the draft; cancel and raise a new application.
 - "Give the SWIFT date." / "Give the date the money was paid." / "Give the SWIFT (MT103) reference from the bank's copy." / "Give the cash voucher number." / "Give the cheque number." / "Give the bank's transfer reference." — fill the confirm dialog.

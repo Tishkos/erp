@@ -14,9 +14,10 @@
  *     from (`FUNDS_RESERVED`). A reservation is nothing but this row in
  *     `approved`/`sent`; `treasury.balances` counts it as committed.
  *   * **send** — the dashed arrows are checked: a verified supplier bank
- *     account, the funds, the PD (imports), the instalment's trigger. A
- *     failure is refused with its cause; a manager may send anyway with a
- *     reason, which is stored on the row and logged.
+ *     account, the funds, the instalment's trigger. A failure is refused with
+ *     its cause; a manager may send anyway with a reason, which is stored on
+ *     the row and logged. The PD (imports) is shown as a warning and refuses
+ *     nothing (2026-10-07).
  *   * **confirm** — SWIFT date and MT103 reference (or the transfer
  *     reference, the cash voucher, the cheque). In the same transaction the
  *     existing services create and post the accounting document: a supplier
@@ -684,6 +685,12 @@ export async function checksFor(tx: Tx, row: typeof paymentApplication.$inferSel
 /**
  * Check 1 — needs a validated PD (§15.3): the PD register's answer for the
  * day the file goes to the bank, from the account the money leaves.
+ *
+ * Shown, never a stop (2026-10-07, by direction: the PD check is information
+ * on the record and refuses no paper): the PD is registered on the bank's
+ * platform after the bank has the application, so at Send there is usually
+ * none yet. A PD the bank cannot pay against reads as a warning — checked by
+ * hand — and `failing` leaves warnings alone.
  */
 async function pdCheck(tx: Tx, row: typeof paymentApplication.$inferSelect): Promise<SendCheck> {
   const account = await accountOf(tx, row.bankCashAccountId);
@@ -691,7 +698,7 @@ async function pdCheck(tx: Tx, row: typeof paymentApplication.$inferSelect): Pro
     asOf: row.applicationDate ?? today(),
     accountBankCode: account.bankCode,
   });
-  return { code: 'pd_validated', outcome: readiness.outcome, detail: readiness.detail };
+  return { code: 'pd_validated', outcome: readiness.outcome === 'fail' ? 'warning' : readiness.outcome, detail: readiness.detail };
 }
 
 async function triggerCheck(tx: Tx, row: typeof paymentApplication.$inferSelect): Promise<SendCheck> {

@@ -6,8 +6,9 @@
  *            quantity board says where every unit is, and the claim takes
  *            what did not arrive out of transit — the import can then clear.
  *   units    An import bought in boxes is received in boxes and moves units.
- *   funded   Stage 2 is reached with an application and no instalment plan;
- *            an application left without an amount asks for all that is left.
+ *   funded   Stage 2 is reached once the bank has an application and no
+ *            instalment plan — not when it is approved (2026-10-07); an
+ *            application left without an amount asks for all that is left.
  *   direct   A supplier payment made straight against the import's invoice
  *            pays the import: it counts, and the cap knows it.
  *   dollars  An import read from a supplier's document in dollars: the
@@ -28,6 +29,7 @@ import * as payables from '@/server/services/payables';
 import * as pay from '@/server/services/supplier-payment';
 import * as shipments from '@/server/services/shipments';
 import { parseDecimal } from '@/server/domain/money';
+import { STAGE_RULES } from '@/server/domain/payables';
 import { formatQuantity, parseQuantity } from '@/server/domain/uom';
 import { BAGHDAD, PANEL, WAREHOUSE, buildTradingWorld, scope, type TradingWorld } from './trading-fixture';
 
@@ -362,14 +364,21 @@ describe('funded · stage 2 without a plan, and an application for all that is l
     await postInvoice();
   });
 
-  it('asks for all that is left when no amount is given, and reaches Invoiced + funded once approved', async () => {
+  it('asks for all that is left when no amount is given, and is funded once the bank has it — not when approved', async () => {
     const made = await withScope(scope(world.clerk), (tx) =>
       applications.create(tx, world.clerk, { payableId, paymentMethodCode: SWIFT, bankCashAccountId: world.bankAccountId, amountTxn: null, onDate: '2026-09-10' }),
     );
     const { rows } = await ownerPool.query(`select amount_txn::text as amount from payment_application where id = $1`, [made.id]);
     expect(rows[0].amount).toBe('1000000.0000');
     await withScope(scope(world.manager), async (tx) => { await applications.submit(tx, world.manager, made.id); return applications.approve(tx, world.manager, made.id); });
-    expect(await stageOf()).toBe('invoiced_funded');
+    // Approved by the manager alone is the company's own step: not funded (2026-10-07, by direction).
+    expect(await stageOf()).toBe('order_confirmed');
+    // The bank has it (no PD yet — the PD check is shown, never a stop): funded, and the payment in progress.
+    // The bank is empty and no supplier account is named: a manager sends anyway with a reason (A11).
+    await withScope(scope(world.manager), (tx) => applications.send(tx, world.manager, made.id, { applicationDate: '2026-09-11', bankReference: 'BNK-IM2', overrideReason: 'Funds arrive tomorrow; the supplier account follows' }));
+    const funded = await withScope(scope(world.clerk), async (tx) => STAGE_RULES.import_invoiced_funded!(await payables.gatherFacts(tx, payableId)));
+    expect(funded).toBe(true);
+    expect(await stageOf()).toBe('payment_in_progress');
     // Nothing is left to ask for now.
     expect(
       await rejection(
