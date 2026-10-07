@@ -2,7 +2,10 @@
 
 import type { UserAppearanceSettings } from '@/server/domain/appearance';
 import { withCurrentUser } from '@/server/session';
-import { makeMineCompanyDefault, resetCompanyDefaults, setMySettings } from '@/server/services/user-appearance';
+import { CompanyNotSetUpError, makeMineCompanyDefault, resetCompanyDefaults, setMySettings } from '@/server/services/user-appearance';
+
+/** Why everyone's default could not change: no company row yet (2026-10-07 — the live install had none), or anything else. */
+export type CompanyDefaultFailure = 'no_company' | 'failed';
 
 /** Autosaves only the signed-in user's own layout preferences. */
 export async function saveMyAppearanceSettings(input: UserAppearanceSettings): Promise<{
@@ -31,7 +34,7 @@ export async function saveMyAppearanceSettings(input: UserAppearanceSettings): P
  * they see it becomes the company's default. `configure` on the company,
  * checked and audited by the service.
  */
-export async function makeMyAppearanceEveryonesDefault(): Promise<{ readonly ok: boolean; readonly error?: string }> {
+export async function makeMyAppearanceEveryonesDefault(): Promise<{ readonly ok: boolean; readonly error?: string; readonly failure?: CompanyDefaultFailure }> {
   try {
     await withCurrentUser((tx, request) =>
       makeMineCompanyDefault(tx, {
@@ -42,12 +45,16 @@ export async function makeMyAppearanceEveryonesDefault(): Promise<{ readonly ok:
     );
     return { ok: true };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'Everyone\'s default could not be set.' };
+    return {
+      ok: false,
+      failure: error instanceof CompanyNotSetUpError ? 'no_company' : 'failed',
+      error: error instanceof Error ? error.message : 'Everyone\'s default could not be set.',
+    };
   }
 }
 
 /** "Reset everyone's default to the built-in" (0419). */
-export async function resetEveryonesAppearanceDefault(): Promise<{ readonly ok: boolean; readonly error?: string }> {
+export async function resetEveryonesAppearanceDefault(): Promise<{ readonly ok: boolean; readonly error?: string; readonly failure?: CompanyDefaultFailure }> {
   try {
     await withCurrentUser((tx, request) =>
       resetCompanyDefaults(tx, {
@@ -58,6 +65,10 @@ export async function resetEveryonesAppearanceDefault(): Promise<{ readonly ok: 
     );
     return { ok: true };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'Everyone\'s default could not be reset.' };
+    return {
+      ok: false,
+      failure: error instanceof CompanyNotSetUpError ? 'no_company' : 'failed',
+      error: error instanceof Error ? error.message : 'Everyone\'s default could not be reset.',
+    };
   }
 }

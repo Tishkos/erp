@@ -23,7 +23,6 @@ import { Denied } from '@/components/denied';
 import { can } from '@domain/permissions';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as partners from '@/server/services/partners';
-import * as terms from '@/server/services/payment-terms';
 import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
 import { savedViewsFor } from '@/server/saved-views-gate';
 import { partnerRegister } from '@/server/services/screen-registers';
@@ -79,11 +78,9 @@ export async function PartnerList({
   const saved = await savedViewsFor(role === 'supplier' ? 'payables.suppliers' : 'sales.customers', searchParams);
   const status = saved?.current.params['status'] ?? '';
 
-  const { shown, paymentTerms } = await withCurrentUser(async (tx) => ({
+  const { shown } = await withCurrentUser(async (tx) => ({
     // The rows and filters are `partnerRegister` — the pinned count on Home asks the same function.
     ...(await partnerRegister(tx, role, { q: outcome.q, status })),
-    // Only a supplier's New form asks for terms (2026-10-06).
-    paymentTerms: mayCreate && role === 'supplier' ? await terms.listActive(tx) : [],
   }));
 
   return (
@@ -113,23 +110,11 @@ export async function PartnerList({
                     columns remain, and a partner that has them keeps them. */}
                 <Field label={t('partners.email')} name="email" type="email" />
                 <Field label={t('partners.phone')} name="phone" />
-                {/* A supplier is entered with its payment terms; a customer is
-                    not asked for them (2026-10-06, by direction: "remove payment
-                    terms for customers creation since they dont need to") — a
-                    sale to a customer with no terms falls due on its invoice
-                    date (`payment-terms.dueDateOn`). */}
-                {role === 'supplier' ? (
-                  <Select
-                    emptyLabel={t('partners.no_terms')}
-                    hint={t('partners.terms_hint')}
-                    label={t('partners.payment_terms')}
-                    name="paymentTermsCode"
-                    options={paymentTerms.map((term) => ({
-                      value: term.code,
-                      label: `${term.code} · ${term.name}`,
-                    }))}
-                  />
-                ) : null}
+                {/* Neither a customer nor a supplier is asked for payment terms
+                    when it is made (by direction: customers 2026-10-06, suppliers
+                    2026-10-07 — "remove payment terms in supplier when making it,
+                    no need"). A sale with no terms falls due on its invoice date;
+                    a purchase's due date is set once the SWIFT is received. */}
                 <Field label={t('partners.address')} name="address" type="textarea" wide />
               </Grid>
               <SubmitRow>

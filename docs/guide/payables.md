@@ -917,7 +917,7 @@ What it is for: The supplier master — who the company buys from, one record pe
 ### How to add a supplier — Suppliers
 Needs: `create` on `business_partner`. The supplier is Active at once only for a user who also holds `approve` on `business_partner`.
 1. Press **New supplier** (مورد جديد).
-2. Fill: **Legal name** (الاسم القانوني) — required; **Email** (البريد الإلكتروني); **Phone** (الهاتف); **Payment terms** (شروط الدفع) — optional, "No terms set" (بلا شروط) when empty; **Address** (العنوان).
+2. Fill: **Legal name** (الاسم القانوني) — required; **Email** (البريد الإلكتروني); **Phone** (الهاتف); **Address** (العنوان). A new supplier is not asked for payment terms (since 2026-10-07): a purchase invoice's due date is set once the SWIFT is received; terms can still be added later on the supplier's **Update** form.
 3. Press **Create** (إنشاء). The system gives the supplier its code; the code cannot be typed or changed.
 4. If a company with exactly the same legal name already exists as a customer, no second record is made: that record is given the supplier role and keeps its code.
 5. The new supplier is **Active** at once only if you are allowed to approve partners; otherwise it is a **Prospect** (محتمل) and must be approved before it can be used.
@@ -931,7 +931,7 @@ A prospect is not offered in any supplier picker (purchase invoice, expense, pay
 ### Fields — Suppliers
 - **Legal name** (الاسم القانوني) — required. The registered name; also used to detect duplicates.
 - **Email** (البريد الإلكتروني), **Phone** (الهاتف) — optional contact details; an email or phone already on another partner counts as a possible duplicate.
-- **Payment terms** (شروط الدفع) — optional. When this supplier's invoices fall due: a purchase invoice with no due date typed takes it from these terms.
+- **Payment terms** (شروط الدفع) — not on the New supplier form (since 2026-10-07); optional on the supplier's **Update** form. A purchase invoice's due date is not taken from them any more: it is set once the SWIFT is received (Import Applications → the import → **Set due date**).
 - **Address** (العنوان) — optional.
 - **Code** (الرمز) — given by the system on saving; never typed.
 

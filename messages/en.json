@@ -1174,6 +1174,8 @@
     "company_default_state_made": "Your appearance is now everyone's default.",
     "company_default_state_reset": "Everyone's default is the built-in one again.",
     "company_default_state_error": "Everyone's default could not be changed.",
+    "company_default_state_no_company": "The company has not been set up yet, so there is nowhere to keep everyone's default. Set it up first, then press this again.",
+    "company_default_setup_link": "Open Company Setup",
     "module_group": {
       "finance": "Finance",
       "invoicing": "Invoicing",

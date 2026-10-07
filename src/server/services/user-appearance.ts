@@ -113,9 +113,19 @@ export function mayConfigureCompanyDefaults(principal: Principal): boolean {
   return can(principal, 'configure', COMPANY_DEFAULT_OBJECT);
 }
 
+/** Everyone's default lives on the company row; with none there is nowhere to keep it. */
+export class CompanyNotSetUpError extends Error {
+  readonly code = 'COMPANY_NOT_SET_UP';
+
+  constructor() {
+    super('The company has not been set up yet, so it has no default appearance.');
+    this.name = 'CompanyNotSetUpError';
+  }
+}
+
 async function companyRow(tx: Tx) {
   const [row] = await tx.select({ id: company.id, defaults: company.uiDefaults }).from(company).limit(1);
-  if (!row) throw new Error('The company has not been set up yet, so it has no default appearance.');
+  if (!row) throw new CompanyNotSetUpError();
   return row;
 }
 

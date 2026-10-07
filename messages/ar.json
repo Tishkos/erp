@@ -1174,6 +1174,8 @@
     "company_default_state_made": "أصبح مظهرك الافتراضي للجميع.",
     "company_default_state_reset": "عاد الافتراضي للجميع إلى المظهر الأصلي.",
     "company_default_state_error": "تعذّر تغيير الافتراضي للجميع.",
+    "company_default_state_no_company": "لم يُعدّ ملف الشركة بعد، فلا مكان لحفظ الافتراضي للجميع. أعدّه أولاً ثم اضغط هنا مرة أخرى.",
+    "company_default_setup_link": "فتح إعداد الشركة",
     "module_group": {
       "finance": "المالية",
       "invoicing": "الفوترة",

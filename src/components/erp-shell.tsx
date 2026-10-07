@@ -489,7 +489,7 @@ export function ErpShell({
   // Everyone's default (0419): set from this person's appearance, or reset to
   // the built-in one — each after a confirm, in this drawer.
   const [companyStep, setCompanyStep] = useState<'idle' | 'confirm_make' | 'confirm_reset'>('idle');
-  const [companyState, setCompanyState] = useState<'idle' | 'working' | 'made' | 'reset' | 'error'>('idle');
+  const [companyState, setCompanyState] = useState<'idle' | 'working' | 'made' | 'reset' | 'error' | 'no_company'>('idle');
   const settleSaves = async () => {
     // The choices pressed a moment ago reach the account first, so "mine" is what is on screen.
     for (let waited = 0; saving.current.busy && waited < 50; waited += 1) {
@@ -501,7 +501,8 @@ export function ErpShell({
     await settleSaves();
     try {
       const result = kind === 'make' ? await makeMyAppearanceEveryonesDefault() : await resetEveryonesAppearanceDefault();
-      setCompanyState(result.ok ? (kind === 'make' ? 'made' : 'reset') : 'error');
+      // No company row yet: say so, and where to set it up (2026-10-07).
+      setCompanyState(result.ok ? (kind === 'make' ? 'made' : 'reset') : result.failure === 'no_company' ? 'no_company' : 'error');
     } catch {
       setCompanyState('error');
     }
@@ -1321,6 +1322,14 @@ export function ErpShell({
                   )}
                   <p aria-live="polite" className="erp-appearance-company__state" data-company-default-state={companyState}>
                     {companyState === 'idle' ? null : shell(`company_default_state_${companyState}`)}
+                    {companyState === 'no_company' ? (
+                      <>
+                        {' '}
+                        <a className="font-medium text-primary-subtle-fg underline underline-offset-2" href="/administration/company">
+                          {shell('company_default_setup_link')}
+                        </a>
+                      </>
+                    ) : null}
                   </p>
                 </section>
               ) : null}

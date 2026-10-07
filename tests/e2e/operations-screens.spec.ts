@@ -188,7 +188,7 @@ test.describe('the Operations Build screens open', () => {
     await expect(page.locator('select[name="warehouse_code_0"] option')).not.toHaveCount(0);
   });
 
-  test('block 4 · the invoice is raised, and falls due when the terms say', async ({
+  test('block 4 · the invoice is raised, and waits for its due date until the SWIFT', async ({
     browser,
     page,
   }) => {
@@ -203,35 +203,19 @@ test.describe('the Operations Build screens open', () => {
      *
      * It proves §16 on the same pass. The due date is not typed — the form
      * no longer asks for one at all (by direction, 2026-10-03: the real date
-     * is set once the SWIFT is confirmed) — and the record carries the
-     * supplier's payment terms counted from the posting date until then.
+     * is set once the SWIFT is confirmed) — and the record shows none until it
+     * is set (2026-10-07). A supplier is no longer asked for payment terms when
+     * it is made (by direction, 2026-10-07: "remove payment terms in supplier
+     * when making it, no need").
      */
     const stamp = Date.now().toString().slice(-6);
-    let termsCode = '';
     let supplierCode = '';
-
-    const administration = await browser.newContext();
-    const administrator = await administration.newPage();
-    try {
-      await signIn(administrator, ADMIN);
-      await administrator.goto('/master-data/payment-terms');
-      await administrator.getByRole('button', { name: 'New payment term' }).click();
-      const term = administrator.locator('dialog[open], [role="dialog"]').first();
-      await term.getByLabel(/^Name/).fill(`Thirty days ${stamp}`);
-      await term.getByLabel('Days to pay').fill('30');
-      await term.getByRole('button', { name: 'Create' }).click();
-      // A new term opens its own record, where its worked example is.
-      await administrator.waitForURL(/\/master-data\/payment-terms\/[^/?]+/, { timeout: 60_000 });
-      termsCode = mintedCode(administrator);
-    } finally {
-      await administration.close();
-    }
 
     await page.goto('/master-data/suppliers');
     await page.getByRole('button', { name: 'New supplier' }).click();
     const supplier = page.locator('dialog[open], [role="dialog"]').first();
     await supplier.getByLabel(/^Legal name/).fill(`Terms Test ${stamp}`);
-    await supplier.getByLabel(/^Payment terms/).selectOption(termsCode);
+    await expect(supplier.getByLabel(/^Payment terms/)).toHaveCount(0);
     await supplier.getByRole('button', { name: 'Create' }).click();
     await page.waitForURL(/\/(?:payables\/suppliers|sales\/customers)\/[^/?]+/, { timeout: 60_000 });
     supplierCode = mintedCode(page);
@@ -256,12 +240,6 @@ test.describe('the Operations Build screens open', () => {
     await page.goto('/payables/invoices/new');
     await expect(page.getByRole('heading', { name: 'New invoice' })).toBeVisible();
 
-    // Today, as the form opens it — and thirty days after it, which is what
-    // the due date should say once the supplier is named, and nothing else.
-    const posting = await page.getByLabel('Invoice Date').inputValue();
-    const thirtyDaysOn = new Date(`${posting}T00:00:00Z`);
-    thirtyDaysOn.setUTCDate(thirtyDaysOn.getUTCDate() + 30);
-
     await page.getByLabel('Supplier Code').fill(supplierCode);
     await expect(page.locator('input[name="due_date"]')).toHaveCount(0);
 
@@ -284,9 +262,8 @@ test.describe('the Operations Build screens open', () => {
       { timeout: 120_000 },
     );
     await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible({ timeout: 60_000 });
-    // The record says when it falls due: thirty days on, from the terms.
-    const dueText = new Intl.DateTimeFormat('en-US', { month: 'short', day: '2-digit', year: 'numeric', timeZone: 'UTC' }).format(thirtyDaysOn);
-    await expect(page.getByText('Due Date', { exact: true }).locator('..')).toContainText(dueText);
+    // No due date yet: it is set once the SWIFT is received (2026-10-07).
+    await expect(page.getByText('Set once the SWIFT is received').first()).toBeVisible();
   });
 
   test('draft quantity remains reliable while a row saves', async ({ browser, page }) => {
