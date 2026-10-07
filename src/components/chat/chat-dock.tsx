@@ -9,6 +9,7 @@ import { badgeText, CHAT_MAX_FILES_PER_MESSAGE, CHAT_MESSAGE_MAX_LENGTH, type Pr
 import { cn } from '@/components/intent/cn';
 import type { ConversationRow, MessageView } from '@/server/services/chat-read';
 import { useBell } from '../notifications/notification-store';
+import { roomFor, useAssistant } from '../assistant/assistant-store';
 import { ChatAvatar, presenceOfRow } from './chat-avatar';
 import {
   closeWindow,
@@ -74,6 +75,8 @@ export function ChatDock() {
   const pathname = usePathname();
   const snap = useChat();
   const phone = useIsPhone();
+  // The AI dock owns the bottom-end corner; the windows sit beside it, further along while its panel is open (2026-10-07).
+  const assistant = useAssistant();
   useEffect(() => mountDock(), []);
 
   // The chat screen is the full chat: no windows over it.
@@ -93,11 +96,12 @@ export function ChatDock() {
     <section
       aria-label={t('dock_label')}
       className={cn(
-        'pointer-events-none fixed bottom-0 end-3 flex items-end gap-3 sm:end-4 print:hidden',
+        'pointer-events-none fixed bottom-0 flex items-end gap-3 print:hidden',
         // Under the header's menus on a desktop; a phone's full-screen window over everything but the search.
         phone && shown.length > 0 ? 'z-[80]' : 'z-[45]',
       )}
       data-chat-dock=""
+      style={{ insetInlineEnd: roomFor(assistant.open && !phone) }}
     >
       {shown.map((w) => (
         <DockWindow focused={front?.id === w.id} key={w.id} phone={phone} row={rows.get(w.id)!} />

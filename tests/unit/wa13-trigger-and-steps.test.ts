@@ -124,6 +124,16 @@ describe('the trigger', () => {
     expect(prompt).toMatch(/ask them to reply \*!ai yes\* to go ahead/);
     expect(prompt).toMatch(/!ai approve <document number>/);
   });
+
+  it('in the application\u2019s AI dock there is no !ai: every message reaches him and a yes is a button (2026-10-07)', () => {
+    const prompt = systemPrompt({ locale: 'en', userName: 'Baban', branchCode: 'HQ', today: '2026-10-07', medium: 'web' });
+    expect(prompt).toMatch(/you are the AI panel in the corner of the ERP screen/);
+    expect(prompt).toMatch(/there is no !ai trigger here and you must NEVER tell them to write !ai/);
+    expect(prompt).toMatch(/a proposal shows them a Yes and a No button/);
+    expect(prompt).not.toMatch(/You are shown a message only when it begins with !ai/);
+    // The group's own paragraph stays the default.
+    expect(systemPrompt({ locale: 'en', userName: 'Baban', branchCode: 'HQ', today: '2026-10-07', medium: 'whatsapp' })).toMatch(/You are shown a message only when it begins with !ai/);
+  });
 });
 
 describe('an answer laid out in steps', () => {

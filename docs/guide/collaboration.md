@@ -1,6 +1,6 @@
 # Chat, tasks and documents — user guide
 
-This guide covers the screens people use to work together rather than to post documents: Chat (المحادثات), the Task Center — My Tasks (مهامي), the Document Centre (مركز المستندات) with QS Cloud Files, and the Cloud Files Settings (إعدادات Cloud Files) an administrator uses to switch the cloud files on.
+This guide covers the screens people use to work together rather than to post documents: Chat (المحادثات), the AI dock — Noah (نوح — الذكاء الاصطناعي) in the corner of every screen, the Task Center — My Tasks (مهامي), the Document Centre (مركز المستندات) with QS Cloud Files, and the Cloud Files Settings (إعدادات Cloud Files) an administrator uses to switch the cloud files on.
 **Chat** is for talking to colleagues inside the system, one to one or in a group. A message is never edited or deleted, only withdrawn with a reason. The **Messages** (الرسائل) button in the top bar shows how many messages are unread.
 A **task** is a piece of work one person asks another to do, in a section, with a priority and a deadline. It moves by buttons from Draft to Assigned, Accepted, In progress, Handed in and Completed, and **Reply in Chat** opens a conversation about it.
 The **Document Centre** is a window onto the company's cloud file store, QS Cloud Files. Each person links their own cloud account once, then browses, uploads and links files to the records they belong to. The files stay in the cloud; the system keeps only the links. The same files show on a record under its paperclip, in the **QS Cloud Files** panel.
@@ -193,6 +193,41 @@ A refusal shows in a red band titled "That did not go through." (لم تتم ا�
 - "<name> cannot open this record, so they cannot be added to a conversation about it." / "<name> cannot open the record this conversation is about, so they cannot be added." / "Pick at least one colleague to talk to about the record."
 - "The list of colleagues could not be loaded." (تعذّر تحميل قائمة الزملاء.) / "That did not work. Try again." (لم تنجح العملية. حاول مرة أخرى.) — try again in a moment.
 - "Permission denied: 'create' on 'chat' is not granted to this user."
+
+## The AI dock — Noah (نوح — الذكاء الاصطناعي)
+Path: every screen — the round button with the sparkle in the bottom end corner   |   Arabic: كل شاشة — الزر الدائري ذو النجمة في الزاوية السفلية
+Address: no address of its own; the panel opens over the page you are on (its route is /assistant/api)
+Needs: being signed in. Every active user may ask; what Noah reads is read as you, with your own permissions, so a storekeeper is told what a storekeeper's screens show. A proposal runs only after you press **Yes, do it** (نعم، نفّذ), as you, through the system's own rules — the same refusals you would meet on the screen.
+What it is for: asking the system's assistant — the same Noah the WhatsApp group talks to — about a document, a figure, a screen or what to do next, without leaving the page. Since 2026-10-07.
+
+### How to ask Noah — The AI dock
+1. Press the round **AI — ask Noah** (الذكاء الاصطناعي — اسأل نوح) button in the bottom end corner of any screen. A panel titled **Noah — AI** (نوح — الذكاء الاصطناعي) opens above it, with the line "Reads as you; acts only after your Yes" (يقرأ باسمك؛ ولا ينفّذ إلا بعد موافقتك).
+2. Write your question in **Ask Noah…** (اسأل نوح…) and press **Enter** (**Shift+Enter** adds a line), or press the arrow **Send** (إرسال). While he reads, the top line says **Reading…** (يقرأ…) and three dots pulse in the conversation.
+3. His answer appears as a bubble, in the language you wrote in. A document number or a figure in it is something he read in the system as you. A picture he took of a screen shows inline under his words — press it to open it full size. A report he made (PDF or Excel) is a line with a download arrow under the answer.
+4. Ask the next question in the same panel: the last twelve turns go with it, so "and Erbil?" or "show me the first one" means something. The conversation stays with this browser tab as you move from screen to screen; **Clear the conversation** (مسح المحادثة) — the bin in the panel's top line — starts afresh.
+5. Paste a picture (a screenshot, a photo of a paper) into the box with Ctrl+V: it is listed as a chip above the box and goes with your question for him to read; at most two, up to 4 MB each.
+6. **Close** (إغلاق) — the × or the Escape key — closes the panel; the button stays in the corner. On a phone the panel takes the whole screen.
+
+### How a proposal is run — The AI dock
+1. When you ask him to do something — approve a document, post an invoice, create a supplier, save a draft, run a few steps — he does not do it. A card **Noah proposes** (يقترح نوح) appears under his answer with the facts: the document, the figures, what cannot be undone.
+2. Press **Yes, do it** (نعم، نفّذ) to run it as you, now, through the document's own service: your permissions, the maker-checker rule, the branch scope and the open period decide, exactly as on the screen. He tells you what happened — or the system's refusal, in its own words.
+3. Press **No** (لا) and nothing is done ("Nothing was done." — لم يُنفَّذ شيء.).
+4. A proposal stands for ten minutes and for one question: asking something else drops it, and he proposes afresh if you ask again.
+
+### Fields — The AI dock
+- **Ask Noah…** (اسأل نوح…) — the question, up to 4,000 characters.
+- Pasted pictures — up to two, JPEG, PNG, GIF or WebP, each up to 4 MB; **Remove picture** (إزالة الصورة) on the chip takes one off.
+- **Yes, do it** / **No** on a proposal card.
+
+### After you save — The AI dock
+- Nothing is saved by asking. Each answer is one line in the audit trail ("assistant.answered": your question's first words, the tools he used, whether a file or pictures went back). Each **Yes** writes the same audit rows a WhatsApp yes writes, with `web` as where it came from.
+- The conversation is kept in this browser tab only (pictures and files are not kept across a reload); the server keeps nothing between questions.
+
+### Refusals — The AI dock
+- "The assistant is not set up on this server: …" (المساعد غير مهيّأ على هذا الخادم) — the host has no brain: neither the CLI signed in nor a key. An administrator sets it up as for the WhatsApp bridge (docs/RUNBOOK-whatsapp.md).
+- "You are signed out. Sign in again and ask once more." — the session ended while the panel was open.
+- "Something went wrong while answering. Try again." — the brain or the database failed; the error is in the server's log with its digest.
+- A refusal from a proposal is the system's own sentence — the same one the screen would show — and nothing was changed.
 
 ## My Tasks (مهامي)
 Path: Dashboard → Home → My Tasks   |   Arabic: الرئيسية ← الرئيسية ← مهامي

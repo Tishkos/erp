@@ -8662,6 +8662,31 @@
       "automation_run": "Automation Run"
     }
   },
+  "assistant": {
+    "title": "Noah — AI",
+    "subtitle": "Reads as you; acts only after your Yes",
+    "open": "AI — ask Noah",
+    "close": "Close",
+    "clear": "Clear the conversation",
+    "empty": "Ask about a document, a figure, a screen, or what to do next. Noah reads the system as you, with your permissions.",
+    "messages": "Conversation",
+    "question": "Your question",
+    "placeholder": "Ask Noah… (Enter to send, Shift+Enter for a new line)",
+    "send": "Send",
+    "thinking": "Reading…",
+    "proposal_title": "Noah proposes",
+    "yes": "Yes, do it",
+    "no": "No",
+    "declined": "Nothing was done.",
+    "download": "Download",
+    "pasted_picture": "Pasted picture",
+    "remove_picture": "Remove picture",
+    "footnote": "Answers are read live as you. A proposal runs only after Yes, through the system’s own rules.",
+    "unavailable": "The assistant is not set up on this server: {detail}",
+    "signed_out": "You are signed out. Sign in again and ask once more.",
+    "refused": "You may not ask the assistant.",
+    "failed": "Something went wrong while answering. Try again."
+  },
   "chat": {
     "title": "Chat",
     "subtitle": "Talk to colleagues inside the ERP: one to one or in groups, about the work and about records.",

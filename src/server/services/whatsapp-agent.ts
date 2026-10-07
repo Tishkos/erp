@@ -31,7 +31,7 @@ import { pictureLanguage } from '../domain/whatsapp-pictures';
 import * as review from './whatsapp-review';
 import * as sqlService from './whatsapp-sql';
 import * as systemGuide from './system-guide';
-import { runAgent, type AgentClient, type AgentResult, type AskedPicture, type PriorTurn, type ToolOutcome } from '../domain/whatsapp-agent';
+import { runAgent, type AgentClient, type AgentMedium, type AgentResult, type AskedPicture, type PriorTurn, type ToolOutcome } from '../domain/whatsapp-agent';
 import * as apInvoices from './ap-invoice';
 import * as arInvoices from './ar-invoice';
 import * as bankAccounts from './bank-cash-accounts';
@@ -97,6 +97,16 @@ export interface AskerMeta {
   readonly question?: string | null;
 }
 
+/** The chat a question came from, said as a person reading a file will understand it. */
+export const WEB_CHAT = 'web';
+export function chatLabelOf(chat: string | null | undefined): string {
+  if (!chat) return 'WhatsApp';
+  if (chat === 'terminal') return 'terminal (ask-noah)';
+  // The AI dock in the application (2026-10-07): the same tools, as the signed-in person.
+  if (chat === WEB_CHAT) return 'the application (AI dock)';
+  return `WhatsApp ${chat.includes('@g.us') ? 'group' : 'chat'}`;
+}
+
 export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?: ActionHooks, meta?: AskerMeta) {
   /*
    * Everybody may ask (2026-10-04), so each tool answers for the asker's own
@@ -125,7 +135,7 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
     return `${row?.display_name ?? meta?.userName ?? ctx.principal.userId}${row?.email ? ` <${row.email}>` : ''} · branch ${ctx.branchCode}`;
   };
   /** Where it was said, for the files a tool writes. */
-  const chatLabel = !meta?.chat ? 'WhatsApp' : meta.chat === 'terminal' ? 'terminal (ask-noah)' : `WhatsApp ${meta.chat.includes('@g.us') ? 'group' : 'chat'}`;
+  const chatLabel = chatLabelOf(meta?.chat);
   const words = (value: unknown): string | null => (typeof value === 'string' && value.trim() !== '' ? value.trim() : null);
 
   const run = async (name: string, args: Record<string, unknown>): Promise<ToolOutcome> => {
@@ -763,7 +773,7 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         const who = `${row?.display_name ?? meta?.userName ?? ctx.principal.userId}${row?.email ? ` <${row.email}>` : ''} · branch ${ctx.branchCode}`;
         const filed = systemGuide.reportIssue({
           who,
-          chat: !meta?.chat ? 'WhatsApp' : meta.chat === 'terminal' ? 'terminal (ask-noah)' : `WhatsApp ${meta.chat.includes('@g.us') ? 'group' : 'chat'}`,
+          chat: chatLabelOf(meta?.chat),
           issue: { summary, kind, severity, screen: text('screen'), doing: text('doing'), happened: text('happened'), message: text('message'), document: text('document'), note: text('note') },
         });
         return {
@@ -812,6 +822,8 @@ export async function runAgentFor(input: {
   /** Who is in the group, as the instructions say it (`rosterForPrompt`). */
   readonly people?: string;
 }): Promise<AgentResult> {
+  // The AI dock in the application (2026-10-07): every message reaches him, a yes is a button.
+  const medium: AgentMedium = input.chat === WEB_CHAT ? 'web' : 'whatsapp';
   // What he has been told to keep about the company and this person, the walkthrough they are in, the last exchange.
   const memory = (() => {
     try {
@@ -837,6 +849,7 @@ export async function runAgentFor(input: {
     ...(input.pictures && input.pictures.length > 0 ? { pictures: input.pictures } : {}),
     ...(input.people ? { people: input.people } : {}),
     ...(memory ? { memory } : {}),
+    medium,
     // Before an answer is sent: every document number and figure in it is something he read, or he is asked once to put it right.
     check: (answer, sources) => {
       const found = unsupportedIn(answer, sources);

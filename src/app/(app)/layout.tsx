@@ -5,6 +5,7 @@ import { AppShell } from '@/components/app-shell';
 // screen component (the Intent UI redesign, 2026-10-06).
 import '@/components/admin/admin.module.css';
 import { TableLabels } from '@/components/admin/table-labels';
+import { AssistantDock } from '@/components/assistant/assistant-dock';
 import { ChatDock } from '@/components/chat/chat-dock';
 import { ResultSounds } from '@/components/result-sounds';
 import { Toasts } from '@/components/toasts/toast-region';
@@ -109,6 +110,8 @@ export default async function AuthenticatedLayout({ children }: { children: Reac
       <TableLabels />
       {/* The chat windows at the foot of every screen, and the sounds a form's result makes (2026-10-06). */}
       <ChatDock />
+      {/* Noah in the bottom-end corner — the AI dock (2026-10-07); the chat dock sits beside it. Not drawn for the camera's own session. */}
+      {appearance.camera ? null : <AssistantDock />}
       <ResultSounds camera={appearance.camera} />
       {/* The pop-up notifications in the corner: a form's result, a new notification, a new message (2026-10-07). */}
       <Toasts camera={appearance.camera} />
