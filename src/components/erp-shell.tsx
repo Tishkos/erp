@@ -768,12 +768,22 @@ export function ErpShell({
         <div className="erp-header__bar" ref={barRef}>
           <div className="erp-header__identity">
             <Link className="erp-brand" href="/" onClick={closeNavigation}>
+              {/*
+               * `unoptimized` (2026-10-08): the mark is served as its static file,
+               * never through /_next/image. On the live host one optimizer key
+               * (this file at w=64, WebP) got stuck in the running process after a
+               * browser aborted its first generation, and every later request for
+               * it waited for ever — the bar had no logo for anybody at that
+               * pixel ratio until pm2 restarted. A 48px mark on every page is not
+               * worth that path; the file is small and nginx caches it a year.
+               */}
               <Image
                 className="erp-brand__logo"
                 src={mainLogo}
                 alt={shell('logo_alt')}
                 preload
                 sizes="48px"
+                unoptimized
               />
               <span className="erp-brand__wordmark">
                 <strong>{shell('company_name')}</strong>
@@ -1022,6 +1032,7 @@ export function ErpShell({
                 src={mainLogo}
                 alt={shell('logo_alt')}
                 sizes="132px"
+                unoptimized
               />
               <button
                 className="erp-icon-button"
