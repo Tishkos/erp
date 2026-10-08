@@ -3466,7 +3466,7 @@
       "advance_basis_none": "No upfront payment",
       "advance_basis_percent": "Payable by percentage",
       "advance_basis_amount": "Payable by amount",
-      "advance_amount": "Advance amount",
+      "advance_amount": "Payable amount",
       "left_to_pay": "Left to pay",
       "share_of_total": "That is {percent}% of the total",
       "advance_over_total": "More than the invoice comes to — an advance is at most the total.",

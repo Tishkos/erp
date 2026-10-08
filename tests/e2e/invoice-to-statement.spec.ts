@@ -252,16 +252,16 @@ test.describe('a purchase invoice reaches the supplier statement', () => {
     await page.locator('input[name="supplier_invoice_no"]').fill(receiptNo);
     await expect(page.locator('[data-account-balance]').first()).toContainText(/Balance: IQD [\d,]+/, { timeout: 30_000 });
 
-    // Payable in advance: with Import ticked it opens on "by percentage" with
-    // the box empty — no preset share.
+    // Payable in advance: two choices only since 2026-10-08 — no percentage.
+    // With Import ticked it opens on "by amount" with the box empty.
     const basis = page.locator('select[name="advance_basis"]');
-    await expect(basis).toHaveValue('percent');
-    await expect(page.locator('input[name="advance_percent"]')).toHaveValue('');
-    // By amount: 1,000 of 7,500 is 13.33%, and 6,500 is left to pay.
-    await basis.selectOption('amount');
+    await expect(basis).toHaveValue('amount');
+    await expect(basis.locator('option')).toHaveCount(2);
+    await expect(page.locator('input[name="advance_amount"]')).toHaveValue('');
+    // 1,000 of 7,500 in front: 6,500 is left to pay, and no share is said.
     await page.locator('input[name="advance_amount"]').fill('1000');
-    await expect(page.locator('[data-payable-amount]')).toContainText('That is 13.33% of the total');
     await expect(page.locator('[data-left-to-pay]')).toContainText('IQD 6,500');
+    await expect(page.locator('[data-payable-amount]')).toHaveCount(0);
 
     // A local purchase: the Import box starts ticked since 2026-10-03. Unticked,
     // no account is chosen to pay it from, so nothing can be paid in front

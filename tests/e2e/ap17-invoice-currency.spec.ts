@@ -87,13 +87,12 @@ test.describe('AP-17 · a dollar invoice shows its dinars', () => {
     const dinarEdge = await rightEdge(page, `${cell} > bdi:nth-of-type(2)`);
     expect(Math.abs(dollarEdge - dinarEdge)).toBeLessThanOrEqual(1);
 
-    // Twenty per cent in front: the share in dollars and in dinars.
-    const advance = page.locator('input[name="advance_percent"]');
-    await advance.fill('20');
-    const share = page.locator('input[name="advance_percent"] + span');
-    await expect(share).toContainText(
-      (dollars * 0.2).toLocaleString('en-US', { minimumFractionDigits: 2 }),
-    );
+    // An amount in front (no percentage on the form since 2026-10-08): said in dinars under the box.
+    const advance = page.locator('input[name="advance_amount"]');
+    const inFront = Math.round(dollars * 0.2);
+    await advance.fill(String(inFront));
+    const share = page.locator('[data-payable-amount]');
+    await expect(share).toContainText(Math.round(inFront * perDollar).toLocaleString('en-US'));
     // One line, whatever the figures come to.
     const lines = await share.evaluate((node) => {
       const style = getComputedStyle(node);
@@ -101,9 +100,9 @@ test.describe('AP-17 · a dollar invoice shows its dinars', () => {
     });
     expect(lines).toBeLessThan(1.6);
 
-    // Never more than the whole invoice.
-    await advance.fill('120');
-    await expect(advance).toHaveValue('100');
+    // Never more than the whole invoice: the box says so and will not send it.
+    await advance.fill(String(dollars + 1));
+    await expect(share).toContainText('More than the invoice comes to');
 
     // There is no due date here — it is set once the SWIFT is confirmed — and
     // no second box asking for the terms the import application already holds.

@@ -3466,7 +3466,7 @@
       "advance_basis_none": "بلا دفعة مقدمة",
       "advance_basis_percent": "دفع مقدم بنسبة مئوية",
       "advance_basis_amount": "دفع مقدم بمبلغ",
-      "advance_amount": "مبلغ الدفعة المقدمة",
+      "advance_amount": "المبلغ المستحق الدفع",
       "left_to_pay": "المتبقي للدفع",
       "share_of_total": "أي {percent}% من الإجمالي",
       "advance_over_total": "أكثر من قيمة الفاتورة — الدفعة المقدمة لا تتجاوز الإجمالي.",

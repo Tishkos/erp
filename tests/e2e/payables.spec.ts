@@ -98,8 +98,8 @@ test.describe('A22 · payables in a browser', () => {
     await page.getByLabel('Unit Price').first().fill('1000');
     await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
     await page.locator('input[name="is_import"]').check();
-    // The terms are the advance's percentage (2026-10-03): 30% in front.
-    await page.locator('input[name="advance_percent"]').fill('30');
+    // The advance is an amount (2026-10-08: no percentage on the form): 6,000 of 20,000 in front.
+    await page.locator('input[name="advance_amount"]').fill('6000');
     await page.getByRole('button', { name: 'Create' }).click();
 
     await page.waitForURL(
@@ -205,7 +205,7 @@ test.describe('A22 · payables in a browser', () => {
     await page.getByLabel('Unit Price').first().fill('5000');
     await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
     await page.locator('input[name="is_import"]').check();
-    await page.locator('input[name="advance_percent"]').fill('30');
+    await page.locator('input[name="advance_amount"]').fill('15000');
     await page.getByRole('button', { name: 'Create' }).click();
     await page.waitForURL(
       (url) => url.pathname.startsWith('/payables/invoices/') && !url.pathname.endsWith('/new'),
