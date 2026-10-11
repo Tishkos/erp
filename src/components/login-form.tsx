@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react';
 import Image from 'next/image';
+import Script from 'next/script';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { Blocks, ShieldCheck, TrendingUp } from 'lucide-react';
 import { cn } from '@/components/intent/cn';
 import { Note } from '@/components/intent/note';
-import { DEFAULT_ACCENT, DEFAULT_PALETTE } from '@domain/appearance';
+import { DEFAULT_PALETTE, type Accent } from '@domain/appearance';
+import { RECAPTCHA_SCRIPT } from '@domain/recaptcha';
 // The palettes' `--w-*` tokens (and the checkbox) live there; the Intent theme reads them.
 import '@/components/admin/admin.module.css';
 import styles from '@/app/sign-in/sign-in.module.css';
@@ -26,9 +28,13 @@ import {
  * palette's calm canvas, the company's mark above one centred card, the
  * language switch and "authorised users only" along the top. It sits outside
  * the application shell: a visitor who has not signed in, or a session on a
- * temporary password, has no menu to show. It wears the default palette and
- * accent; nobody's own appearance is known yet.
+ * temporary password, has no menu to show. It wears the default palette;
+ * nobody's own appearance is known yet. Its accent is blue, whatever the
+ * company's — by direction (2026-10-11): "the things in the login screen
+ * blue highlight, not orange anymore".
  */
+const AUTH_ACCENT: Accent = 'blue';
+
 export async function AuthShell({
   children,
   pillars = false,
@@ -42,7 +48,7 @@ export async function AuthShell({
   return (
     <main
       className={cn('erp-root', styles.page, 'flex min-h-dvh flex-col bg-[var(--w-canvas)] text-fg')}
-      data-accent={DEFAULT_ACCENT}
+      data-accent={AUTH_ACCENT}
       data-palette={DEFAULT_PALETTE}
     >
       <header className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4">
@@ -156,6 +162,22 @@ export function AuthError({ children }: { readonly children: ReactNode }) {
 }
 
 /**
+ * reCAPTCHA v2's "I'm not a robot" box, where the server has a site key
+ * (`services/recaptcha.ts`). Google's script draws it into the div; the
+ * answer travels with the form as `g-recaptcha-response`, and the server
+ * action refuses a sign-in whose answer Google does not confirm. The widget
+ * is a fixed 304px wide, so it is centred rather than stretched.
+ */
+export function Captcha({ siteKey, locale, label }: { readonly siteKey: string; readonly locale: 'en' | 'ar'; readonly label: string }) {
+  return (
+    <div aria-label={label} className="flex justify-center" role="group">
+      <Script src={`${RECAPTCHA_SCRIPT}?hl=${locale}`} strategy="afterInteractive" />
+      <div className="g-recaptcha" data-sitekey={siteKey} data-theme="light" />
+    </div>
+  );
+}
+
+/**
  * The sign-in form — begun from shadcn/ui's `login-01` block and made this
  * application's.
  *
@@ -173,16 +195,19 @@ export async function LoginForm({
   action,
   failed,
   mfa,
+  captcha,
   className,
 }: {
   readonly action: (formData: FormData) => Promise<void>;
-  /** The refusal to show: credentials, lockout, an expired temporary password — or none. */
-  readonly failed: 'credentials' | 'locked' | 'expired' | 'code' | null;
+  /** The refusal to show: credentials, lockout, an expired temporary password, the captcha — or none. */
+  readonly failed: 'credentials' | 'locked' | 'expired' | 'code' | 'captcha' | null;
   /** HD4 — the account needs its authenticator code: show the field. */
   readonly mfa: boolean;
+  /** The reCAPTCHA site key, when the server has one; null draws no box. */
+  readonly captcha?: string | null;
   readonly className?: string;
 }) {
-  const t = await getTranslations('auth');
+  const [t, locale] = await Promise.all([getTranslations('auth'), getLocale()]);
 
   return (
     <AuthCard className={className} eyebrow={t('eyebrow')} foot={t('need_access')} heading={t('welcome')} hint={t('welcome_hint')}>
@@ -213,11 +238,15 @@ export async function LoginForm({
                 ? t('temporary_expired')
                 : failed === 'code'
                   ? t('code_required')
-                  : t('failed')}
+                  : failed === 'captcha'
+                    ? t('captcha_failed')
+                    : t('failed')}
           </AuthError>
         ) : null}
 
         <RememberMe label={t('remember_me')} />
+
+        {captcha ? <Captcha label={t('captcha_label')} locale={locale === 'ar' ? 'ar' : 'en'} siteKey={captcha} /> : null}
 
         <SubmitButton label={t('sign_in')} pendingLabel={t('signing_in')} />
       </form>

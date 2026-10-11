@@ -182,3 +182,59 @@ export function findGaps(issuedUpTo: bigint, recorded: readonly bigint[]): bigin
   }
   return gaps;
 }
+
+/** What `parseDocumentNumber` reads back out of a number. */
+export interface ParsedDocumentNumber {
+  readonly serial: bigint;
+  readonly branchCode: string | null;
+  readonly year: number | null;
+  /** The counter the number belongs to (`scopeKeyFor` of what was read). */
+  readonly scopeKey: string;
+}
+
+/**
+ * The inverse of `formatDocumentNumber`: the serial, and the branch and year
+ * the pattern wrote, read back out of a number — or null for a number this
+ * series did not write (another prefix, a hand-typed code, more or fewer
+ * parts). A `{YY}` is read as this century.
+ *
+ * For the repair that re-records the numbers a table already holds after the
+ * counters were cleared (`scripts/ops/resync-document-numbers.ts`).
+ */
+export function parseDocumentNumber(def: SequenceDefinition, text: string): ParsedDocumentNumber | null {
+  validateSequenceDefinition(def);
+  const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const names: string[] = [];
+  const source = escape(def.pattern).replace(/\\\{([A-Z]+)\\\}/g, (_match, token: string) => {
+    names.push(token);
+    switch (token) {
+      case 'PREFIX':
+        return escape(def.prefix);
+      case 'BRANCH':
+        return '([A-Za-z0-9_]+)';
+      case 'YY':
+        return '(\\d{2})';
+      case 'YYYY':
+        return '(\\d{4})';
+      default:
+        return '(\\d+)';
+    }
+  });
+  const match = new RegExp(`^${source}$`).exec(text.trim());
+  if (!match) return null;
+  let serial = 0n;
+  let branchCode: string | null = null;
+  let year: number | null = null;
+  let group = 1;
+  for (const token of names) {
+    const value = match[group]!;
+    if (token === 'PREFIX') continue;
+    group += 1;
+    if (token === 'BRANCH') branchCode = value;
+    else if (token === 'YY') year = 2000 + Number(value);
+    else if (token === 'YYYY') year = Number(value);
+    else serial = BigInt(value);
+  }
+  if (serial <= 0n) return null;
+  return { serial, branchCode, year, scopeKey: scopeKeyFor(def, { branchCode, year }) };
+}

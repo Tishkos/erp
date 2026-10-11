@@ -52,7 +52,14 @@ fail() { echo "DRILL FAILED: $*" >&2; psql -d postgres -qc "drop database if exi
 NIGHTLY_SET=$(ls -1d "$BACKUPS"/nightly/*/ 2>/dev/null | sort | tail -1)
 DRILL_STARTED=$(date -u +%s)
 if [[ -n "$NIGHTLY_SET" ]]; then
-  DUMP=$(ls "$NIGHTLY_SET"erp-*.dump "$NIGHTLY_SET"erp-*.dump.age 2>/dev/null | head -1)
+  # Whichever of the two the set holds. Not `ls a b | head -1`: a set is
+  # either encrypted or not, so one of the two globs never matches, ls exits 2
+  # for it, and under pipefail that 2 is what the drill ended with — 0 seconds
+  # in, on the first Sunday with a nightly set to pick (2026-10-11).
+  DUMP=""
+  for candidate in "$NIGHTLY_SET"erp-*.dump "$NIGHTLY_SET"erp-*.dump.age; do
+    [[ -f "$candidate" ]] && { DUMP="$candidate"; break; }
+  done
   [[ -n "$DUMP" ]] || fail "the newest nightly set $NIGHTLY_SET holds no erp-*.dump"
   if [[ "$DUMP" == *.age ]]; then
     [[ -f /etc/qs-erp/backup.env ]] && { set -a; . /etc/qs-erp/backup.env; set +a; }

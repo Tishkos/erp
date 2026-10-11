@@ -621,6 +621,12 @@ end \$\$;
 commit;
 SQL
 
+# The counters were cleared with the documents, but the tables a format keeps
+# — employees, ports, positions, the partners, items, warehouses, accounts and
+# tax codes — still hold their numbers. Re-record those, or the next employee
+# is EMP-HQ-0001 again and refused (2026-10-11, employee_no_uniq).
+(cd "$APP" && npx tsx scripts/ops/resync-document-numbers.ts --apply)
+
 pm2 restart "$PM2_NAME" --update-env >/dev/null
 echo "restarted $PM2_NAME"
 REMOTE

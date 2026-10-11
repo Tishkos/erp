@@ -19,13 +19,24 @@ const config: NextConfig = {
   // metrics from beside its code (bundled, those paths no longer exist), and
   // the Word and Excel writers are large enough that compiling them into each
   // export route exhausts the development server's memory.
-  serverExternalPackages: ['pdfkit', 'fontkit', 'docx', 'write-excel-file'],
+  // The browser Noah's live pictures are taken with (services/live-screenshot.ts)
+  // is the same: Playwright loads its driver files by path at run time, and
+  // the standalone trace copied only the ones it could see statically — the
+  // live server's pictures failed with "Cannot find module
+  // '…/.next/standalone/node_modules/playwright-core/…'" (ISS-20261009-001).
+  // Left outside the bundle and carried whole below.
+  serverExternalPackages: ['pdfkit', 'fontkit', 'docx', 'write-excel-file', '@playwright/test', 'playwright', 'playwright-core'],
 
   // Print and export read the embedded Arabic font, the print logo and the
   // DRAFT watermark from disk (src/server/print/assets.ts), so the standalone
   // build must carry them.
   outputFileTracingIncludes: {
-    '/**': ['./src/server/print/assets/**/*'],
+    '/**': [
+      './src/server/print/assets/**/*',
+      './node_modules/playwright-core/**/*',
+      './node_modules/playwright/**/*',
+      './node_modules/@playwright/test/**/*',
+    ],
   },
 
   typescript: {

@@ -2,6 +2,7 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
 import { AdminPage, Field, Flash, Form, Grid, Pill, Submit, SubmitRow, admin as s } from '@/components/admin';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { QrCode } from '@/components/admin/qr-code';
 import { formatBusinessDate, formatTimestamp, type Locale } from '@/i18n/config';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as authentication from '@/server/services/authentication';
@@ -13,10 +14,15 @@ import { businessDateOf } from '@/server/domain/business-date';
 /**
  * REQ-HARDEN-001 HD4 — the second factor, enrolled by the account holder.
  *
- * Begin shows a secret for the authenticator app (typed in, or read from the
- * otpauth address — the app accepts either); the app's first code confirms
- * it. A privileged account inside its grace is told how long it has; past
- * the grace this is the only screen the session reaches.
+ * Begin shows a secret for the authenticator app — as a QR code to scan, as
+ * a key to type, and as the otpauth address itself for a phone that is both
+ * the browser and the authenticator (it cannot scan its own screen; the
+ * address opens the app). The app's first code confirms it. A privileged
+ * account inside its grace is told how long it has; past the grace this is
+ * the only screen the session reaches.
+ *
+ * The code is drawn here, on the server (`QrCode`): the secret goes to
+ * nobody's QR service.
  */
 export const dynamic = 'force-dynamic';
 
@@ -90,17 +96,23 @@ export default async function SecurityPage({ searchParams }: { searchParams: Sea
           {otpauth ? (
             <Panel title={t('mfa_confirm_title')}>
               <p className={s.sectionHint}>{t('mfa_confirm_hint')}</p>
+              <div className={s.profileCard}>
+                <QrCode label={t('mfa_qr_label')} value={otpauth} />
+                <p>{t('mfa_qr_caption')}</p>
+              </div>
               <ul className={s.profileFacts}>
                 <li>
                   <span>{t('mfa_secret')}</span>
                   <span>
-                    <code>{status.pendingSecret!.match(/.{1,4}/g)!.join(' ')}</code>
+                    <code dir="ltr">{status.pendingSecret!.match(/.{1,4}/g)!.join(' ')}</code>
                   </span>
                 </li>
                 <li>
                   <span>{t('mfa_otpauth')}</span>
                   <span>
-                    <code className="break-all">{otpauth}</code>
+                    <a className={`${s.button} ${s.small}`} href={otpauth}>
+                      {t('mfa_open_app')}
+                    </a>
                   </span>
                 </li>
               </ul>

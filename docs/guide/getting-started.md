@@ -42,8 +42,9 @@ What it is for: Proving who you are. Until you sign in, every address leads here
 1. Open the system's address in the browser. The screen says "Sign in to continue" (سجّل الدخول للمتابعة).
 2. Type your **Email** (البريد الإلكتروني) and your **Password** (كلمة المرور). The eye button shows or hides what you type; "Caps Lock is on" (مفتاح Caps Lock مفعّل) warns you when capitals are locked.
 3. Leave **Remember me on this device** (تذكّرني على هذا الجهاز) ticked on your own computer; untick it on a shared one.
-4. Press **Sign in** (تسجيل الدخول). The Dashboard opens.
-5. If your password is a temporary one, the Change password screen opens instead — see "Change password".
+4. Tick **I'm not a robot** (أنا لست روبوتًا) — the box under the form; sometimes it asks you to pick pictures first.
+5. Press **Sign in** (تسجيل الدخول). The Dashboard opens.
+6. If your password is a temporary one, the Change password screen opens instead — see "Change password".
 
 ### How to sign in with an authenticator code — Sign in
 1. Some accounts (a Super User, and roles the administrator marked as privileged) sign in with a second step once they have enrolled an authenticator app.
@@ -61,6 +62,7 @@ On the Change password screen there is also a **Sign out** button under the form
 - **Password** (كلمة المرور) — required.
 - **Authenticator code** (رمز تطبيق المصادقة) — shown only when your account needs it: the 6-digit code from your authenticator app.
 - **Remember me on this device** (تذكّرني على هذا الجهاز) — ticked by default. Ticked: you stay signed in on this device until the session ends. Unticked: you are signed out when the browser is closed. Neither makes the session longer.
+- **I'm not a robot** (أنا لست روبوتًا) — Google's reCAPTCHA box, required; it must be ticked every time the form is sent (also after a wrong password, and when the form comes back asking for the authenticator code). The sign-in screen's highlight colour is blue whatever colours you chose inside the system.
 
 ### After you sign in — Sign in
 - A session lasts 8 hours from the moment you sign in. After that the next click sends you back to Sign in; sign in again and continue.
@@ -71,6 +73,7 @@ On the Change password screen there is also a **Sign out** button under the form
 - "Those credentials were not accepted. Check the address and password, or ask an administrator to reset it." (لم يتم قبول بيانات الاعتماد هذه…) — the email or the password is wrong, or the account is deactivated; the message is deliberately the same for all three. Check Caps Lock and the keyboard language, try again, then ask an administrator for a reset.
 - "Too many failed attempts. Wait fifteen minutes and try again." (محاولات فاشلة كثيرة…) — five wrong tries within fifteen minutes lock sign-in for that account from your location. Wait fifteen minutes; a correct password will then work.
 - "The temporary password has expired. Ask an administrator for a new one." (انتهت صلاحية كلمة المرور المؤقتة…) — a temporary password works for 72 hours after it was issued. Ask an administrator to issue a new one.
+- "Tick “I’m not a robot” and sign in again." (ضع علامة على «أنا لست روبوتًا» ثم سجّل الدخول مرة أخرى.) — the box was not ticked, or its answer had expired (it lasts two minutes); tick it and press Sign in again.
 - "This account signs in with a second factor. Enter the code your authenticator app shows now." — the code was wrong or too old. Type email, password and the code the app shows at this moment. If you lost the phone, ask an administrator.
 
 ## Change password (تغيير كلمة المرور)
@@ -286,7 +289,7 @@ What it is for: One list of the documents waiting for your decision, then what y
 Path: your own menu (your picture in the top bar) → Profile settings (إعدادات الملف الشخصي)
 Address: /profile
 Needs: to be signed in. No other permission: the page only ever shows and changes your own account.
-What it is for: Your own account: your picture, display name, language, colours, password, and the facts of the account (roles, branches, departments).
+What it is for: Your own account: your picture, display name, language, colours, password, the authenticator (second step of signing in), and the facts of the account (roles, branches, departments).
 
 ### How to change your display name — My profile
 1. Open your menu → **Profile settings**.
@@ -297,6 +300,11 @@ What it is for: Your own account: your picture, display name, language, colours,
 1. In **Change password** (تغيير كلمة المرور) type your **Current password** (كلمة المرور الحالية), the **New password** (كلمة المرور الجديدة) and the same again in **Confirm new password** (تأكيد كلمة المرور الجديدة).
 2. Press **Update password** (تحديث كلمة المرور).
 3. "Your password has been changed." (تم تغيير كلمة المرور.) confirms it. Every other session of yours (other browsers, other devices) is signed out; the one you are using stays.
+
+### How to reach the authenticator (Security) — My profile
+1. Open your menu → **Profile settings**.
+2. The **Security** (الأمان) panel, under **Account**, shows whether the **Authenticator** (تطبيق المصادقة) is **Enrolled** (مسجَّل) or **Not enrolled** (غير مسجَّل), whether it is **Required for this account** (مطلوب لهذا الحساب) and when it was **Last used** (آخر استخدام).
+3. Press the button at the top of the panel — **Set up authenticator** (إعداد تطبيق المصادقة) when none is enrolled, **Manage** (إدارة) when one is. It opens the Security screen, /profile/security, where the QR code is shown.
 
 ### How to set or remove your picture — My profile
 1. Under your name press **Choose an image** (اختر صورة) and pick a PNG, JPEG or WebP file of at most 400 KB; a square picture looks best.
@@ -319,6 +327,7 @@ Layout style, spacing and sizes are set in the Appearance panel of your own menu
 - **Current password** / **New password** / **Confirm new password** — all required; the new one at least 12 characters.
 - **Choose an image** (اختر صورة) — optional; PNG, JPEG or WebP, up to 400 KB.
 - **Account** (الحساب) panel, read-only: **Roles** (الأدوار), **Branches** (الفروع — a ★ marks your default branch), **Departments** (الأقسام — "Manager" (مدير) marks a department you manage), **Live sessions** (الجلسات النشطة — how many places you are signed in right now), **Password last changed** (آخر تغيير لكلمة المرور) and **Created** (تاريخ الإنشاء).
+- **Security** (الأمان) panel, read-only: **Authenticator** (تطبيق المصادقة — Enrolled or Not enrolled), **Required for this account** (مطلوب لهذا الحساب), **Last used** (آخر استخدام), and the button **Set up authenticator** (إعداد تطبيق المصادقة) or **Manage** (إدارة) that opens the Security screen.
 - **Audit log** (سجل التدقيق) at the bottom — what has happened to your account.
 
 ### After you save — My profile
@@ -331,23 +340,30 @@ Each form saves on its own button and answers "Saved." (or "Your password has be
 - "avatar: use a PNG, JPEG or WebP image" / "avatar: is larger than 400 KB".
 
 ## Security (الأمان)
-Path: not in the menu and not linked from My profile — type the address; it also opens by itself when your account must enrol an authenticator and the time allowed has passed
+Path: your own menu (your picture in the top bar) → Profile settings (إعدادات الملف الشخصي) → the **Security** (الأمان) panel → **Set up authenticator** (إعداد تطبيق المصادقة) or **Manage** (إدارة); it also opens by itself when your account must enrol an authenticator and the time allowed has passed
 Address: /profile/security
 Needs: to be signed in.
 What it is for: Setting up the second step of signing in — an authenticator app on your phone that shows a six-digit code. Required for a Super User and for roles an administrator marked as privileged; optional for everybody else.
 
 ### How to enrol an authenticator — Security
 1. Install an authenticator app on your phone (Google Authenticator, Microsoft Authenticator, Aegis…).
-2. Open /profile/security. The **Second factor** (العامل الثاني) panel shows whether it is **Required for this account** (مطلوب لهذا الحساب) and whether you are **Enrolled** (مسجَّل) or **Not enrolled** (غير مسجَّل).
-3. Press **Begin enrolment** (بدء التسجيل). The page shows a **Setup key** (مفتاح الإعداد) and an **otpauth address** (عنوان otpauth).
-4. In the app choose "enter a setup key" and type the key (or paste the otpauth address).
+2. Open Profile settings and press **Set up authenticator** (إعداد تطبيق المصادقة) in the **Security** panel (address /profile/security). The **Second factor** (العامل الثاني) panel shows whether it is **Required for this account** (مطلوب لهذا الحساب) and whether you are **Enrolled** (مسجَّل) or **Not enrolled** (غير مسجَّل).
+3. Press **Begin enrolment** (بدء التسجيل). The page shows a QR code, with the **Setup key** (مفتاح الإعداد) under it.
+4. In the app choose to add an account and scan the QR code with the phone's camera. If it cannot be scanned, choose "enter a setup key" in the app and type the key. If you are reading the page on the same phone the app is on, press **Open in the authenticator app** (افتح في تطبيق المصادقة) beside **On this phone** (على هذا الهاتف) instead.
 5. Type the six-digit **Code from the app** (الرمز من التطبيق) and press **Confirm enrolment** (تأكيد التسجيل).
 6. "The authenticator is enrolled. Sign-in will ask for its code." From now on signing in asks for the code.
 
 ### How to replace the authenticator (new phone) — Security
-1. While you still have the old app, open /profile/security and press **Issue a new key** (إصدار مفتاح جديد).
-2. Add the new key to the new app and confirm with its code. Until the new app is confirmed, sign-in still needs the code from the old one.
+1. While you still have the old app, open Profile settings → **Security** → **Manage** (إدارة) and press **Issue a new key** (إصدار مفتاح جديد).
+2. Scan the new QR code with the new app (or type the new key) and confirm with its code. Until the new app is confirmed, sign-in still needs the code from the old one.
 3. If the old phone is lost, ask an administrator.
+
+### Fields — Security
+- **Second factor** (العامل الثاني) panel, read-only: **Required for this account** (مطلوب لهذا الحساب), **Authenticator** (تطبيق المصادقة — Enrolled or Not enrolled), **Enrolled on** (تاريخ التسجيل), **Last used** (آخر استخدام).
+- The QR code — shown only between **Begin enrolment** and **Confirm enrolment**. It holds the setup key, the company's name and your e-mail; the app shows the company's name beside the code it produces. It is drawn by the system itself and is black on white in every colour scheme.
+- **Setup key** (مفتاح الإعداد) — the same key as the QR code, in groups of four letters, for typing into the app.
+- **On this phone** (على هذا الهاتف) → **Open in the authenticator app** (افتح في تطبيق المصادقة) — opens the app with the key filled in, on a phone or tablet that has an authenticator app installed. On a computer without one it does nothing.
+- **Code from the app** (الرمز من التطبيق) — required; the six digits the app shows now.
 
 ### What happens if you do not enrol — Security
 - An account that needs a second factor gets a reminder in the bell once a day: "Enrol your authenticator — This account must sign in with an authenticator code from <date>. Enrol it under My profile → Security."

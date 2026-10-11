@@ -11,6 +11,7 @@ import {
   SequenceDefinitionError,
   findGaps,
   formatDocumentNumber,
+  parseDocumentNumber,
   scopeKeyFor,
   validateSequenceDefinition,
   type SequenceDefinition,
@@ -158,5 +159,32 @@ describe('§24 · sequence gap report', () => {
 
   it('is unaffected by the order the allocations were recorded in', () => {
     expect(findGaps(4n, [4n, 1n, 2n])).toEqual([3n]);
+  });
+});
+
+describe('parseDocumentNumber · the inverse of the format', () => {
+  const employee: SequenceDefinition = { key: 'EMPLOYEE', prefix: 'EMP', pattern: '{PREFIX}-{BRANCH}-{SERIAL}', padding: 4, scopeBranch: true, scopeYear: false };
+  const yearly: SequenceDefinition = { key: 'LEAVE_REQUEST', prefix: 'LVE', pattern: '{PREFIX}-{BRANCH}-{YYYY}-{SERIAL}', padding: 5, scopeBranch: true, scopeYear: true };
+
+  it('reads the serial, the branch and the year the pattern wrote', () => {
+    expect(parseDocumentNumber(employee, 'EMP-HQ-0011')).toEqual({ serial: 11n, branchCode: 'HQ', year: null, scopeKey: 'HQ' });
+    expect(parseDocumentNumber(yearly, 'LVE-ERBIL-2026-00007')).toEqual({ serial: 7n, branchCode: 'ERBIL', year: 2026, scopeKey: 'ERBIL|2026' });
+    expect(parseDocumentNumber(branchYear, 'INV-HQ-26-00042')).toEqual({ serial: 42n, branchCode: 'HQ', year: 2026, scopeKey: 'HQ|2026' });
+    expect(parseDocumentNumber(journal, ' JE-000003 ')).toEqual({ serial: 3n, branchCode: null, year: null, scopeKey: '' });
+  });
+
+  it('round-trips what formatDocumentNumber writes', () => {
+    for (const serial of [1n, 9n, 10n, 12345n, 100000n]) {
+      const text = formatDocumentNumber(yearly, serial, { branchCode: 'HQ', year: 2026 });
+      expect(parseDocumentNumber(yearly, text)?.serial).toBe(serial);
+    }
+  });
+
+  it('is null for a number this series did not write', () => {
+    expect(parseDocumentNumber(employee, 'WH-PORT')).toBeNull();
+    expect(parseDocumentNumber(employee, 'EMP-HQ-2026-0001')).toBeNull();
+    expect(parseDocumentNumber(employee, 'EMPX-HQ-0001')).toBeNull();
+    expect(parseDocumentNumber(employee, 'EMP-HQ-0000')).toBeNull();
+    expect(parseDocumentNumber(journal, 'JE-')).toBeNull();
   });
 });

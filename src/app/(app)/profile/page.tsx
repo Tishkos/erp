@@ -9,6 +9,7 @@ import {
   Flash,
   Form,
   Grid,
+  LinkButton,
   Pill,
   Submit,
   SubmitRow,
@@ -20,6 +21,7 @@ import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { formatTimestamp, type Locale } from '@/i18n/config';
 import { OwnAvatar } from '@/components/chat/chat-avatar';
 import { requireContext, withCurrentUser } from '@/server/session';
+import * as authentication from '@/server/services/authentication';
 import * as users from '@/server/services/users';
 import { listRouteViews } from '@/server/services/saved-views';
 import { ACCENTS, PALETTES } from '@domain/appearance';
@@ -30,7 +32,8 @@ import { changePassword, saveAvatar, saveMyAppearance, saveProfile } from './act
  * My profile — the signed-in person's own account.
  *
  * Two columns: who you are on the left (picture, name, role, the facts of the
- * account), what you can change on the right (name, password). No
+ * account, the authenticator and the way to its screen, /profile/security),
+ * what you can change on the right (name, password). No
  * administration grant is needed: the page only ever shows and edits the
  * caller's own row, and the password form asks for the current password
  * before accepting a new one.
@@ -59,8 +62,12 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
   const { user, roles, branches, departments, sessions } = await withCurrentUser((tx) =>
     users.detail(tx, context.principal.userId),
   );
-  // The person's own saved views of screens (/profile/views): how many, and the way in.
-  const viewCount = (await withCurrentUser((tx, c) => listRouteViews(tx, c.principal))).length;
+  // The person's own saved views of screens (/profile/views): how many, and the way in;
+  // and where their second factor stands, for the Security panel.
+  const { viewCount, mfa } = await withCurrentUser(async (tx, c) => ({
+    viewCount: (await listRouteViews(tx, c.principal)).length,
+    mfa: await authentication.mfaStatus(tx, c.principal.userId),
+  }));
   // What the person sees: their own choice, else everyone's default (0419), else Sand and Gold.
   const own = await withCurrentUser((tx) => companyService.appearanceFor(tx, context.principal.userId));
   const fmt = (d: Date | null) => (d ? formatTimestamp(d.toISOString(), locale as Locale) : admin('none'));
@@ -170,6 +177,37 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
               <li>
                 <span>{admin('created_at')}</span>
                 <span>{fmt(user.createdAt)}</span>
+              </li>
+            </ul>
+          </Panel>
+
+          {/* The second step of signing in, and the way to its screen (2026-10-11, by direction:
+              "security also available in profile settings"). */}
+          <Panel
+            actions={
+              <LinkButton
+                href="/profile/security"
+                label={mfa.enrolled ? t('security_manage') : t('security_set_up')}
+                small
+                tone={mfa.required && !mfa.enrolled ? 'primary' : 'secondary'}
+              />
+            }
+            title={t('security')}
+          >
+            <ul className={s.profileFacts}>
+              <li>
+                <span>{t('mfa_status')}</span>
+                <span>
+                  <Pill label={mfa.enrolled ? t('mfa_on') : t('mfa_off')} on={mfa.enrolled} />
+                </span>
+              </li>
+              <li>
+                <span>{t('mfa_required')}</span>
+                <span>{mfa.required ? <Pill label={admin('yes')} on={true} /> : admin('no')}</span>
+              </li>
+              <li>
+                <span>{t('mfa_last_used')}</span>
+                <span>{fmt(mfa.lastVerifiedAt)}</span>
               </li>
             </ul>
           </Panel>

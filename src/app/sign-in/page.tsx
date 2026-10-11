@@ -4,6 +4,7 @@ import { db, applyScope } from '@/server/db/client';
 import { signIn as authenticate } from '@/server/services/authentication';
 import { optionalContext, RESTRICTION_ROUTE, SESSION_COOKIE } from '@/server/session';
 import { AuthShell, LoginForm } from '@/components/login-form';
+import { recaptchaSiteKey, verifyRecaptcha } from '@/server/services/recaptcha';
 
 /**
  * Sign-in — Phase 01.1's authentication, given a screen in Phase 01.12.
@@ -38,6 +39,17 @@ async function signIn(formData: FormData) {
   // the fallback when nothing better is there.
   const ipAddress =
     headerList.get('x-real-ip')?.trim() || headerList.get('x-forwarded-for')?.split(',')[0]?.trim() || null;
+
+  // The captcha, before the credentials are looked at: a form Google does not
+  // vouch for is not a sign-in attempt and is not counted as one. Where the
+  // server has no site key there is no box and nothing to check.
+  if (recaptchaSiteKey()) {
+    const human = await verifyRecaptcha({ response: String(formData.get('g-recaptcha-response') ?? ''), remoteIp: ipAddress });
+    if (!human.ok) {
+      console.warn(`sign-in captcha refused: ${human.reason}`);
+      redirect(`/sign-in?error=captcha${formData.get('code') !== null ? '&mfa=1' : ''}`);
+    }
+  }
   // The refusal is a value, not a throw, so the attempt and its audit row
   // commit with it (HD3). A database failure is the one thing still thrown,
   // and reads as a refusal to the visitor.
@@ -105,16 +117,18 @@ export default async function SignInPage({
         ? 'expired'
         : params.error === 'code'
           ? 'code'
-          : params.error !== undefined
-            ? 'credentials'
-            : null;
+          : params.error === 'captcha'
+            ? 'captcha'
+            : params.error !== undefined
+              ? 'credentials'
+              : null;
   const mfa = params.mfa === '1';
 
   // The page around the form — the company's mark, the language switch, what
   // the system is — is `AuthShell`'s; the password screen wears the same.
   return (
     <AuthShell pillars>
-      <LoginForm action={signIn} failed={failed} mfa={mfa} />
+      <LoginForm action={signIn} captcha={recaptchaSiteKey()} failed={failed} mfa={mfa} />
     </AuthShell>
   );
 }

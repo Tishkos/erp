@@ -358,7 +358,9 @@
     "code_placeholder": "6-digit code from your authenticator app",
     "code_required": "This account signs in with a second factor. Enter the code your authenticator app shows now.",
     "locked": "Too many failed attempts. Wait fifteen minutes and try again.",
-    "temporary_expired": "The temporary password has expired. Ask an administrator for a new one."
+    "temporary_expired": "The temporary password has expired. Ask an administrator for a new one.",
+    "captcha_label": "Confirm you are not a robot",
+    "captcha_failed": "Tick “I’m not a robot” and sign in again."
   },
   "column": {
     "branch": "Branch",
@@ -1798,7 +1800,6 @@
       "out_of_balance": "Out of balance",
       "unbalanced": "This entry does not balance",
       "unbalanced_detail": "Debits come to {debit} and credits to {credit}. It cannot be posted until they agree.",
-      "held_note": "Waiting for the advance: {items} in {warehouse}, On Process (Without SWIFT). They move to In Process when a payment application of this import is Paid — attach the paid paper to it.",
       "submit": "Submit",
       "approve": "Approve and post",
       "reject": "Reject",
@@ -3480,6 +3481,7 @@
       "import_filter_unlinked": "Not linked"
     },
     "payment_applications": {
+      "held_note": "Waiting for the advance: {items} in {warehouse}, On Process (Without SWIFT). They move to In Process when a payment application of this import is Paid — attach the paid paper to it.",
       "subtitle": "Requests to the bank or cashier to pay a supplier",
       "new": "New payment application",
       "new_note": "Choose the import. Its page opens with the payment dialog, beside its instalments and what is already applied.",
@@ -8185,18 +8187,23 @@
     "mfa_grace": "This account must enrol an authenticator by {date}. After that date it can do nothing else until it has.",
     "mfa_grace_over": "The enrolment period has passed. Enrol an authenticator now; nothing else is available until you do.",
     "mfa_begin_title": "Enrol an authenticator",
-    "mfa_begin_hint": "Install an authenticator app (Google Authenticator, Microsoft Authenticator, Aegis…). Begin shows a key to add to it; the app’s first code confirms it.",
+    "mfa_begin_hint": "Install an authenticator app (Google Authenticator, Microsoft Authenticator, Aegis…). Begin shows a QR code to scan with it; the app’s first code confirms it.",
     "mfa_begin": "Begin enrolment",
     "mfa_replace_title": "Replace the authenticator",
     "mfa_replace_hint": "Replacing issues a new key. Until the new app confirms it, sign-in needs the code from the old one.",
     "mfa_replace": "Issue a new key",
-    "mfa_confirm_title": "Add the key to your app, then confirm",
-    "mfa_confirm_hint": "In the app choose “enter a setup key” and type the key, or paste the otpauth address. Then enter the six-digit code the app shows.",
+    "mfa_confirm_title": "Scan the QR code, then confirm",
+    "mfa_confirm_hint": "Scan the QR code with your authenticator app, or choose “enter a setup key” in the app and type the key. Then enter the six-digit code the app shows.",
     "mfa_secret": "Setup key",
-    "mfa_otpauth": "otpauth address",
+    "mfa_otpauth": "On this phone",
     "mfa_code": "Code from the app",
     "mfa_confirm": "Confirm enrolment",
-    "mfa_enrolled": "The authenticator is enrolled. Sign-in will ask for its code."
+    "mfa_enrolled": "The authenticator is enrolled. Sign-in will ask for its code.",
+    "mfa_qr_label": "QR code for the authenticator app",
+    "mfa_qr_caption": "Scan with your authenticator app",
+    "mfa_open_app": "Open in the authenticator app",
+    "security_set_up": "Set up authenticator",
+    "security_manage": "Manage"
   },
   "audit_action": {
     "company": {
@@ -9030,6 +9037,10 @@
       "reconciliation_issue": {
         "title": "Reconciliation difference: {ref}",
         "detail": "{name}"
+      },
+      "authentication_enrol_second_factor": {
+        "title": "Enrol your authenticator",
+        "detail": "From {due} signing in needs the code from an authenticator app. Enrol it under My profile → Security."
       },
       "system_health": {
         "title": "System health needs attention",

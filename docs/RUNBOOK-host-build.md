@@ -74,6 +74,7 @@ in escrow:
 | `DATABASE_URL_OWNER` | `postgres://erp_owner:…@127.0.0.1:5434/erp` — migrations, backups and ops scripts (SG-4 moves it out of the app's file) |
 | `BETTER_AUTH_SECRET` | 32 random bytes; rotating it signs everyone out |
 | `BETTER_AUTH_URL` | `https://erp.qs-groups.com` |
+| `RECAPTCHA_SITE_KEY`, `RECAPTCHA_SECRET_KEY` | reCAPTCHA v2 ("I'm not a robot") on the sign-in form, registered for `erp.qs-groups.com`. Both set: the box is drawn and a sign-in Google does not confirm is refused (`services/recaptcha.ts`); either unset: no box. The secret stays in this file and in escrow, never in the repository |
 | `NODE_ENV` | `production` |
 | `APP_ENV` | `production` / `staging` |
 | `ERP_TIMEZONE` | `Asia/Baghdad` — the business date |

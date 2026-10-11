@@ -38,6 +38,7 @@ const LIVE_USE: Readonly<Record<string, string>> = {
   'scripts/ops/closing-checks.ts': 'a scheduled job; writes only notifications (REQ-IMPROVE-001 FC-4)',
   'scripts/ops/whatsapp-bridge.ts': 'the live bridge; writes only its own session, the message log and delivery status (REQ-WA-001)',
   'scripts/ops/ensure-stage-warehouses.ts': 'creates the stage warehouses a live install needs; idempotent',
+  'scripts/ops/resync-document-numbers.ts': 'a live repair: re-records the numbers the kept tables already hold so the counters start after them; dry run unless --apply, idempotent',
   'scripts/ops/ensure-chart-of-accounts.ts':
     'builds the chart a live install needs and maps every posting role to it; idempotent, --dry-run rolls back, and it never moves a mapping somebody has already decided',
   'scripts/ops/ensure-user-employees.ts': 'makes the employee behind each active user (REQ-FIX-001 FX14); idempotent, dry run unless --apply, run by the deploy',

@@ -167,6 +167,11 @@ export const KINDS: Readonly<Record<string, KindDef>> = Object.freeze({
 
   // The system itself (raised by the health check, services/system-health.ts).
   'system.health': { category: 'system', window: 'day' },
+  // HD4 — raised by the sign-in itself (services/authentication.ts, once a
+  // business day inside the enrolment grace). Registered so the bell and the
+  // WhatsApp alert say it in the reader's language rather than the stored
+  // English; `due` in its context is the day the code becomes required.
+  'authentication.enrol_second_factor': { category: 'system', window: 'day', fallback: '/profile/security' },
 });
 
 /**

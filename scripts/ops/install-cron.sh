@@ -9,7 +9,11 @@ FILE="$APP/scripts/ops/crontab.erp"
 BEGIN="# >>> qs-erp (managed by scripts/ops/install-cron.sh — do not edit) >>>"
 END="# <<< qs-erp <<<"
 current=$(crontab -l 2>/dev/null || true)
-outside=$(printf '%s\n' "$current" | awk -v b="$BEGIN" -v e="$END" '$0==b{skip=1;next} $0==e{skip=0;next} !skip')
+# Outside the markers only what is not ours: the lines the first installs
+# wrote by hand before the markers existed (a second restore-drill at the same
+# minute, a second integrity check) would otherwise run beside the managed
+# ones for ever.
+outside=$(printf '%s\n' "$current" | awk -v b="$BEGIN" -v e="$END" '$0==b{skip=1;next} $0==e{skip=0;next} !skip' | grep -v -e "$APP/scripts/ops/" -e '^# QS ERP:' || true)
 { printf '%s\n' "$outside"; echo "$BEGIN"; cat "$FILE"; echo "$END"; } | crontab -
 mkdir -p /var/log/qs-erp "$APP/var/jobs"
 cat > /etc/logrotate.d/qs-erp <<'ROTATE'
