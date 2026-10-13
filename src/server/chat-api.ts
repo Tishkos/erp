@@ -12,7 +12,7 @@
  * a request that names another origin is refused as well.
  */
 import { headers } from 'next/headers';
-import { applyScope, db, type Tx } from './db/client';
+import { applyScope, transact, type Tx } from './db/client';
 import { currentClientIp, currentRequestId } from './request-id';
 import type { ActorContext } from './services/chart-of-accounts';
 import { optionalContext } from './session';
@@ -27,7 +27,7 @@ export async function runChatApi<T>(handler: (tx: Tx, ctx: ActorContext) => Prom
   if (!context) return { status: 'signed_out' };
   if (context.restriction) return { status: 'restricted' };
   const [requestId, clientIp] = await Promise.all([currentRequestId(), currentClientIp()]);
-  const value = await db.transaction(async (tx) => {
+  const value = await transact(async (tx) => {
     await applyScope(tx, context.scope);
     return handler(tx, { principal: context.principal, branchCode: context.scope.branchCode, requestId, clientIp });
   });

@@ -11,9 +11,11 @@
  * There is no unauthenticated path into a screen: `requireContext` sends the
  * visitor to the sign-in form before any work is done.
  */
+import { cache } from 'react';
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { db, applyScope, type RequestScope, type Tx } from './db/client';
+import { applyScope, transact, type RequestScope, type Tx } from './db/client';
+import { isSignedOutError } from './domain/authentication';
 import type { Principal } from './domain/permissions';
 import { loadPrincipal } from './services/authorization';
 import { resolveSession, restrictionFor, type SessionRestriction } from './services/authentication';
@@ -53,14 +55,22 @@ export const RESTRICTION_ROUTE: Record<Exclude<SessionRestriction, null>, string
  * from anything the client sends. A user with several branches works in one at
  * a time; the picker writes the chosen one to a cookie, and it is checked
  * against their scope here rather than trusted.
+ *
+ * Resolved once per page (2026-10-12). The layout, the shell, the page and
+ * each of its doors all ask who the caller is, and every asking was its own
+ * transaction of a dozen statements — six of them for one click. `cache`
+ * shares the one answer among everything a single render asks, so a
+ * revocation is still seen on the very next request, which is all §25 asks;
+ * a server action and a route handler are outside any render and resolve
+ * afresh, as they always did.
  */
-export async function currentContext(): Promise<RequestContext> {
+export const currentContext = cache(async function currentContext(): Promise<RequestContext> {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
 
   if (!token) throw new NotSignedInError('no session cookie was sent');
 
-  return db.transaction(async (tx) => {
+  return transact(async (tx) => {
     const { session, user } = await resolveSession(tx, token);
 
     // Scope must be set before the principal is read: `user_branch_scope` and
@@ -91,14 +101,25 @@ export async function currentContext(): Promise<RequestContext> {
       permissionsVersion: user.permissionsVersion,
     };
   });
-}
+});
 
-/** The same, returning null instead of throwing — for the sign-in page itself. */
+/**
+ * The same, returning null when nobody is signed in — for the sign-in page
+ * itself.
+ *
+ * Only that is null. Until 2026-10-12 every failure was: a database that was
+ * slow to hand out a connection read as "signed out", so the person was sent
+ * to the sign-in form with a perfectly good session, the chat and the bell
+ * were told 401, and the shell's permissions check read version 0 and
+ * refreshed itself. A failure that is not about the session is thrown, to the
+ * error page that offers *Try again* and to the log.
+ */
 export async function optionalContext(): Promise<RequestContext | null> {
   try {
     return await currentContext();
-  } catch {
-    return null;
+  } catch (error) {
+    if (isSignedOutError(error)) return null;
+    throw error;
   }
 }
 
@@ -131,7 +152,7 @@ export async function withCurrentUser<T>(
   options: { allowRestricted?: boolean } = {},
 ): Promise<T> {
   const context = await requireContext(options);
-  return db.transaction(async (tx) => {
+  return transact(async (tx) => {
     await applyScope(tx, context.scope);
     return fn(tx, context);
   });

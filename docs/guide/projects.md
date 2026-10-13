@@ -1,6 +1,6 @@
 # Projects — user guide
 
-The Projects module (المشاريع) runs a project from its definition to its close. Work flows in this order: **Project Master** defines a project and releases it; **WBS** breaks it into elements, activities and milestones and schedules them; **Cost Plan** and **Budgets** say what it should cost and how much may be spent; **Change Orders** move the contract value, the budget and the finish date after release.
+The Projects module (المشاريع) runs a project from its first contact to its close. Work flows in this order: **Project Initiation** takes a customer project — a direct sale or a tender — through its stages to the signed contract, where it becomes a project by itself; **Project Master** defines a project and releases it (and is where an internal or investment project is created directly); **WBS** breaks it into elements, activities and milestones and schedules them; **Cost Plan** and **Budgets** say what it should cost and how much may be spent; **Change Orders** move the contract value, the budget and the finish date after release.
 While the work runs, purchases assigned to an element show on **Procurement** and **Project Costs**, stock is taken to an element on **Material Issues**, and **Progress** measures the work, the milestones and the hours.
 **Billing** raises certificates to the customer and recognises revenue; **Forecast** shows the cost at completion; **Close** settles and closes the project; **Reports** prints the four project reports.
 Project types, tolerance profiles, cost codes and the revenue-recognition method are kept in **Settings → Administration → Project Settings**.
@@ -80,6 +80,82 @@ Purchases are not typed in Projects; they arrive from Payables.
 5. The Payables user who does these steps needs project permissions too: the post permission on projects to approve an assigned order, open an assigned payable, or post or reverse an assigned invoice; the edit-draft permission on projects to cancel an assigned order or payable. Without it the step is refused with "Permission denied: 'post' on 'project' is not granted to this user."
 See Procurement for the commitments and Project Costs for the cost lines.
 
+## Project Initiation (تأسيس المشاريع)
+Projects → Projects & Planning → Project Initiation   |   Arabic: المشاريع ← المشاريع والتخطيط ← تأسيس المشاريع
+Address: /projects/initiation (one record: /projects/initiation/<initiation number>)
+Needs: `view` on `project` to open; `create` to open a new record; `edit_draft` to fill the stages, add BOQ lines, log activities, move to the next stage and mark a record lost; `approve` to approve a tender's Go / No-Go and to confirm the signed contract
+What it is for: The company's Project Guide. Every customer project starts here, before it is a project: you choose its type — a **Direct Sales Project** (مشروع بيع مباشر) or a **Tender Project** (مشروع مناقصة) — and walk the record through the six stages of that workflow, one at a time. When the contract is signed and confirmed, the record becomes an Active Project on Project Master by itself, carrying its Pre-Sales Form, its drawings and its approved BOQ. Nothing here posts to the books or moves stock.
+
+### The two project types — Project Initiation
+- **Direct Sales Project** — for direct customers and special projects: the Pre-Sales Form, the system type and an assessment of the customer's site. Stages 1 to 6: **1 Sales Lead** (عميل مبيعات محتمل) → **2 Opportunity and Pre-Sales Form** (الفرصة ونموذج ما قبل البيع) → **3 Site Survey Design** (مسح الموقع والتصميم) → **4 BOQ Costing** (تسعير جدول الكميات) → **5 Proposal Follow-up** (العرض والمتابعة) → **6 Contract Signing** (توقيع العقد).
+- **Tender Project** — for formal tenders and government tender documents (ITB/RFP): submission deadlines, bid bonds and a compliance matrix. Stages 7 to 12: **7 Tender Lead** (مناقصة محتملة) → **8 Feasibility Review and Tender Qualification (Go / No-Go)** (مراجعة الجدوى وتأهيل المناقصة) → **9 Site Visit & Pre-Bid Meeting** (زيارة الموقع واجتماع ما قبل العطاء) → **10 Tender Design BOQ** (تصميم المناقصة وجدول الكميات) → **11 Compliance Matrix & Bidding** (مصفوفة المطابقة وتقديم العطاء) → **12 Submission & Award** (التقديم والإحالة).
+- The type is chosen once, when the record is opened, and cannot be changed afterwards.
+- A record carries one status: **Open** (مفتوح) while it is being worked, **Converted to project** (تحوّل إلى مشروع) once its contract is confirmed, or **Lost** (خسارة) with its reason. A converted or lost record does not change again.
+
+### How to open a new record — Project Initiation
+1. Projects → Projects & Planning → Project Initiation, then press **New initiation** (تأسيس جديد). The button shows only with the create permission.
+2. Choose the **Project type** (نوع المشروع): Direct Sales Project or Tender Project. The window describes both.
+3. Type the **Project name** (اسم المشروع) and the **Customer name** (اسم العميل) — for a tender, the issuing entity (owner). Choose the **Owner** (المسؤول), the person who follows it; you by default.
+4. Press **Create** (إنشاء). The record opens at its first stage with the next number of the series, PIN-<branch>-<year>-<serial>.
+The record belongs to the branch you are working in.
+
+### How to work a record through its stages — Project Initiation
+1. Open the record from the list by its number.
+2. The **Workflow** (مسار العمل) strip shows the six stages: a check on what is done, the current stage highlighted, the rest marked Pending.
+3. Under it there is one section per stage the record has reached. Press **Edit** (تعديل) in a stage's section to fill its form, then **Save** (حفظ). A later stage's section appears when the record gets there; an earlier stage can still be corrected while the record is Open.
+4. A note above the record says what the current stage still needs, for example "2 · Opportunity and Pre-Sales Form still needs: Site coordinates (GPS) · System type".
+5. When nothing is missing, the button **Next stage: …** (المرحلة التالية) appears at the foot of the record. Press it to move on. Stages are completed in order; none can be skipped.
+6. Files are added through the paperclip in the title of the stage they belong to (see "Fields — Project Initiation").
+7. To record a call, a meeting, a site visit, a clarification or an addendum, press **Log activity** (تسجيل نشاط) under **Follow-up activities** (أنشطة المتابعة). An activity is kept as written; it is never edited or removed.
+8. If the customer walks away, the proposal is refused or the tender is not awarded, type the reason beside **Mark lost** (تسجيل كخسارة) and press it.
+
+### Fields — Project Initiation
+Direct Sales:
+- **1 Sales Lead** — Project name, Customer name, **Customer phone** (هاتف العميل), **Initial contact** (أول تواصل; the day the record was opened unless changed), **Lead source** (مصدر العميل: Referral, Existing customer, Website, Social media, Exhibition or event, Walk-in, Cold call, Partner or agent, Other), Note, and optionally the approved customer from the Customers list. Needed to move on: the name, the phone, the contact date and the lead source.
+- **2 Opportunity and Pre-Sales Form** — site: **Site latitude / longitude (GPS)** in decimal degrees (like 33.312806), **Governorate** (المحافظة), **Area** (المنطقة), **Site type** (نوع الموقع: Land or Rooftop); contact person: name, **Job title**, **Phone**, Second phone, **Official email**; **System type** (نوع النظام): On-Grid, Off-Grid, Hybrid, BESS (Battery Energy Storage System) or Solar Pumping. All of these are needed to move on except the second phone. The paperclip in this section holds the **Customer documents** (وثائق العميل): engineering drawings, building and site maps, site photos, electrical load requirements and current electricity bills.
+- **3 Site Survey Design** — **Survey date**, the box **Site data verified** (تم التحقق من بيانات الموقع), a note. The paperclip holds the final Single-Line Diagram (SLD) and layout; at least one file must be there to move on.
+- **4 BOQ Costing** — the **Bill of Quantities (BOQ)** (جدول الكميات) in the record's own table. Press **Add BOQ line** (إضافة بند): the **Cost** (Material مواد, Shipping شحن or Installation تركيب), an optional item of the catalogue, a description, the quantity, the unit and the unit cost in IQD. **Remove** (حذف) on a row takes a line out. The foot shows the three costs and the BOQ total. At least one line with a cost is needed. Moving on approves the BOQ: it can no longer be changed.
+- **5 Proposal Follow-up** — **Proposal reference**, **Proposal date**, **Proposal value (IQD)**, **Proposal status** (Draft, Sent, Negotiating, Accepted, Rejected). The printer in this section's title prints the technical and commercial proposal (PDF, Excel or Word, English or العربية): the customer, the site, the system asked for, the scope from the BOQ without its costs, and the proposal's value. The paperclip holds the proposal as sent. Only a proposal marked **Accepted** moves on to the contract.
+- **6 Contract Signing** — **Contract reference**, **Signed on**, **Contract value (IQD)**, **Payment terms**, and the **Customer (approved)** from the Customers list. The paperclip holds the signed contract; at least one file is required.
+Tender:
+- **7 Tender Lead** — Project name, **Issuing entity (owner)**, **Tender reference no.**, **Submission deadline**, **Link to the tender documents (ITB/RFP)** (a web address beginning with http:// or https://); the paperclip holds the tender documents themselves. A link or an uploaded file is needed, with the reference and the deadline.
+- **8 Go / No-Go** — **Qualification requirements**, **Bid bond (IQD)** (type 0 if the tender asks for none). The decision is made with the buttons **Approve Go** (اعتماد المشاركة) or **No-Go** (عدم مشاركة) by somebody with the approve permission. A No-Go needs its reason and ends the record as Lost.
+- **9 Site Visit & Pre-Bid Meeting** — **Site visit date**, **Site visit minutes**, **Technical clarifications**. Addenda are logged as activities of the kind Addendum.
+- **10 Tender Design BOQ** — the approved designs behind this section's paperclip, and the BOQ as in stage 4. Both are needed.
+- **11 Compliance Matrix & Bidding** — **Bid price (IQD)**; the bank guarantee: **Guarantee bank**, **Guarantee no.**, **Guarantee amount (IQD)**, **Guarantee expiry**, **Guarantee status** (Requested, Issued, Released, Converted, Forfeited); and the **Compliance matrix** (مصفوفة المطابقة): press **Add compliance line**, type the clause and the requirement, and answer each line Compliant, Partially compliant, Not compliant or Not applicable with **Answer** (إجابة) on its row. Every line must be answered. Where a bid bond is asked, the guarantee's details are required and its status must be Issued.
+- **12 Submission & Award** — **Submitted on**, **Submission reference**, **Award status** (Under evaluation, Awarded, Not awarded), **Awarded on**, and the guarantee's status, which must be Converted or Released where a bond was asked. Then the **Contract Signing** section, exactly as stage 6.
+
+### How to confirm the contract and create the project — Project Initiation
+1. At the last stage, fill the Contract Signing section and upload the signed contract. Link the approved customer: only customers that are approved and in use are offered; add or approve one on Customers first.
+2. When nothing is missing, somebody with the approve permission — not the person who opened the record — sees **Confirm contract and create project** (تأكيد العقد وإنشاء المشروع).
+3. In the window choose the **Project manager**, optionally the **Department**, the **Project start** and **Project finish** (the project's baseline dates), the **Billing method**, **Retention %**, **Advance recovery %**, and optionally a **Project code** (blank takes the next PRJ number).
+4. Press the button. The project is created and released in one step and its record opens.
+
+### After you save — Project Initiation
+- A new record is Open at stage 1 (direct sale) or stage 7 (tender).
+- Moving on from the BOQ stage records who approved the BOQ and when.
+- Confirming the contract creates a project of the type Direct Sales Project or Tender Project with the status Released (active): its customer, its contract value, its baseline dates, and the BOQ total as its baseline budget. The project names the person who opened the initiation as its author and the person who confirmed the contract as the one who released it.
+- The record becomes Converted to project and shows the project's code as a link. Nothing on it can be changed afterwards.
+- The project's record on Project Master shows **Initiated from** (نشأ من التأسيس) with the initiation's number, and a section **Project initiation** (تأسيس المشروع) with the Pre-Sales Form's facts, every file of the initiation under **Drawings and documents** (المخططات والوثائق), and the approved BOQ. These are read from the initiation; they are not copies.
+- Every save, stage move, decision and conversion is in the record's history (the clock icon).
+
+### Refusals — Project Initiation
+- "Stage N is not complete: …" — the stage still needs what the message lists; the note above the record says the same in words.
+- "…has not reached that stage yet. Stages are completed in order, one at a time." — a later stage's form was sent before its turn.
+- "…is converted; a decided record does not change again." / "…is lost…" — the record is closed.
+- "The BOQ of … is approved; it no longer changes." — the record has left its BOQ stage.
+- "You raised this record, so somebody else confirms the signed contract." — the two-person rule; a Super User alone is excepted.
+- "… is not an approved customer in use. Approve it on its page under Customers first." — the customer is still a prospect, on hold or out of use.
+- "A No-Go says why the company will not take part." / "A lost record says why…" — the reason is required.
+- "A Direct Sales Project starts in Project Initiation and becomes a project when its contract is signed" — shown on Project Master if somebody tries to create a project of one of these two types by hand; the New project form does not offer them.
+- "No project initiation '…', or it is outside the branches you may see." — the record belongs to another branch.
+
+### The icons at the top of a record — Project Initiation
+- **Printer** — the whole record (PDF, Excel, Word; English or العربية).
+- **Paperclip** — general files of the record. Each stage that names documents has its own paperclip in its own title: Customer documents, SLD and layout, Proposal, Tender documents, Bid and guarantee, Signed contract.
+- **Notes** — notes on the record; adding one needs the edit-draft permission.
+- **Clock** — the record's history: who did what, and when.
+
 ## Project Master (الملف الرئيسي للمشروع)
 Projects → Projects & Planning → Project Master   |   Arabic: المشاريع ← المشاريع والتخطيط ← الملف الرئيسي للمشروع
 Address: /projects (a project's record: /projects/<project code>)
@@ -103,7 +179,7 @@ The project belongs to the branch you are working in when you create it.
 
 ### Fields — Project Master
 The New project form:
-- **Type** (النوع) — required. One of the active project types; it decides whether the project is for a customer, internal or an investment. Cannot be changed later.
+- **Type** (النوع) — required. One of the active project types; it decides whether the project is for a customer, internal or an investment. Cannot be changed later. The types Direct Sales Project and Tender Project are not offered here: a project of either is created by confirming the contract on Project Initiation.
 - **Code** (الرمز) — optional. Leave blank for the next number in the PRJ series, or type a code the company already uses (letters, digits, hyphens, underscores; up to 32; stored in capitals). Must not already exist. Cannot be changed later.
 - **Name** (الاسم) — required.
 - **Customer** (العميل) — required for a customer project; must stay "— no customer (internal or investment) —" (— بلا عميل (داخلي أو استثماري) —) for the other kinds. Only active customers are listed. Cannot be changed later.

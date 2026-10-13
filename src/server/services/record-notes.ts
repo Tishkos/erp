@@ -204,6 +204,8 @@ const TARGETS = new Map<string, NoteTarget>([
   ['manual_stock_addition', target('manual_stock_addition', 'create', inTable('manual_stock_addition', 'id', 'branch_code'))],
   // The Project System — its documents are kept by number.
   ['project', target('project', 'edit_draft', inTable('project', 'code', 'branch_code'))],
+  // A Project Initiation (the Project Guide, 2026-10-12), by its number.
+  ['project_initiation', target('project', 'edit_draft', inTable('project_initiation', 'initiation_no', 'branch_code'))],
   ['project_certificate', target('project', 'edit_draft', inTable('project_certificate', 'certificate_no', 'branch_code'))],
   ['project_budget', target('project', 'edit_draft', inProjectDocument('project_budget_document', 'document_no'))],
   ['project_variation', target('project', 'edit_draft', inProjectDocument('project_variation', 'variation_no'))],

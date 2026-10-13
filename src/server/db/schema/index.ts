@@ -72,6 +72,7 @@ export * from './bank-execution-batch';
 export * from './logistics';
 export * from './crm';
 export * from './projects';
+export * from './project-initiation';
 export * from './fixed-assets';
 export * from './investments';
 export * from './stock-operations';

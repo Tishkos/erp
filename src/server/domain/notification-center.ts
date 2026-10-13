@@ -416,7 +416,8 @@ export function labelParams(row: {
     days: whole(first(c.days_overdue, c.days_until_due, c.days_late, c.days)),
     actor: text(c.actor) || text(c.actorName) || text(c.senderName),
     amount: text(c.amount) || text(c.outstanding),
-    date: text(c.due_date) || text(c.eta) || text(c.date),
+    // `due`: the day a second factor becomes required (authentication.enrol_second_factor).
+    date: text(c.due_date) || text(c.eta) || text(c.date) || text(c.due),
     name: text(c.name) || text(c.title) || text(c.period),
     count: whole(c.count),
     extra: text(c.stage) || text(c.reason) || text(c.wbsCode),

@@ -20,6 +20,7 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as departments from '@/server/services/departments';
 import * as employees from '@/server/services/employees';
 import * as pb from '@/server/services/project-budget';
+import * as initiation from '@/server/services/project-initiation';
 import * as ps from '@/server/services/project-system';
 import * as recordNotes from '@/server/services/record-notes';
 import {
@@ -33,6 +34,7 @@ import {
   updateProject,
 } from '../actions';
 import { chipOf } from '../chip';
+import { ProjectInitiationSection } from '../initiation/from-initiation';
 
 /**
  * One project — REQ-PM-001 §13. Copies the Purchase Invoice page: the
@@ -79,7 +81,10 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       const notes = await recordNotes.listNotes(tx, { object: ps.PERMISSION_OBJECT, recordId: view.project.code });
       // The manager's own profile, where the user is also an employee (FIX-5); plain text where not.
       const manager = view.project.managerUserId ? await employees.ofUser(tx, view.project.managerUserId) : null;
-      return { view, pickers, depts, elements, documents, changes, plan, notes, manager };
+      // The Project Guide (2026-10-12): the initiation this project was converted from, and its files — read live.
+      const origin = await initiation.forProject(tx, code);
+      const originFiles = origin ? await initiation.filesOf(tx, origin.initiation.initiationNo) : [];
+      return { view, pickers, depts, elements, documents, changes, plan, notes, manager, origin, originFiles };
     } catch (error) {
       // E1 — a missing record is a 404; anything else reaches the error boundary.
       if (isNotFoundError(error)) return null;
@@ -87,7 +92,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     }
   });
   if (!found) notFound();
-  const { view, pickers, depts, elements, documents, changes, plan, notes, manager } = found;
+  const { view, pickers, depts, elements, documents, changes, plan, notes, manager, origin, originFiles } = found;
   const row = view.project;
   const status = row.status;
   const kind = view.type?.kind ?? 'customer';
@@ -111,6 +116,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     { label: column('code'), value: <bdi dir="ltr">{row.code}</bdi> },
     { label: column('status'), value: x(`status_${status}`), status: chipOf(status) },
     { label: x('type'), value: <bdi dir="auto">{typeLabel}</bdi> },
+    ...(origin ? [{ label: x('initiated_from'), value: <ProfileLink code={origin.initiation.initiationNo} kind="project_initiation" /> }] : []),
     { label: x('customer'), value: <ProfileLink code={view.customer?.code ?? null} dir="auto" kind="customer" name={view.customer?.name ?? null} /> },
     {
       label: x('manager'),
@@ -340,6 +346,9 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
           </tbody>
         </table>
       </DocumentWindow>
+
+      {/* What the project carries from its initiation: the Pre-Sales Form, the drawings, the approved BOQ. */}
+      {origin ? <ProjectInitiationSection files={originFiles} view={origin} /> : null}
 
       <section aria-labelledby="project-elements-title" className={s.sapDoc}>
         <div className={s.sapWindow}>

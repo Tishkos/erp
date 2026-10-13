@@ -336,6 +336,9 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     // Three headings since 2026-10-07 (by direction), in the order a project
     // lives: set up and planned, carried out, billed and closed.
     items: [
+      // The Project Guide (2026-10-12, by direction): a customer project begins as a Project
+      // Initiation — a direct sale or a tender — and becomes a project when its contract is signed.
+      page('project_initiation', 'project', '/projects/initiation'),
       // REQ-PM-001 PM-1 — the Project System's master screens.
       page('project_master', 'project', '/projects'),
       page('contracts', 'project', '/projects/contracts'),

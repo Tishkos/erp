@@ -73,9 +73,25 @@ export class ProjectStateError extends Error {
   }
 }
 
+/**
+ * No such project — or one outside the branches the reader may see, which row
+ * security makes the same thing. Coded `…_NOT_FOUND` so every Projects screen
+ * that is handed a code (`/projects/<code>`, `…/wbs?project=<code>`) answers
+ * "does not exist" instead of falling into the error page (2026-10-12: until
+ * then this was a bare `Error`, and a stale link or a project outside the
+ * reader's branches read as "This screen could not be shown").
+ */
+export class ProjectNotFoundError extends Error {
+  readonly code = 'PROJECT_NOT_FOUND';
+  constructor(projectCode: string) {
+    super(`No project '${projectCode}'.`);
+    this.name = 'ProjectNotFoundError';
+  }
+}
+
 async function load(tx: Tx, projectCode: string) {
   const [row] = await tx.select().from(project).where(eq(project.code, projectCode)).limit(1);
-  if (!row) throw new Error(`No project '${projectCode}'.`);
+  if (!row) throw new ProjectNotFoundError(projectCode);
   return row;
 }
 
@@ -102,6 +118,14 @@ export interface CreateProjectInput {
   readonly requiresCostCode?: boolean;
   /** §10 — where it came from, when it came from CRM. */
   readonly opportunityId?: string | null;
+  /**
+   * The Project Guide's conversion (2026-10-12): the project is the signed
+   * contract of a Project Initiation, raised by whoever raised that record and
+   * confirmed by the caller. The caller then answers with `approve`, not
+   * `create`, and the project names the raiser as its author — which is what
+   * lets the confirmation release it under the four-eyes rule below.
+   */
+  readonly raisedByUserId?: string | null;
 }
 
 /**
@@ -118,7 +142,7 @@ export async function create(
   ctx: ActorContext,
   input: CreateProjectInput,
 ): Promise<{ projectCode: string }> {
-  await authz.authorize(ctx.principal, 'create', PERMISSION_OBJECT, {
+  await authz.authorize(ctx.principal, input.raisedByUserId ? 'approve' : 'create', PERMISSION_OBJECT, {
     branchCode: input.branchCode,
   });
 
@@ -173,7 +197,7 @@ export async function create(
       retentionPercent: toDecimalString(input.retentionPercent ?? 0n, 4n),
       advanceRecoveryPercent: toDecimalString(input.advanceRecoveryPercent ?? 0n, 4n),
       requiresCostCode: input.requiresCostCode ?? true,
-      createdBy: ctx.principal.userId,
+      createdBy: input.raisedByUserId ?? ctx.principal.userId,
     })
     .returning({ code: project.code });
 

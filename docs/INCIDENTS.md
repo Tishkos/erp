@@ -101,3 +101,91 @@ The Erbil cash account is left for the screen that now shows it
   application.
 * `docs/` cleared of the earlier registers; this file and the runbook are the
   two that remain.
+
+---
+
+## 2026-10-12 · "Sometimes from Settings to Accounting": the whole application replaced by "This screen could not be shown"
+
+### Reported
+
+Moving from a Settings screen to Accounting, the page showed only "This screen
+could not be shown — Something failed while rendering. Nothing was saved or
+changed." with *Try again* and *Go to the dashboard*, and no menu around it.
+"Sometimes." And, separately, "the page says no existing".
+
+### What was actually wrong
+
+**The shell's own section bar, in the browser.** With the modules in the side
+panel (or the bottom bar) the top bar carries the open module's headings
+(`components/erp-section-bar.tsx`); what does not fit goes behind "More", and
+the bar keeps the indexes of what it tucked there. The bar is part of the
+layout, so it is the same instance from one module to the next — and it used
+the indexes measured for the module just left for the first drawing of the
+next one. Settings has one heading, so its screens are the entries: about
+seventeen, eight of them behind "More" at a laptop's width. Accounting has six
+headings. Arriving there, the indexes named entries that did not exist; the
+bar threw while drawing; and an error thrown by the layout is caught above the
+shell, which is why the menu went with it.
+
+It was not "sometimes": it was every move from a module with entries behind
+"More" to one with fewer entries than those indexes, for everybody on the side
+panel. Everybody was — the company's default navigation on the live system is
+the side panel and all thirteen active users follow it. *Try again* remounts
+the shell, so the next attempt worked, and going the other way never failed.
+
+The server never saw it. The live error log holds no failed render since
+2026-10-03; an error page without a server line is the browser's.
+
+Reproduced on a development server: side panel, 1366 px wide,
+`/administration/company`, press Accounting in the panel.
+
+### Also found on the way
+
+* **A record that is not there fell into the error page on three screens.**
+  All 74 record screens were asked for a number and an id nobody has. A missing
+  project (`/projects/<code>`, and six project workspaces given a stale
+  `?project=`) threw a bare error instead of "not found"; the user page and a
+  container's `?id=` given something that is not an id were refused by the
+  database as malformed. The not-found page itself spoke only of "the approved
+  menu tree", which told somebody who had followed a link to a record nothing.
+* **A slow database read as a sign-out.** Any failure to resolve the session —
+  including a connection the pool could not hand out in time — was treated as
+  "nobody is signed in": a redirect to the sign-in form, and 401 to the chat
+  and the bell, which then stop polling until the page is reloaded. Seen on the
+  development machine under memory pressure; not found in the live log.
+* **Six identity look-ups a page.** The layout, the shell, the page and each of
+  its doors each resolved the caller in a transaction of its own — about
+  sixteen database transactions for one click.
+* **The "Enrol your authenticator" notification showed a raw key** in the bell:
+  its label asked for a `{due}` the reader was never given. This one is in the
+  live log, seven times in a day.
+
+### Repair
+
+Nothing to repair in the data. No record was affected: the failure was in the
+drawing of the menu.
+
+### Changed so it cannot recur
+
+* The section bar and the page tabs keep their measurement together with the
+  list it was taken of, and use it only for that list
+  (`erp-section-bar.tsx`, `admin/section-tabs-nav.tsx`).
+  `tests/e2e/section-bar-modules.spec.ts` walks every module from Settings in
+  side-panel mode and requires the shell to stand.
+* A missing project is `ProjectNotFoundError`; the user page and the container
+  check the shape of an id before asking for it.
+  `tests/e2e/missing-records.spec.ts` finds every record screen from the file
+  system and asks each for a record that does not exist.
+* Only a missing, unknown, expired or revoked session is "signed out"; a
+  transaction that could not get a connection is tried twice more; the caller
+  is resolved once per page (`server/session.ts`, `server/db/client.ts`;
+  `tests/unit/ses01-session-resilience.test.ts`; control C-95).
+* The notification's label reads the date it is given.
+
+### How it was found
+
+The page a person pastes says where to look: an error page with no menu is the
+boundary above the shell. The sweep that opened every screen with a full page
+load found nothing, because a full load mounts a fresh bar; only clicking from
+one module to another, in the navigation layout the person actually uses,
+shows it.

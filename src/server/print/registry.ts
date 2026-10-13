@@ -15,6 +15,7 @@ import * as projectReports from './project-reports';
 import * as hrReports from './hr-reports';
 import * as accountingDocuments from './accounting-documents';
 import * as projectDocuments from './project-documents';
+import * as projectInitiationDocuments from './project-initiation-documents';
 import * as hrDocuments from './hr-documents';
 import * as taskDocuments from './task-documents';
 import * as exceptionDocuments from './exception-documents';
@@ -122,6 +123,8 @@ const BUILDERS = {
   project_budget: byId(projectDocuments.projectBudget),
   project_change_order: byId(projectDocuments.changeOrder),
   project_material_issue: byId(projectDocuments.materialIssue),
+  project_initiation: byId(projectInitiationDocuments.projectInitiation),
+  project_proposal: byId(projectInitiationDocuments.projectProposal),
   employee_advance: byId(hrDocuments.employeeAdvance),
   leave_request: byId(hrDocuments.leaveRequest),
   employee_document: byId(hrDocuments.employeeDocument),

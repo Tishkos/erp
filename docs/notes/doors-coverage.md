@@ -75,6 +75,7 @@ All six draw printer, paperclip, notes, clock in the rule's order (REQ-LOG-001, 
 | `projects/change-orders/[no]` — change order | ✅ | ✅ | ✅ | ✅ | `project_change_order` | project, budget document, earlier versions ✅ | shared | done |
 | `projects/material-issues/[no]` — material issue / return | ✅ | ✅ | ✅ | ✅ | `project_material_issue` | project, warehouse, items ✅ | shared | done |
 | `projects/[code]` — project (profile) | — | — | ✅ | ✅ | — | customer, manager (employee), branch, department ✅; budget documents, change orders: links ✅ | shared | profile |
+| `projects/initiation/[no]` — project initiation (the Project Guide, 2026-10-12) | ✅ | ✅ | ✅ | ✅ | `project_initiation` (+ `project_proposal` in the Proposal stage's title) | customer, branch, project, items of the BOQ ✅; each stage that names documents has its own paperclip (`initiation_customer_docs`, `initiation_design`, `initiation_proposal`, `initiation_tender_docs`, `initiation_bid`, `initiation_contract`) | projects | done |
 
 Attachments on the three documents hang by number, as the certificate's do
 (`project_budget`, `project_variation`, `project_material_issue` in

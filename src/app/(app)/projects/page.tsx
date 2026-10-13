@@ -64,7 +64,13 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Sea
           <NewRecordDialog buttonLabel={x('new')} closeLabel={t('close')} openOnLoad={params.new === '1' && Boolean(outcome.error)} title={x('new_title')}>
             <Form action={createProject}>
               <Grid>
-                <Select label={x('type')} name="type_code" options={pickers.types.map((row) => ({ value: row.code, label: locale === 'ar' && row.nameAr ? row.nameAr : row.nameEn }))} required />
+                {/* A Direct Sales or a Tender project is made from its Project Initiation, not here (the Project Guide, 2026-10-12). */}
+                <Select
+                  label={x('type')}
+                  name="type_code"
+                  options={pickers.types.filter((row) => !ps.INITIATED_TYPES.includes(row.code)).map((row) => ({ value: row.code, label: locale === 'ar' && row.nameAr ? row.nameAr : row.nameEn }))}
+                  required
+                />
                 <Field hint={x('code_hint')} label={column('code')} name="code" />
                 <Field label={column('name')} name="name" required wide />
                 <Select emptyLabel={x('no_customer')} label={x('customer')} name="customer_id" options={pickers.customers.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))} />

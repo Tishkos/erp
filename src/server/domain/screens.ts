@@ -159,6 +159,8 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   fifo_valuation: 'report',
 
   // 6 — Projects
+  // The Project Guide (2026-10-12): the register of initiations and one record's page.
+  project_initiation: 'document',
   project_master: 'document',
   contracts: 'document',
   wbs: 'workspace',
@@ -584,6 +586,8 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/administration/whatsapp',
   // Automation (platform phase, Agent 10).
   '/administration/automation',
+  // The Project Guide (2026-10-12) — Project Initiation: the two workflows before a project.
+  '/projects/initiation',
   // REQ-PM-001 PM-1 — the Project System's structure.
   '/projects',
   '/projects/contracts',

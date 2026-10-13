@@ -54,6 +54,8 @@ export const dynamic = 'force-dynamic';
 
 type Action = (formData: FormData) => Promise<void>;
 
+const USER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default async function UserPage({
   params,
   searchParams,
@@ -82,6 +84,11 @@ export default async function UserPage({
   const secret = outcome.saved ? (jar.get(FLASH_COOKIE)?.value ?? null) : null;
   const mailed = query.mailed === '1';
   const mailFailed = query.mail_failed === '1';
+
+  // A user is addressed by an id. Anything else is not a user: asking the
+  // database for it would be refused as malformed, and the reader would be told
+  // the screen had failed when the address was simply wrong (2026-10-12).
+  if (!USER_ID.test(id)) notFound();
 
   const data = await withCurrentUser(async (tx) => {
     try {

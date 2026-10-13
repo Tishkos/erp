@@ -7,6 +7,7 @@ import {
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -49,11 +50,17 @@ export function SectionTabsNav({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLUListElement>(null);
   const menuId = useId();
-  // null until measured: the server's row, every tab on it.
-  const [hidden, setHidden] = useState<readonly number[] | null>(null);
+  // null until measured: the server's row, every tab on it. A measurement belongs to the row it was
+  // taken of — were this component to outlive its tabs (as the shell's section bar did, 2026-10-12),
+  // the indexes of another row would name tabs that are not there.
+  const [measured, setMeasured] = useState<{ readonly signature: string; readonly hidden: readonly number[] } | null>(null);
   const [open, setOpen] = useState(false);
   const current = tabs.findIndex((tab) => tab.current);
   const signature = tabs.map((tab) => tab.href).join('|');
+  const hidden = useMemo(
+    () => (measured && measured.signature === signature ? measured.hidden.filter((index) => index >= 0 && index < tabs.length) : null),
+    [measured, signature, tabs.length],
+  );
 
   const measure = useCallback(() => {
     const nav = navRef.current;
@@ -73,8 +80,10 @@ export function SectionTabsNav({
       more.getBoundingClientRect().width,
       current,
     );
-    setHidden((was) => (was && was.length === next.length && was.every((v, i) => v === next[i]) ? was : next));
-  }, [current, tabs.length]);
+    setMeasured((was) =>
+      was && was.signature === signature && was.hidden.length === next.length && was.hidden.every((v, i) => v === next[i]) ? was : { signature, hidden: next },
+    );
+  }, [current, tabs.length, signature]);
 
   useBeforePaint(() => {
     measure();

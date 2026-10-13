@@ -297,6 +297,14 @@ export async function resetTestData(): Promise<void> {
   await client.query('delete from fixed_asset');
   await client.query('delete from asset_category');
 
+  // The Project Guide (0421) — a Project Initiation names the project it became,
+  // and its BOQ, compliance and activity rows name it. Never deleted in
+  // production; lifted here only.
+  await client.query('delete from project_initiation_activity');
+  await client.query('delete from project_initiation_compliance_line');
+  await client.query('delete from project_initiation_boq_line');
+  await client.query('delete from project_initiation');
+
   // Phase 11 — projects. Before the journals its costs point at, and before the
   // project dimension row every one of them hangs off. Children first.
   // REQ-PM-001 PM-5 — the plan lines name their certificates; recognition
@@ -987,7 +995,7 @@ export async function resetTestData(): Promise<void> {
                          -- REQ-AP-001 Stage 6, migration 0235.
                          'LOAN',
                          -- REQ-HR-001 Stage HR-1, migration 0241.
-                         'EMPLOYEE', 'POSITION_CODE', 'LEAVE_REQUEST', 'PAYROLL_RUN', 'PAYSLIP', 'EMPLOYEE_ADVANCE', 'VACANCY', 'APPLICANT', 'PERFORMANCE_REVIEW', 'EXPENSE_CLAIM', 'TRAVEL_REQUEST', 'HR_LETTER', 'EMPLOYEE_REQUEST', 'EMPLOYEE_DOCUMENT', 'PROJECT', 'PROJECT_BUDGET', 'PROJECT_VARIATION', 'PROJECT_ISSUE', 'PROJECT_SETTLEMENT',
+                         'EMPLOYEE', 'POSITION_CODE', 'LEAVE_REQUEST', 'PAYROLL_RUN', 'PAYSLIP', 'EMPLOYEE_ADVANCE', 'VACANCY', 'APPLICANT', 'PERFORMANCE_REVIEW', 'EXPENSE_CLAIM', 'TRAVEL_REQUEST', 'HR_LETTER', 'EMPLOYEE_REQUEST', 'EMPLOYEE_DOCUMENT', 'PROJECT', 'PROJECT_BUDGET', 'PROJECT_VARIATION', 'PROJECT_ISSUE', 'PROJECT_SETTLEMENT', 'PROJECT_INITIATION',
                          -- Platform phase, Agent 3 — the Task Center, migration 0340.
                          'TASK',
                          -- Platform phase, Agent 7 — the Exception Center, migration 0380.

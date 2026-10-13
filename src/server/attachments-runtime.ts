@@ -45,6 +45,7 @@ import {
   project,
   projectBudgetDocument,
   projectCertificate,
+  projectInitiation,
   projectMaterialIssue,
   projectVariation,
   purchaseOrder,
@@ -62,6 +63,7 @@ import {
 import type { Tx } from './db/client';
 import type { Principal } from './domain/permissions';
 import { can } from './domain/permissions';
+import { INITIATION_FILE_SECTIONS } from './domain/project-initiation';
 import * as attachments from './services/attachments';
 
 /**
@@ -358,6 +360,19 @@ const projectParentAccess = async (tx: Tx, principal: Principal, objectId: strin
   return Boolean(row);
 };
 
+/**
+ * A Project Initiation (the Project Guide, 2026-10-12) and the sections of it
+ * that file their own papers — the customer's documents, the SLD and layout,
+ * the proposal, the tender documents, the bid and its guarantee, the signed
+ * contract — each kept under the record's number: whoever reads projects, and
+ * row security answers the branch.
+ */
+const projectInitiationParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'project')) return false;
+  const [row] = await tx.select({ id: projectInitiation.id }).from(projectInitiation).where(eq(projectInitiation.initiationNo, objectId)).limit(1);
+  return Boolean(row);
+};
+
 const projectBudgetParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
   if (!can(principal, 'view', 'project')) return false;
   const [row] = await tx
@@ -592,6 +607,8 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('employee_document', employeeDocumentParentAccess);
   attachments.registerParentAccessCheck('project_certificate', projectCertificateParentAccess);
   attachments.registerParentAccessCheck('project', projectParentAccess);
+  attachments.registerParentAccessCheck('project_initiation', projectInitiationParentAccess);
+  for (const section of INITIATION_FILE_SECTIONS) attachments.registerParentAccessCheck(section, projectInitiationParentAccess);
   attachments.registerParentAccessCheck('project_budget', projectBudgetParentAccess);
   attachments.registerParentAccessCheck('project_variation', projectVariationParentAccess);
   attachments.registerParentAccessCheck('project_material_issue', projectMaterialIssueParentAccess);

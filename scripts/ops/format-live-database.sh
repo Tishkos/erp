@@ -240,6 +240,10 @@ client_import_payment
 client_import_file_reference
 client_import_file
 money_transfer_deposit
+project_initiation_activity
+project_initiation_compliance_line
+project_initiation_boq_line
+project_initiation
 project_billing_plan_line
 project_recognition
 project_balance_movement

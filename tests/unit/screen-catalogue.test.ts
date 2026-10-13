@@ -122,8 +122,9 @@ describe('the screen catalogue covers the approved tree', () => {
     // Exceptions (Agent 7): one document screen; the ERP Control Center (Agent 9): one report screen.
     // + Automation (Agent 10): one settings screen; its rule and run pages sit behind it.
     // + Manual Stock Additions (2026-10-06): one document screen.
-    expect(allMenuItems()).toHaveLength(254);
-    expect(Object.keys(SCREENS)).toHaveLength(254);
+    // + Project Initiation (2026-10-12, the Project Guide): one document screen.
+    expect(allMenuItems()).toHaveLength(255);
+    expect(Object.keys(SCREENS)).toHaveLength(255);
   });
 
   it('uses only declared archetypes', () => {
@@ -155,7 +156,8 @@ describe('the screen catalogue covers the approved tree', () => {
     // + 1 (Automation, a settings screen; the rule and run pages behind it are not menu items).
     // + 1 (Landed Costs became a document on 2026-10-06: the register and the import's landed-cost sheet behind it).
     // + 2 (Manual Stock Additions, a document: the register and the record, 2026-10-06).
-    expect(total).toBe(372);
+    // + 2 (Project Initiation, a document: the register and the record, 2026-10-12).
+    expect(total).toBe(374);
   });
 });
 
@@ -208,8 +210,8 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    // 254: Manual Stock Additions (2026-10-06).
-    expect(screenRoutes().size).toBe(254);
+    // 254: Manual Stock Additions (2026-10-06). 255: Project Initiation (2026-10-12).
+    expect(screenRoutes().size).toBe(255);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -382,6 +384,8 @@ describe('every screen has one address', () => {
       '/projects/contracts',
       '/projects/costs',
       '/projects/forecast',
+      // The Project Guide (2026-10-12) — Project Initiation.
+      '/projects/initiation',
       '/projects/material-issues',
       '/projects/plan',
       '/projects/procurement',

@@ -52,6 +52,14 @@ export const SEQUENCE_KEY = 'PROJECT';
 
 const MONEY = 4n;
 
+/**
+ * The Project Guide's two project types (0421). A project of either is made by
+ * converting its Project Initiation (`project-initiation.convert`), so the
+ * new-project form does not offer them and `createDefinition` refuses one
+ * raised by hand.
+ */
+export const INITIATED_TYPES: readonly string[] = ['DIRECT_SALES', 'TENDER'];
+
 // ---------------------------------------------------------------------------
 // §4 — the definition
 // ---------------------------------------------------------------------------
@@ -77,6 +85,12 @@ export interface DefinitionInput {
   readonly description?: string | null;
   readonly toleranceProfileCode?: string | null;
   readonly opportunityId?: string | null;
+  /**
+   * The Project Guide's conversion (2026-10-12): a customer project confirmed
+   * from a Project Initiation is raised by whoever raised that record; the
+   * caller confirms it and answers with `approve` instead of `create`.
+   */
+  readonly raisedByUserId?: string | null;
 }
 
 async function typeOf(tx: Tx, code: string) {
@@ -111,10 +125,17 @@ const day = (value: string | null | undefined, field: string): string | null => 
  * an internal or investment project has no customer and is written here.
  */
 export async function createDefinition(tx: Tx, ctx: ActorContext, input: DefinitionInput): Promise<{ projectCode: string }> {
-  await permit(ctx, 'create', PERMISSION_OBJECT);
+  const raisedBy = optionalText(input.raisedByUserId);
+  await permit(ctx, raisedBy ? 'approve' : 'create', PERMISSION_OBJECT);
   const name = requireText(input.name, 'name');
   const type = await typeOf(tx, normaliseCode(input.typeCode, 'type'));
   const kind = type.kind as ProjectKind;
+  if (raisedBy && kind !== 'customer') throw new ProjectSystemError('type', 'only a customer project is confirmed from an initiation');
+  // The Project Guide (2026-10-12): a Direct Sales or a Tender project is the
+  // signed contract of its Project Initiation, never typed in by hand.
+  if (!raisedBy && INITIATED_TYPES.includes(type.code)) {
+    throw new ProjectSystemError('type', `a ${type.nameEn} starts in Project Initiation and becomes a project when its contract is signed`);
+  }
   const branchCode = requireText(input.branchCode, 'branch');
   const managerUserId = requireText(input.managerUserId, 'manager');
   const [manager] = await tx.select({ id: appUser.id, isActive: appUser.isActive }).from(appUser).where(eq(appUser.id, managerUserId)).limit(1);
@@ -156,6 +177,7 @@ export async function createDefinition(tx: Tx, ctx: ActorContext, input: Definit
       businessLineCode: optionalText(input.businessLineCode),
       costCentreCode: optionalText(input.costCentreCode),
       opportunityId: optionalText(input.opportunityId),
+      raisedByUserId: raisedBy,
     });
   } else {
     if ((input.customerId ?? '').trim()) throw new ProjectSystemError('customer', `an ${kind} project has no customer`);
@@ -207,7 +229,7 @@ export async function createDefinition(tx: Tx, ctx: ActorContext, input: Definit
     isPlanning: true,
     isAccountAssignment: true,
     isBilling: kind === 'customer',
-    createdBy: ctx.principal.userId,
+    createdBy: raisedBy ?? ctx.principal.userId,
   });
 
   return { projectCode };

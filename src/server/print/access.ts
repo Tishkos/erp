@@ -111,6 +111,9 @@ export const EXPORT_ACCESS = {
   project_budget: { kind: 'document', route: '/projects/budgets', object: 'project' },
   project_change_order: { kind: 'document', route: '/projects/change-orders', object: 'project' },
   project_material_issue: { kind: 'document', route: '/projects/material-issues', object: 'project' },
+  // The Project Guide (2026-10-12): a Project Initiation, and the proposal it generates at its Proposal stage.
+  project_initiation: { kind: 'document', route: '/projects/initiation', object: 'project' },
+  project_proposal: { kind: 'document', route: '/projects/initiation', object: 'project' },
   // HR's records, printed from their own pages (shared, 2026-10-04), each
   // under its own grant. A person's paper and their review are also theirs to
   // print (R5): their row policies return their own rows and nobody else's.

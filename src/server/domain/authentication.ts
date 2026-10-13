@@ -347,6 +347,19 @@ export class SessionInvalidError extends Error {
 }
 
 /**
+ * Whether a failure to resolve the caller means *nobody is signed in* — no
+ * session cookie (`NOT_SIGNED_IN`, raised by `server/session.ts`), or a
+ * session that is unknown, expired, revoked or whose account was deactivated
+ * (`SESSION_INVALID`). Anything else — the database could not be reached, a
+ * statement failed — says nothing about who is asking, and must never be read
+ * as a sign-out (2026-10-12).
+ */
+export function isSignedOutError(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null | undefined)?.code;
+  return code === 'NOT_SIGNED_IN' || code === 'SESSION_INVALID';
+}
+
+/**
  * §25 — "session expiry and immediate revocation."
  *
  * The 01.1 gate is the sharper statement: "Revoking a session terminates access

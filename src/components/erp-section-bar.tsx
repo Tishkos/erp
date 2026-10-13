@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type FocusEvent,
@@ -68,7 +69,9 @@ export function ErpSectionBar({
   const navRef = useRef<HTMLElement>(null);
   const rulerRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState<string | null>(null);
-  const [hidden, setHidden] = useState<readonly number[] | null>(null);
+  // What was measured, and for which entries. This bar lives in the layout, so it is the same
+  // instance from one module to the next: a measurement belongs to the list it was taken of.
+  const [measured, setMeasured] = useState<{ readonly signature: string; readonly hidden: readonly number[] } | null>(null);
   const moduleName = shell(`module.${module.key}`);
 
   // One heading: its screens are the bar. Several: each heading is a menu, or a link when it holds one screen.
@@ -93,6 +96,21 @@ export function ErpSectionBar({
         );
   const current = entries.findIndex((entry) => entry.current);
   const signature = `${module.key}|${entries.map((entry) => entry.key).join('|')}`;
+  /*
+   * The entries behind "More" — of THIS list. Until 2026-10-12 the indexes
+   * measured for the module just left were used for the first drawing of the
+   * next one: coming from Settings (some twenty screens, most of them behind
+   * "More") to Accounting (six headings) they named entries that did not
+   * exist, the bar threw while drawing, and because it is part of the layout
+   * the whole application was replaced by "This screen could not be shown"
+   * (by report: "sometimes from settings to accounting we get issues"). A
+   * measurement of another list is no measurement: the bar draws every entry
+   * until it has measured this one, as it does on first load.
+   */
+  const hidden = useMemo(
+    () => (measured && measured.signature === signature ? measured.hidden.filter((index) => index >= 0 && index < entries.length) : null),
+    [measured, signature, entries.length],
+  );
 
   const measure = useCallback(() => {
     const bar = navRef.current;
@@ -117,8 +135,12 @@ export function ErpSectionBar({
     const room = bar.clientWidth - padding;
     if (room <= 0) return;
     const next = overflowOf(widths, gap, room, more, current);
-    setHidden((was) => (was && was.length === next.length && was.every((value, index) => value === next[index]) ? was : next));
-  }, [current, entries.length]);
+    setMeasured((was) =>
+      was && was.signature === signature && was.hidden.length === next.length && was.hidden.every((value, index) => value === next[index])
+        ? was
+        : { signature, hidden: next },
+    );
+  }, [current, entries.length, signature]);
 
   useBeforePaint(() => {
     measure();

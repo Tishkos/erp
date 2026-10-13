@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { db, applyScope } from '@/server/db/client';
+import { logger } from '@/server/logging';
 import { revokeSession } from '@/server/services/authentication';
 import { optionalContext, SESSION_COOKIE } from '@/server/session';
 
@@ -17,18 +18,24 @@ import { optionalContext, SESSION_COOKIE } from '@/server/session';
 export const dynamic = 'force-dynamic';
 
 export async function POST() {
-  const context = await optionalContext();
-
-  if (context) {
-    await db.transaction(async (tx) => {
-      await applyScope(tx, context.scope);
-      await revokeSession(
-        tx,
-        { principal: context.principal, branchCode: context.scope.branchCode },
-        context.sessionId,
-        'User signed out',
-      );
-    });
+  // Signing out never fails for the person: if the database cannot be asked
+  // just now, the cookie is cleared all the same and the session runs out on
+  // its own expiry. The failure is still logged.
+  try {
+    const context = await optionalContext();
+    if (context) {
+      await db.transaction(async (tx) => {
+        await applyScope(tx, context.scope);
+        await revokeSession(
+          tx,
+          { principal: context.principal, branchCode: context.scope.branchCode },
+          context.sessionId,
+          'User signed out',
+        );
+      });
+    }
+  } catch (error) {
+    logger.error('sign-out: the session could not be revoked', { error });
   }
 
   const jar = await cookies();

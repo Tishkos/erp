@@ -50,6 +50,50 @@ export interface RequestScope {
 }
 
 /**
+ * Whether a failure happened while *getting* a connection — before a single
+ * statement of the transaction ran.
+ *
+ * The pool waits `connectionTimeoutMillis` for a free client and then rejects
+ * with "timeout exceeded when trying to connect". On a busy or memory-starved
+ * host that wait is lost to the machine, not to the database: the process
+ * stalls for a few seconds, the timer fires, and a screen that had nothing
+ * wrong with it fails (seen on the development machine, 2026-10-12: the
+ * server answered its own pollers as if nobody were signed in). Because
+ * nothing has been sent yet, trying again is always safe — for a read and for
+ * a write alike — which is not true of any failure after BEGIN, so those are
+ * never matched here.
+ */
+export function isConnectFailure(error: unknown): boolean {
+  for (let cause: unknown = error, depth = 0; cause && depth < 5; depth += 1) {
+    const { message, code } = cause as { message?: unknown; code?: unknown };
+    if (typeof message === 'string' && /timeout exceeded when trying to connect|Connection terminated due to connection timeout/i.test(message)) return true;
+    // Refused or not ready yet; too many connections; the server is starting up or shutting down.
+    if (code === 'ECONNREFUSED' || code === '53300' || code === '57P03') return true;
+    cause = (cause as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
+const CONNECT_RETRY_DELAYS_MS = [200, 800] as const;
+
+/**
+ * `db.transaction`, tried again when no connection could be had. Two more
+ * attempts, a moment apart; anything else — and a third failure — is thrown as
+ * it came, to the error boundary and the log.
+ */
+export async function transact<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await db.transaction(fn);
+    } catch (error) {
+      const delay = CONNECT_RETRY_DELAYS_MS[attempt];
+      if (delay === undefined || !isConnectFailure(error)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
+/**
  * Runs `fn` inside a transaction with the RLS session variables set.
  *
  * `set_config(..., true)` makes the setting transaction-local, so it cannot
@@ -60,7 +104,7 @@ export interface RequestScope {
  * This is the only sanctioned way to read or write scoped tables.
  */
 export async function withScope<T>(scope: RequestScope, fn: (tx: Tx) => Promise<T>): Promise<T> {
-  return db.transaction(async (tx) => {
+  return transact(async (tx) => {
     await applyScope(tx, scope);
     return fn(tx);
   });

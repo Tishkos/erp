@@ -69,6 +69,8 @@ export const PROFILE_KINDS = [
   'stock_reconciliation',
   // A Manual Stock Addition (2026-10-06).
   'manual_stock_addition',
+  // A Project Initiation (the Project Guide, 2026-10-12).
+  'project_initiation',
   'project_certificate',
   'project_budget',
   'project_variation',
@@ -156,6 +158,7 @@ const BASES: Readonly<Record<ProfileKind, string | null>> = {
   stock_transfer: '/inventory/transfers',
   stock_reconciliation: '/inventory/stock-reconciliation',
   manual_stock_addition: '/inventory/manual-additions',
+  project_initiation: '/projects/initiation',
   project_certificate: '/projects/billing',
   project_budget: '/projects/budgets',
   project_variation: '/projects/change-orders',

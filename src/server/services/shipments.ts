@@ -1783,6 +1783,9 @@ export async function viewBl(tx: Tx, blNo: string) {
 }
 
 export async function viewContainer(tx: Tx, containerNo: string, id?: string | null) {
+  // An id that is not an id names no container: asked of the database it would be refused as
+  // malformed, and the page would say the screen had failed rather than that there is none (2026-10-12).
+  if (id && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new ShipmentNotFoundError(containerNo);
   const candidates = await tx
     .select()
     .from(shipmentContainer)
