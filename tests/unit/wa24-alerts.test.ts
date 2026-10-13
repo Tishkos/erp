@@ -357,6 +357,16 @@ describe('the one exception to "he speaks only when called" is as wide as it was
     expect(bridge).toMatch(/if \(!toSelf && !maySendTo\(current\(\), to\)\) \{/);
   });
 
+  it('tags the whole group on the team’s message, and only there (2026-10-13: "the tagging should be @all, not specific names")', () => {
+    // The team's message carries the one tag for everybody; a person's own alert keeps their own.
+    expect(alerts).toMatch(/const text = teamMessage\(\{ tags: \[EVERYONE_TAG\], rows: shared\.map/);
+    expect(alerts).toMatch(/const text = alertMessage\(\{ tag: `@\$\{member\.tag\.replace/);
+    // @all becomes every member's address inside an alert to its group — and nowhere else: what the model writes goes through writeTags.
+    expect(bridge).toMatch(/const everyone = alertToItsGroup && roster && roster\.jid === to\.groupJid \? tagEveryone\(message\.text, roster\.members\) : null;/);
+    expect(bridge.match(/tagEveryone\(/g)).toHaveLength(1);
+    expect(teamMessage({ tags: ['@all'], rows: [row()], words: WORDS, locale: 'ar', appUrl: 'x' }).split(/\r?\n/)[1]).toBe('@all');
+  });
+
   it('is the system speaking, never the model: nothing in it is generated', () => {
     expect(alerts.length).toBeGreaterThan(2_000);
     expect(alerts).not.toMatch(/runAgentFor|agent\(|wa\.answer|client\.|readerFor/);

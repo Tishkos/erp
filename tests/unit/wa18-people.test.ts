@@ -7,7 +7,7 @@
  * for Ali, copied as digits, with nothing beside it to make it a tag.
  */
 import { describe, expect, it } from 'vitest';
-import { numberOf, readTags, rosterForPrompt, rosterFrom, writeTags } from '@domain/whatsapp-people';
+import { EVERYONE_TAG, numberOf, readTags, rosterForPrompt, rosterFrom, tagEveryone, writeTags } from '@domain/whatsapp-people';
 import { MAX_ASKED_PICTURES, runAgent, systemPrompt, type AgentMessage } from '@domain/whatsapp-agent';
 
 const users = new Map([
@@ -101,6 +101,37 @@ describe('writing an answer that tags somebody', () => {
   it('with nobody on the roster, changes nothing', () => {
     expect(writeTags('@Ali hello', [])).toEqual({ text: '@Ali hello', mentions: [] });
     expect(readTags('@159386907476204 hello', [])).toEqual({ text: '@159386907476204 hello', mentioned: [] });
+  });
+});
+
+describe('a notice for the whole team says @all (2026-10-13, by direction)', () => {
+  const roster = rosterFrom(participants, { users, names });
+
+  it('keeps the word as written and puts every member’s address beside it — linked to an ERP user or not', () => {
+    const text = `📣 *للفريق — جديد في النظام*
+${EVERYONE_TAG}
+• الإصدار 1.1.0`;
+    const tagged = tagEveryone(text, roster);
+    expect(tagged?.text).toBe(text);
+    expect(tagged?.mentions).toHaveLength(roster.length);
+    expect(new Set(tagged?.mentions)).toEqual(new Set(roster.map((member) => member.tag)));
+  });
+
+  it('is asked for by a line of its own: in the middle of a sentence, in a name or in an address it is not it', () => {
+    expect(tagEveryone('for @Ali only', roster)).toBeNull();
+    expect(tagEveryone('write to all@example.com', roster)).toBeNull();
+    expect(tagEveryone('@allocation is late', roster)).toBeNull();
+    expect(tagEveryone('@@all', roster)).toBeNull();
+    // A notice whose own words say it: the bullet is not the tag line.
+    expect(tagEveryone('• 13 Oct 05:05 — Tell @all about the count', roster)).toBeNull();
+    expect(tagEveryone(['Team', '  @ALL  ', '• one'].join(String.fromCharCode(10)), roster)?.mentions).toHaveLength(roster.length);
+    expect(tagEveryone(['Team', '@all', '• one'].join(String.fromCharCode(13, 10)), roster)?.mentions).toHaveLength(roster.length);
+  });
+
+  it('is never what writeTags does: an answer that says @all tags nobody', () => {
+    const answer = writeTags('I will tell @all about it', roster);
+    expect(answer.text).toBe('I will tell @all about it');
+    expect(answer.mentions).toEqual([]);
   });
 });
 

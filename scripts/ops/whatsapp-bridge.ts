@@ -74,7 +74,7 @@ import { runAgentFor, type AgentClient } from '../../src/server/services/whatsap
 import { cliAgentClient, cliReady } from '../../src/server/services/whatsapp-cli-brain';
 import { AI_TRIGGER, isSelfChat, listensTo, maySendTo, triggerOf } from '../../src/server/domain/whatsapp';
 import { nameOf } from '../../src/server/domain/whatsapp-names';
-import { readTags, rosterForPrompt, rosterFrom, writeTags, type Member, type Participant } from '../../src/server/domain/whatsapp-people';
+import { EVERYONE_TAG, readTags, rosterForPrompt, rosterFrom, tagEveryone, writeTags, type Member, type Participant } from '../../src/server/domain/whatsapp-people';
 import type { AskedPicture } from '../../src/server/domain/whatsapp-agent';
 import { knownNames, rememberNames } from '../../src/server/services/whatsapp-names';
 import { questionForFiles, type SentFile } from '../../src/server/domain/whatsapp-files';
@@ -301,7 +301,11 @@ function transportFor(sock: () => WASocket | null, current: () => Awaited<Return
     const jid = to.groupJid && isGroupJid(to.groupJid) ? to.groupJid : e164ToJid(to.e164);
     // "@Ali" becomes a real tag: the digits WhatsApp wants in the text, and his
     // address beside it. A name that is nobody in the group is left as written.
-    const tagged = to.groupJid && roster && roster.jid === to.groupJid ? writeTags(message.text, roster.members) : { text: message.text, mentions: [] as readonly string[] };
+    // The ERP's own team message says "@all": every member is tagged, by address. Only inside an
+    // alert to its group — an answer the model wrote goes through writeTags, which never does this.
+    const everyone = alertToItsGroup && roster && roster.jid === to.groupJid ? tagEveryone(message.text, roster.members) : null;
+    const tagged =
+      everyone ?? (to.groupJid && roster && roster.jid === to.groupJid ? writeTags(message.text, roster.members) : { text: message.text, mentions: [] as readonly string[] });
     const mentions = tagged.mentions.length > 0 ? { mentions: [...tagged.mentions] } : {};
     // The answer replies to the question it answers — once: in a busy group it
     // says which message it belongs to. A courtesy line does not take the place.
@@ -1156,7 +1160,8 @@ async function sendAlerts(
         .map((row) => group.find((one) => one.e164 === row.e164))
         .filter((member): member is Member => Boolean(member));
       if (tagged.length > 0) {
-        const text = teamMessage({ tags: tagged.slice(0, 20).map((member) => `@${member.tag.replace(/[:@].*$/, '')}`), rows: shared.map((one) => one.row), words, locale, appUrl: appUrl() });
+        // What is the team's is said to the team: one tag for everybody in the group (by direction, 2026-10-13).
+        const text = teamMessage({ tags: [EVERYONE_TAG], rows: shared.map((one) => one.row), words, locale, appUrl: appUrl() });
         const e164 = tagged[0]!.e164 ?? batch.rows[0]!.e164;
         const outId = await withScope(scope, (tx) =>
           wa.recordOutbound(tx, { e164, groupJid: settings.groupJid, body: text, intent: 'alert.team', detail: { notificationIds: shared.map((one) => one.row.id), kinds: [...new Set(shared.map((one) => one.row.kind))], people: tagged.length } }),

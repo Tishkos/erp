@@ -1067,6 +1067,32 @@ export const CASES: readonly EvalCase[] = [
     },
     why: 'several steps asked for at once are ONE plan, read back in order, run on one yes — and nothing has run yet',
   },
+  {
+    id: 'whats-new-en',
+    area: 'system',
+    ask: 'what is new in the latest update?',
+    expect: {
+      tools: ['guide'],
+      says: ['1[.]1', 'Project Initiation'],
+      noProposal: true,
+      script: 'latin',
+      maxSeconds: 180,
+    },
+    why: 'the group is told of a release and invited to ask about it: the answer is the guide’s "What is new" block, not a guess from the menu',
+  },
+  {
+    id: 'whats-new-ar',
+    area: 'system',
+    ask: 'ما الجديد في آخر تحديث للنظام؟',
+    expect: {
+      tools: ['guide'],
+      says: ['1[.]1', 'تأسيس'],
+      noProposal: true,
+      script: 'arabic',
+      maxSeconds: 180,
+    },
+    why: 'the release note goes out in Arabic, so the question it invites comes in Arabic: the same block, answered in Arabic',
+  },
 ];
 
 // ---------------------------------------------------------------------------

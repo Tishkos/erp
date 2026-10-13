@@ -157,6 +157,31 @@ export function writeTags(text: string, roster: readonly Member[]): { readonly t
   return { text: out.replace(/\u0000(\d+)\u0000/g, (_whole, index: string) => held[Number(index)] ?? ''), mentions };
 }
 
+/** The tag that means the whole group, as a person would type it. */
+export const EVERYONE_TAG = '@all';
+
+const EVERYONE_LINE = /^[ \t]*@all[ \t]*$/imu;
+
+/**
+ * A notice for the whole team (2026-10-13, by direction: "the tagging should
+ * be @all, not specific names"): `@all` stays in the text as written, and
+ * every member's address goes beside it — which is what makes WhatsApp notify
+ * each of them, linked to an ERP user or not. Null when the text has no line
+ * that is `@all` and nothing else.
+ *
+ * A line of its own, because that is where the team's message puts its tags
+ * and a notice's own words never are: a subject that happens to say "@all" is
+ * in the middle of its bullet, and tags nobody.
+ *
+ * Only the ERP's own team message is sent this way (the bridge asks this
+ * inside an alert and nowhere else). `writeTags` never does it: what the model
+ * writes cannot tag a whole group by saying so.
+ */
+export function tagEveryone(text: string, roster: readonly Member[]): { readonly text: string; readonly mentions: readonly string[] } | null {
+  if (!EVERYONE_LINE.test(text)) return null;
+  return { text, mentions: [...new Set(roster.map((member) => member.tag).filter((tag) => tag.length > 0))] };
+}
+
 /**
  * The members, for the instructions: who is here, who each is in the ERP, and
  * how to tag them.

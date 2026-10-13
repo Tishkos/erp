@@ -7,6 +7,12 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 
 ## Unreleased
 
+### Changed — the WhatsApp group
+- **A notice for the whole team is tagged `@all`** (by direction, 2026-10-13: "the tagging should be @all, not specific names"). The team's message no longer lists the people it could tag by name; it says `@all`, and every member of the group is notified. A person's own alert still tags that person. An answer written by the AI cannot tag the whole group.
+
+### Added — asking about an update
+- **"What is new" has an answer.** `docs/guide/whats-new.md` holds each release's news and fixes, so the AI answers "what is new in the update?" in the WhatsApp group (`!ai …`) and in the application's assistant from it. The release note sent to the group ends with that invitation.
+
 ## 1.1.0 — 2026-10-13
 
 The second numbered release. Its own work is the Project Guide's **Project
