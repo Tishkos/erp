@@ -64,7 +64,7 @@ Read every register top to bottom:
 
 | Register | What it tells you | Expected on the 2026-10 sheet |
 |---|---|---|
-| Latest run — counts | Rows read per sheet; *Already there* = rows a previous apply created | 58 imports · 80 PMT · 88 PD · 46 B/L · 175 containers · 5 detail · 9 pending-order lines · 36 PD notes |
+| Latest run — counts | Rows read per sheet; *Already there* = rows a previous apply created | 58 imports · 80 PMT · 88 PD · 46 B/L · 175 containers · 5 detail · 9 pending-order lines · 14 PD notes (the Pending sheet is read list by list since 2026-10-13: a date or a status there is not a note) |
 | Totals — sheet against ERP | Invoiced / Paid (SWIFT) / Applied from the sheet; the ERP column fills after apply | 35,309,347.81 · 15,617,285.40 · 23,872,694.40 USD |
 | Suppliers not matched | Fix in §1 | 23 on a fresh database; 0 before apply |
 | Payment applications not imported | Each with its reason (no dashboard row, supplier not matched, no bank named, no USD account, no SWIFT method) | After §1: **3** — `INV-LSCFDF32609004` and `OCV2026-0B30-0001` (no dashboard row), `SA2026030101A` 460,900 (no bank named) |
@@ -76,6 +76,26 @@ Read every register top to bottom:
 
 A row that cannot be imported is **reported and skipped, never guessed**.
 Fix the master data or the sheet copy, dry-run again.
+
+### What the 2026-10 sheet itself needs (read 2026-10-13)
+
+The dry run reports what it cannot match. These are the sheet's own cells, found by reading every sheet against the others; correct them in the workbook before the dry run, or decide to leave them:
+
+| Where | What | Effect if left |
+|---|---|---|
+| BL row 26, `M40251213158&M40251213440` | *BL Total Qty* 108,000; the invoice is 10,800 | The containers carry ten times the goods; the import never reads *all received* |
+| BL row 48, `CSA-AL0004`, B/L `SZUS60349300` | No container number, though 195 are inbounded | The B/L has no container: the goods read *In Process*, not *Received* |
+| BL row 16, B/L `027G578017` | `WHSL6245060` is not a container number (`WHSU6245060` has the right check digit) | Four of its five containers are made |
+| BL row 47, B/L `CHN3871276` | The last "container" is `GGZ3177955`, a B/L number | Reported, not made |
+| Dashboard row 34, `EXP/26/05-031` | Inbounded 3,600 and cleared, with no B/L | No container: it stays *In Process* |
+| Dashboard row 55, `INV-LSCFDF32609001` | PD rejected, marked "rejected" beside *Clear?* | Its 95,628 application arrives *sent*; reject it with a paper after the apply |
+| Dashboard rows 50–51, `0018` and `62` | Services (no PD, no goods) | They are imports with nothing to ship; they never clear by the rule |
+| PMT rows 77–78 | `INV-LSCFDF32609004`, `OCV2026-0B30-0001` have no dashboard row | Not imported (242,872 USD) |
+| BL quantities | `CL260408` 132/109, `CSA-AL0001-2` 270/241, `MS2025060303` 190/185, `ZWN-PEGLJY042226-028` 230/211, `ZWN-PEGLJY042526-038` 420/440, `CSA-AL0004` 190/195 (invoice / B/L) | A real shortage is the warehouse's to claim; a typing mistake is the sheet's |
+
+The dashboard's *Paid* and *Applied* agree with the PMT sheet to the dollar for all 58 imports.
+
+**Where the goods stand after the apply.** A migrated import has no invoice in the ERP, so its page reads the goods' position from what the sheet gave it: a container's own status (*Inbounded* → Received, *On port* → At port, *On the sea* → On board); with no container, **In Process** once a payment has its SWIFT date and **On Process (Without SWIFT)** while its applications wait for one. On the 2026-10 sheet: 23 received, 14 on board, 2 at port, 10 in process, 8 without SWIFT, 1 with nothing recorded (`INV-LSCFDF32607004`).
 
 ## 4. Apply
 

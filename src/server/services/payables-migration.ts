@@ -707,6 +707,9 @@ async function write(tx: Tx, ctx: ActorContext, data: SheetImport, look: Lookups
         expiryDate: expiry,
         bankCode: pd.swift ? (bankBySwift.get(pd.swift) ?? null) : null,
         bankSwift: pd.swift,
+        // 0420 — the platform's "invoice no.": what the sheet writes beside the PD, kept as written. For a
+        // PD with no import here (the holding list) it is the only thing that says which invoice it is for.
+        invoiceNo: pd.reference ? pd.reference.slice(0, 64) : null,
         statusCode,
         statusDate: pd.registrationDate,
         lastNote: notes,
@@ -867,7 +870,9 @@ async function containersFor(
       statusCode,
       effectiveDate: bl.eta ?? bl.blDate ?? today(),
       source: 'sheet_import',
-      note: `As the sheet records it (BL row ${bl.row}): ${bl.shippingStatus ?? 'no status'}`,
+      note:
+        `As the sheet records it (BL row ${bl.row}): ${bl.shippingStatus ?? 'no status'}` +
+        (bl.portFileSent && !bl.portFileSentOn ? '; port file sent (the sheet gives no date)' : ''),
       recordedBy: ctx.principal.userId,
     });
     for (const [n, line] of lines.entries()) {

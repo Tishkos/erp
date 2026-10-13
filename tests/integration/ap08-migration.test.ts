@@ -219,6 +219,9 @@ describe('A20 · the sheet, dry run first', () => {
     expect(apps[1].note).toMatch(/Verify the SWIFT date/);
     // The PDs with no import wait in the holding list for the customs officer.
     expect(await count('customs_pd', 'payable_id is null')).toBe(2);
+    // 0420 — each PD keeps the invoice number the sheet writes beside it; a row with none keeps none.
+    expect(await count('customs_pd', `invoice_no = 'AIK-001' and pd_no = '1001'`)).toBe(1);
+    expect(await count('customs_pd', `invoice_no is null`)).toBe(1);
     expect((await ownerPool.query(`select last_note from customs_pd where pd_no = '1001'`)).rows[0].last_note).toBe(
       'settled with customs · all file at the bank',
     );
@@ -333,7 +336,8 @@ describe('A20 · the sheet, dry run first', () => {
     const path = process.env.QS_DASHBOARD_XLSX;
     if (!path || !existsSync(path)) return context.skip();
     const { report } = await dryRun(readFileSync(path));
-    expect(report.counts).toMatchObject({ imports: 58, payments: 80, pds: 88, bls: 46 });
+    // Fourteen PDs have a remark in words on the Pending sheet; its dates and statuses are not notes.
+    expect(report.counts).toMatchObject({ imports: 58, payments: 80, pds: 88, bls: 46, containers: 175, notes: 14 });
     expect(report.totals.sheet).toEqual({ invoiced: '35309347.8100', paid: '15617285.4000', applied: '23872694.4000' });
     expect(report.verifySwift).toHaveLength(11);
     expect(report.pdHolding.length).toBeGreaterThanOrEqual(31);

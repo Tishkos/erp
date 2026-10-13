@@ -87,6 +87,8 @@ export interface BlRow {
   readonly eta: string | null;
   readonly shippingStatus: string | null;
   readonly portFileSentOn: string | null;
+  /** The sheet answers "PORT File Sent?" with YES more often than with a date. */
+  readonly portFileSent: boolean;
   readonly blDate: string | null;
   readonly containers: string[];
   readonly invalidContainers: string[];
@@ -244,6 +246,46 @@ function table(sheets: ReadonlyMap<string, Rows>, sheet: string, first: string, 
 
 const at = (cells: Cell[], index: number): Cell => (index >= 0 ? (cells[index] ?? null) : null);
 
+/** What the BL sheet writes under "PORT File Sent?" when it gives no date. */
+const SENT_WORDS: ReadonlySet<string> = new Set(['yes', 'y', 'sent', 'done', 'true']);
+
+const PENDING_FIRST: ReadonlySet<string> = new Set(['pdno', 'pdnumber']);
+const PENDING_REFERENCE: ReadonlySet<string> = new Set(['invoicepo', 'invoiceno', 'invoicenumber']);
+
+/**
+ * The Pending sheet is not one table: the customs officer keeps several lists
+ * on it, one under another, each with a header row of its own that begins
+ * "PD No." or "PD Number" — the PDs with a remark, the submitted ones, the
+ * expired ones with their dates, the ones waiting for a port file.
+ *
+ * A note is what is written in words beside a PD: under a "Notes" header, or
+ * to the right of the list's last header (where the remarks are, unlabelled).
+ * A date, a status or an invoice number is the list's own column and never a
+ * note — read as one table, the sheet gave "46224" and "Submited" as notes.
+ */
+function pendingRows(rows: Rows): PendingRow[] {
+  const out: PendingRow[] = [];
+  let headers: string[] | null = null;
+  for (const [index, cells] of rows.entries()) {
+    if (PENDING_FIRST.has(norm(cells[0] ?? null))) {
+      headers = cells.map(norm);
+      continue;
+    }
+    if (!headers) continue;
+    const pdNo = pdNumberOf(cells[0] ?? null);
+    if (!/^[0-9]+$/.test(pdNo)) continue;
+    const list = headers;
+    const notes = cells
+      .map((cell, column) => (column > 0 && typeof cell === 'string' && ['notes', ''].includes(list[column] ?? '') ? cleanText(cell) : ''))
+      .filter((text) => text !== '' && pdStatusOf(text) === null)
+      .join(' — ');
+    if (!notes) continue;
+    const referenceAt = list.findIndex((header) => PENDING_REFERENCE.has(header));
+    out.push({ row: index + 1, pdNo, reference: referenceAt >= 0 ? cleanText(cells[referenceAt] ?? null) || null : null, notes });
+  }
+  return out;
+}
+
 /** The workbook, read into the rows the import creates. */
 export function readSheets(sheets: ReadonlyMap<string, Rows>): SheetImport {
   const fixes: Fix[] = [];
@@ -333,24 +375,8 @@ export function readSheets(sheets: ReadonlyMap<string, Rows>): SheetImport {
     });
   }
 
-  // ── Pending: notes the customs officer keeps per PD ───────────────────
-  const pendingTable = table(sheets, 'Pending', 'PD No.', ['PD No.', 'Notes']);
-  const pending: PendingRow[] = [];
-  for (const { row, cells } of pendingTable?.rows ?? []) {
-    const pdNo = pdNumberOf(at(cells, pendingTable!.column('PD No.')));
-    const extra = cells
-      .slice(pendingTable!.column('Notes'))
-      .map(cleanText)
-      .filter(Boolean)
-      .join(' — ');
-    if (!pdNo || !extra) continue;
-    pending.push({
-      row,
-      pdNo,
-      reference: pendingTable!.has('Invoice / PO') ? cleanText(at(cells, pendingTable!.column('Invoice / PO'))) || null : null,
-      notes: extra,
-    });
-  }
+  // ── Pending: the customs officer's working lists, each under its own header ──
+  const pending = pendingRows(sheets.get('Pending') ?? []);
 
   // ── CTN No. (hidden): containers per B/L, when the BL row has none ─────
   const ctnTable = table(sheets, 'CTN No.', 'BL No.', ['BL No.', 'CTN NO.']);
@@ -372,6 +398,7 @@ export function readSheets(sheets: ReadonlyMap<string, Rows>): SheetImport {
     const reference = cleanText(at(cells, blTable!.column('Po/INV. NO.')));
     const listed = blTable!.has('CTN No.') ? String(at(cells, blTable!.column('CTN No.')) ?? '') : '';
     const parsed = parseContainerList(listed.trim() ? listed : (containersByBl.get(blNo) ?? ''));
+    const portFile = blTable!.has('PORT File Sent?') ? at(cells, blTable!.column('PORT File Sent?')) : null;
     bls.push({
       row,
       reference,
@@ -382,7 +409,8 @@ export function readSheets(sheets: ReadonlyMap<string, Rows>): SheetImport {
       totalQty: amountOf(at(cells, blTable!.column('BL Total Qty'))),
       eta: dateOf(at(cells, blTable!.column('ETA'))),
       shippingStatus: cleanText(at(cells, blTable!.column('Shipping Status'))) || null,
-      portFileSentOn: blTable!.has('PORT File Sent?') ? dateOf(at(cells, blTable!.column('PORT File Sent?'))) : null,
+      portFileSentOn: dateOf(portFile),
+      portFileSent: portFile === true || dateOf(portFile) !== null || SENT_WORDS.has(cleanText(portFile).toLowerCase()),
       blDate: dateOf(at(cells, blTable!.column('BL Date'))),
       containers: parsed.numbers,
       invalidContainers: parsed.invalid,
@@ -427,12 +455,17 @@ export function readSheets(sheets: ReadonlyMap<string, Rows>): SheetImport {
   }
 
   // ── Warehouse Master: names only, reconciled in the report ────────────
+  // The names are under "Warehouse Name" (the codes W01… beside them are the
+  // sheet's own); a sheet with one column is that column. A placeholder the
+  // sheet has not named yet ("Warehouse 3") is nobody's warehouse.
   const masterRows = sheets.get('Warehouse Master') ?? [];
+  const masterHeader = masterRows.findIndex((cells) => cells.some((cell) => norm(cell) === 'warehousename'));
+  const nameColumn = masterHeader >= 0 ? masterRows[masterHeader]!.findIndex((cell) => norm(cell) === 'warehousename') : 0;
   const warehouseNames = [
     ...new Set(
       masterRows
-        .slice(1)
-        .map((cells) => cleanText(cells[0] ?? null))
+        .slice(masterHeader >= 0 ? masterHeader + 1 : 1)
+        .map((cells) => cleanText(cells[nameColumn] ?? null))
         .filter((name) => name && !/warehouse/i.test(name)),
     ),
   ];

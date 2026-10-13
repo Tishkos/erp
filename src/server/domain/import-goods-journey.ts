@@ -89,6 +89,16 @@ export interface GoodsJourneyFacts {
   readonly released: { readonly applicationNo: string; readonly on: string | null } | null;
   /** The first posted import invoice and its posting's business date. */
   readonly posted: { readonly invoiceNo: string; readonly on: string | null } | null;
+  /**
+   * A migrated import (the sheet's, `source = 'sheet_import'`) that has no invoice in the ERP: nothing
+   * posted it and nothing held it, so its payment applications say where its goods stand — as the
+   * advance does for an import born here. `paid` is the first application the bank confirmed (its SWIFT
+   * date); `waiting` is the application that stands while none is paid. Null or absent for every other import.
+   */
+  readonly legacy?: {
+    readonly paid: { readonly applicationNo: string; readonly on: string | null } | null;
+    readonly waiting: { readonly applicationNo: string } | null;
+  } | null;
   /** Null when the viewer may not read B/Ls and containers. */
   readonly shipping: {
     readonly bls: readonly { readonly blNo: string; readonly blDate: string | null }[];
@@ -193,6 +203,26 @@ export function goodsJourney(facts: GoodsJourneyFacts): GoodsStepView[] {
           })
         : step('in_process', 'pending', { detail: phrase('journey_released_pending') }),
     );
+  } else if (facts.legacy && !facts.posted) {
+    // ── A migrated import has no invoice here: its payment applications stand for the advance.
+    // Waiting for the SWIFT is On Process (Without SWIFT); the first SWIFT, or goods already on a
+    // B/L, is In Process.
+    const { paid, waiting } = facts.legacy;
+    const shipped = (facts.shipping?.bls.length ?? 0) > 0;
+    if (paid) {
+      steps.push(
+        step('in_process', 'done', { on: paid.on, document: { kind: 'payment_application', no: paid.applicationNo }, detail: phrase('journey_legacy_paid') }),
+      );
+    } else if (shipped) {
+      steps.push(step('in_process', 'done', { detail: phrase('journey_legacy_shipped') }));
+    } else if (waiting) {
+      steps.push(
+        step('on_process', 'partial', { document: { kind: 'payment_application', no: waiting.applicationNo }, detail: phrase('journey_legacy_waiting') }),
+        step('in_process', 'pending', { detail: phrase('journey_released_pending') }),
+      );
+    } else {
+      steps.push(step('in_process', 'pending', { detail: phrase('journey_legacy_unpaid') }));
+    }
   } else {
     // ── Without an advance, In Process is the first step: the invoice posted.
     steps.push(
@@ -382,10 +412,13 @@ export function containerWhere(
 
 /** Where the import's goods are now — by container, and as a whole. */
 export function goodsWhereNow(facts: GoodsJourneyFacts): GoodsWhereNow {
-  const held = facts.heldNow || (facts.advance !== null && heldForAdvance(facts) && facts.released === null && facts.advance.posted);
+  // A migrated import with no invoice here: waiting for its first SWIFT is the hold; a SWIFT is In Process.
+  const legacy = facts.legacy && !facts.posted ? facts.legacy : null;
+  const waitsForSwift = Boolean(legacy && legacy.waiting && !legacy.paid && (facts.shipping?.bls.length ?? 0) === 0);
+  const held = facts.heldNow || (facts.advance !== null && heldForAdvance(facts) && facts.released === null && facts.advance.posted) || waitsForSwift;
   const containers = (facts.shipping?.containers ?? []).map((box) => containerWhere(box, held));
   if (containers.length === 0) {
-    const place: GoodsPlace | null = held ? 'on_process' : facts.posted || facts.released ? 'in_process' : null;
+    const place: GoodsPlace | null = held ? 'on_process' : facts.posted || facts.released || legacy?.paid ? 'in_process' : null;
     return { place, counts: place ? [{ place, count: 0, warehouses: [] }] : [], containers };
   }
   const order: GoodsPlace[] = [...GOODS_PLACES, 'missing'];

@@ -695,6 +695,8 @@ What it is for: Loads the company's payables tracking workbook (QS_DASHBOARD.xls
 4. Nothing is written except the report. Read it — see "How to read the report — Payables Sheet Migration".
 5. Suppliers are matched by name and are never created by this import. For each supplier listed as not matched, correct the name on the supplier's record (or create the supplier), then run the dry run again.
 6. Where the report says a bank has no USD account, open the account first, then run again.
+7. What is brought in is tracking, not accounting: the imports, their payment applications (Paid where the sheet has a SWIFT date, Sent to the bank where it has only an application date, Draft where it has neither), the PDs with their status, bank and the invoice number written beside them, and the B/Ls and containers with where they are (Received, At port, On board). No purchase invoice, no journal and no stock is created.
+8. A PD's note is what the sheet's Pending page says in words beside it. Dates and statuses written there are not notes.
 
 ### How to apply and sign off — Payables Sheet Migration
 1. Open Settings → Administration → Payables Sheet Migration, address /administration/payables-migration.

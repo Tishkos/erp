@@ -188,3 +188,57 @@ describe('IMP01 · the goods’ journey', () => {
     });
   });
 });
+
+describe('IMP01 · a migrated import has no invoice here: its payment applications say where the goods stand (2026-10-13)', () => {
+  const waiting = { paid: null, waiting: { applicationNo: 'PAYAPP-HQ-2026-000040' } };
+  const paid = { paid: { applicationNo: 'PAYAPP-HQ-2026-000041', on: '2026-06-19' }, waiting: null };
+  const bl = { bls: [{ blNo: 'GGZ3177955', blDate: '2026-09-17' }], containers: [], containersAddedOn: null };
+
+  it('waiting for its first SWIFT it is On Process (Without SWIFT), with the application that waits', () => {
+    const facts: GoodsJourneyFacts = { ...bare, legacy: waiting };
+    expect(steps(facts).slice(0, 3)).toEqual(['on_process:partial*', 'in_process:pending', 'bl:pending']);
+    expect(goodsJourney(facts)[0]).toMatchObject({
+      document: { kind: 'payment_application', no: 'PAYAPP-HQ-2026-000040' },
+      detail: { key: 'journey_legacy_waiting' },
+    });
+    expect(goodsWhereNow(facts).place).toBe('on_process');
+  });
+
+  it('with a SWIFT it is In Process since the SWIFT date, and never shows a hold it did not have', () => {
+    const facts: GoodsJourneyFacts = { ...bare, legacy: paid };
+    expect(steps(facts).slice(0, 2)).toEqual(['in_process:done', 'bl:pending*']);
+    expect(goodsJourney(facts)[0]).toMatchObject({
+      on: '2026-06-19',
+      document: { kind: 'payment_application', no: 'PAYAPP-HQ-2026-000041' },
+      detail: { key: 'journey_legacy_paid' },
+    });
+    expect(goodsWhereNow(facts).place).toBe('in_process');
+  });
+
+  it('goods already on a B/L are past the hold whatever was paid; with nothing recorded nothing is claimed', () => {
+    const shipped: GoodsJourneyFacts = { ...bare, legacy: waiting, shipping: bl };
+    expect(steps(shipped).slice(0, 2)).toEqual(['in_process:done', 'bl:done']);
+    expect(goodsJourney(shipped)[0]).toMatchObject({ on: null, detail: { key: 'journey_legacy_shipped' } });
+    const nothing: GoodsJourneyFacts = { ...bare, legacy: { paid: null, waiting: null } };
+    expect(steps(nothing)[0]).toBe('in_process:pending*');
+    expect(goodsJourney(nothing)[0]).toMatchObject({ detail: { key: 'journey_legacy_unpaid' } });
+    expect(goodsWhereNow(nothing).place).toBeNull();
+  });
+
+  it('a container tells its own place: on board, at port, received', () => {
+    const box = (id: string, statusCode: string) => ({ id, containerNo: `MSCU000000${id}`, customsClearedOn: null, receivedOn: null, statusCode });
+    const sailing: GoodsJourneyFacts = {
+      ...bare,
+      legacy: paid,
+      shipping: { ...bl, containers: [box('1', 'on_sea'), box('2', 'at_port'), box('3', 'received')] },
+    };
+    expect(goodsWhereNow(sailing).containers.map((one) => one.place)).toEqual(['on_board', 'at_port', 'received']);
+    expect(goodsWhereNow(sailing).place).toBe('split');
+  });
+
+  it('once an invoice posts here the import reads as any other', () => {
+    const facts: GoodsJourneyFacts = { ...bare, legacy: waiting, posted: { invoiceNo: 'PUR-HQ-2026-000009', on: '2026-10-13' } };
+    expect(goodsJourney(facts)[0]).toMatchObject({ step: 'in_process', state: 'done', detail: { key: 'journey_invoice_posted' } });
+    expect(goodsWhereNow(facts).place).toBe('in_process');
+  });
+});

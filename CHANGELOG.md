@@ -10,6 +10,12 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 ### Changed — the WhatsApp group
 - **A notice for the whole team is tagged `@all`** (by direction, 2026-10-13: "the tagging should be @all, not specific names"). The team's message no longer lists the people it could tag by name; it says `@all`, and every member of the group is notified. A person's own alert still tags that person. An answer written by the AI cannot tag the whole group.
 
+### Changed — the Payables Sheet Migration, read again before the live cut-over
+- **PD notes are the words on the Pending sheet, nothing else.** The sheet keeps five lists one under another; read as one table, a date ("46224") or a status ("Submited") became the note of 22 PDs. Each list is now read under its own header: 14 notes on the 2026-10 sheet.
+- **A migrated PD carries its invoice number** (the platform's "invoice no."), as the sheet writes it beside the PD. "PORT File Sent? YES" is kept on the container's history. The Warehouse Master is read by its names.
+- **A migrated import says where its goods are.** With no purchase invoice in the system, its page reads the goods' position from its payment applications and containers: On Process (Without SWIFT) while they wait for the SWIFT, In Process from the first SWIFT date, then On board / At port / Received by container.
+- The runbook lists what the 2026-10 workbook itself needs corrected, and what live needs first (six suppliers, three USD bank accounts, a true USD rate).
+
 ### Added — asking about an update
 - **"What is new" has an answer.** `docs/guide/whats-new.md` holds each release's news and fixes, so the AI answers "what is new in the update?" in the WhatsApp group (`!ai …`) and in the application's assistant from it. The release note sent to the group ends with that invitation.
 

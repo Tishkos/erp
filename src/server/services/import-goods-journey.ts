@@ -23,7 +23,7 @@
  * picture never shows a fake "pending". The arithmetic of the steps is the
  * pure `domain/import-goods-journey.ts`.
  */
-import { and, asc, eq, inArray, isNull, ne, or } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, ne, notInArray, or } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import { apInvoice, payableEvent, paymentApplication, warehouse } from '../db/schema';
 import { businessDateOf } from '../domain/business-date';
@@ -121,6 +121,22 @@ export async function factsFor(tx: Tx, principal: Principal, payableId: string):
 
   const heldNow = (await advanceHold.heldOf(tx, payableId)).length > 0;
 
+  // A migrated import with no invoice here (the sheet's): its applications say where the goods stand —
+  // the first the bank confirmed, else the one that waits. Read only for those; every other import has none.
+  let legacy: GoodsJourneyFacts['legacy'] = null;
+  if (owner.source === 'sheet_import' && invoices.length === 0) {
+    const standing = await tx
+      .select({ applicationNo: paymentApplication.applicationNo, status: paymentApplication.status, confirmedOn: paymentApplication.confirmedOn })
+      .from(paymentApplication)
+      .where(and(eq(paymentApplication.payableId, payableId), notInArray(paymentApplication.status, ['rejected', 'cancelled'])))
+      .orderBy(asc(paymentApplication.confirmedOn), asc(paymentApplication.applicationNo));
+    const paid = standing.find((one) => one.status === 'confirmed' || one.status === 'debited');
+    legacy = {
+      paid: paid ? { applicationNo: paid.applicationNo, on: paid.confirmedOn ? String(paid.confirmedOn) : null } : null,
+      waiting: !paid && standing[0] ? { applicationNo: standing[0].applicationNo } : null,
+    };
+  }
+
   // The shipping lane — B/Ls and containers, as the PD page reads them; cancelled ones are not the journey.
   let shipping: GoodsJourneyFacts['shipping'] = null;
   if (mayRead(principal, STAGE_SOURCES.container)) {
@@ -195,6 +211,7 @@ export async function factsFor(tx: Tx, principal: Principal, payableId: string):
     heldNow,
     released: releasedNo ? { applicationNo: releasedNo, on: releasing?.confirmedOn ? String(releasing.confirmedOn) : dayOf(releasedLine?.occurredAt) } : null,
     posted: posted ? { invoiceNo: posted.invoiceNo, on: dayOf(posted.postedAt) ?? (posted.invoiceDate ? String(posted.invoiceDate) : null) } : null,
+    legacy,
     shipping,
     customs,
     landed: landedCost,
