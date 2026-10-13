@@ -7,6 +7,54 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 
 ## Unreleased
 
+## 1.1.0 — 2026-10-13
+
+The second numbered release. Its own work is the Project Guide's **Project
+Initiation** and the fix for the application failing when moving between
+modules. It is also the first number given since 1.0.0, so it takes in
+everything that reached the live system under that number: the entries
+further down, written as each landed, and the work of 2026-10-04 to
+2026-10-11, which `AGENTS.md` records section by section rather than line by
+line here.
+
+### Added — Project Initiation (the Project Guide, by direction 2026-10-12)
+- **A screen of its own, first under Projects.** Every customer project starts as a Project Initiation, numbered PIN-{BRANCH}-{YYYY}-{SERIAL}, opened with the guide's Main Project Initiation Selector: a **Direct Sales Project** or a **Tender Project**.
+- **Workflow One — Direct Sales:** 1 Sales Lead → 2 Opportunity and Pre-Sales Form → 3 Site Survey Design → 4 BOQ Costing → 5 Proposal Follow-up → 6 Contract Signing. **Workflow Two — Tender:** 7 Tender Lead → 8 Feasibility Review and Tender Qualification (Go / No-Go) → 9 Site Visit & Pre-Bid Meeting → 10 Tender Design BOQ → 11 Compliance Matrix & Bidding → 12 Submission & Award. One stage at a time; a note on the record says what the current stage still needs, and *Next stage* appears when nothing is missing.
+- **The Pre-Sales Form:** site coordinates (GPS), governorate, area, land or rooftop; the contact person, job title, phones and official email; the system type (On-Grid, Off-Grid, Hybrid, BESS, Solar Pumping); the customer's documents behind the stage's own paperclip.
+- **The bill of quantities** in the record's lines — material, shipping and installation costs with their totals. It is the approved BOQ once the record leaves its stage, and does not change again.
+- **The tender's own parts:** the issuing entity, reference, deadline and link to the tender documents; Go / No-Go approved by somebody who holds `approve` (a No-Go needs its reason and ends the record); the site visit's minutes and clarifications; the compliance matrix, every line answered; the bid price and the bank guarantee, issued before the bid and converted or released at the award.
+- **Follow-up activities** — calls, meetings, site visits, clarifications, addenda — kept as written.
+- **The conversion point.** The signed contract is confirmed by somebody other than whoever opened the record (a super user alone excepted): the project is created and released in the same step, of type Direct Sales Project or Tender Project, with the contract's value, the BOQ's total as its baseline budget and the dates and manager given. The project's page shows the initiation's form, files and BOQ — read from the initiation, never copied.
+- **A Direct Sales or a Tender project is made only this way.** The New project form no longer offers the two types, and one typed in by hand is refused.
+- **Four doors** on the record (print, attachments, notes, history); each stage that names documents has its own paperclip; the Proposal stage prints the technical and commercial proposal.
+- Amounts are in IQD, as everywhere in Projects. Global Search does not list initiations yet.
+- Migration 0421. Controls C-93, C-94. Guide: `docs/guide/projects.md` › Project Initiation.
+
+### Fixed
+- **Moving from one module to another no longer takes the application down.** With the modules in the side panel or the bottom bar, the top bar's list of the open module's headings used the "More" measurement of the module just left for the first drawing of the next. From Settings to Accounting it named entries that did not exist, and the whole application was replaced by "This screen could not be shown". It happened on every such move, for everybody on the side panel — the company's default. The server never logged it: it was the browser's. The bar and the page tabs now keep a measurement with the list it was taken of.
+- **A record that is not there is "does not exist", not an error.** A project that does not exist (on its own page and on six project workspaces given a stale code), a user page and a container asked for by something that is not an id, each showed the error page. All 74 record screens were asked for a record nobody has; these three were the failures. The not-found page now speaks of the page *or record*, where it spoke only of the menu tree.
+- **The "Enrol your authenticator" notification** showed a raw key in the bell: its label asked for a date it was never given.
+- **A slow database is no longer read as a sign-out.** A connection the pool could not hand out in time sent the person to the sign-in form and answered the chat and the bell 401, on which both stop until the page is reloaded. Only a missing, unknown, expired or revoked session is "signed out" now; a transaction that could not get a connection is tried twice more, and nothing after its first statement is ever repeated. Control C-95.
+
+### Changed
+- **The caller is resolved once per page.** The layout, the shell, the page and each of its doors each asked who the reader was, in a transaction of their own — about sixteen database transactions for one click, about eight now.
+- Signing out clears the session cookie even when the session cannot be revoked at that moment.
+
+### Migrations
+- `0421_project_initiation` — additive: four new tables, their triggers, row security and grants; the series `PROJECT_INITIATION`; two rows in `project_type` (Direct Sales Project, Tender Project) and nine in `lead_source`. No existing row is changed.
+- `0240` to `0420` were applied to the live database by the deploys made under 1.0.0; this release does not run them again.
+
+### Rollback
+- Application: `RUNBOOK-host-build.md` § 8 — the previous build is kept as `.next-prev`. With the application rolled back and 0421 left in place, its tables are simply unused; `/healthz` reports the migrations ahead of the build until the release is put back.
+- Data: nothing existing is touched. The pre-migration dump `deploy.sh` takes is the way back from 0421 itself, restored beside the live database (`RUNBOOK-database-recovery.md`).
+
+### Test evidence
+- Type check and the unit suite (159 files, 2,587 tests) green.
+- Integration, against a real PostgreSQL: `pg01-project-initiation` (both workflows end to end, the database's rules, the branch wall), the Project System suites `pm01`–`pm03` and `projects`, `ops14-print-export`, `ops16-document-table-lists`, `hd05-rls-coverage`, `shared-record-notes`, `notification-center`, `im2-02-bl`, `crm`. The whole suite runs again inside `deploy.sh`.
+- Browser: `project-initiation` (a direct sale to an Active Project; a tender through Go to lost; Arabic at a phone's width), `section-bar-modules` (fails on the old bar, passes on the new), `missing-records` (every record screen), and the existing `navigation-layouts` side-panel and bottom-bar tests and `tabs-navigate`.
+
+### Also in this release — delivered since 1.0.0
+
 ### Added — supplier bank accounts on the supplier's profile (IMPROVEMENT-002, sponsor 2026-10-03)
 - **Bank accounts on the profile.** A supplier may hold several accounts. Each takes the bank (from the bank list, or named), branch, address, beneficiary (defaults to the supplier), account no. and/or IBAN, SWIFT/BIC, currency (from the currency list), an intermediary bank and SWIFT, and a note.
 - **Refused when entered:** an IBAN failing its check digits or its country's length, a SWIFT/BIC of the wrong shape, an inactive currency, or the same account twice on one supplier. The same account on another partner is the duplicate warning, and it can be confirmed.
