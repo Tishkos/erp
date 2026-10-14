@@ -5,7 +5,9 @@
  *   npx tsx scripts/ops/ask-noah.ts <email> "<question>" [--picture <file>] [--propose]
  *
  * `--picture` shows him a picture with the question, as a photo or screenshot
- * sent to the group with !ai in its caption would be.
+ * sent to the group with !ai in its caption would be. A `.pdf` is shown as the
+ * bridge shows a scanned PDF: its pages as pictures (needs poppler's
+ * `pdfinfo` / `pdftoppm`, which the server has).
  *
  * `--propose` lets him propose and preview as he does for a contact whose
  * Actions switch is on: the proposal is PRINTED and never run (nobody here
@@ -26,7 +28,9 @@
 import 'dotenv/config';
 import { readFileSync } from 'node:fs';
 import { sql } from 'drizzle-orm';
-import type { AskedPicture } from '../../src/server/domain/whatsapp-agent';
+import { MAX_ASKED_PAGES, type AskedPicture } from '../../src/server/domain/whatsapp-agent';
+import { scanQuestion } from '../../src/server/domain/whatsapp-files';
+import { pdfPagePictures } from '../../src/server/services/whatsapp-files';
 import type { PendingAction } from '../../src/server/domain/whatsapp-do';
 import { db, withScope } from '../../src/server/db/client';
 import { readerFor, readerModel } from '../../src/server/services/reader';
@@ -43,6 +47,17 @@ const question = rest
   .filter((_, index) => pictureAt < 0 || (index !== pictureAt && index !== pictureAt + 1))
   .join(' ')
   .trim();
+
+/** A PDF's pages as the bridge hands over a scan's, with the question framed as it frames one. */
+async function pdfPages(): Promise<{ readonly pictures: AskedPicture[]; readonly question: string }> {
+  const drawn = await pdfPagePictures(readFileSync(pictureFile), MAX_ASKED_PAGES);
+  if (drawn.pages.length === 0) throw new Error(`${pictureFile}: ${drawn.note ?? 'no pages could be drawn'}`);
+  console.error(`(${pictureFile}: ${drawn.pages.length} of ${drawn.total} page(s) drawn)`);
+  return {
+    pictures: drawn.pages.map((page) => ({ mediaType: 'image/jpeg' as const, base64: page.base64, page: page.page })),
+    question: scanQuestion({ caption: question, fileName: pictureFile.replace(/^.*[\\/]/, ''), shown: drawn.pages.length, total: drawn.total, replied: false }),
+  };
+}
 
 /** The picture as the bridge would hand it over: its type from its name, its bytes as base64. */
 function pictures(): AskedPicture[] {
@@ -64,10 +79,11 @@ async function main(): Promise<void> {
   if (!client) throw new Error('no brain is usable here: the claude CLI is not signed in and there is no ANTHROPIC_API_KEY');
 
   const settings = await withScope({ userId: user.id, branchCode: '', isSuperUser: true }, (tx) => wa.settings(tx));
+  const sent = /\.pdf$/i.test(pictureFile) ? await pdfPages() : { pictures: pictures(), question };
   const started = Date.now();
   const reply = await wa.answer({
     userId: user.id,
-    text: question,
+    text: sent.question,
     settings,
     agent: (ctx, asked, userName) =>
       runAgentFor({
@@ -77,7 +93,7 @@ async function main(): Promise<void> {
         question: asked,
         userName,
         chat: 'terminal',
-        pictures: pictures(),
+        pictures: sent.pictures,
         ...(mayPropose ? { actions: { chat: 'terminal', propose: (pending: PendingAction) => proposals.push(pending) } } : {}),
       }),
   });

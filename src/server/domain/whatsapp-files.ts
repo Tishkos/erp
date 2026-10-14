@@ -52,6 +52,50 @@ export interface SentFile {
   readonly sheets: readonly SheetShape[];
   /** When it arrived, so "the file you sent earlier" has an order to it. */
   readonly at: string;
+  /**
+   * A PDF with no text in it — a scan (2026-10-14). Its pages are shown to
+   * him as pictures with the question it came with (`scanQuestion`).
+   */
+  readonly scanned?: boolean;
+}
+
+/**
+ * Below this many letters and digits a PDF has no text worth the name: a scan,
+ * or a scan with a stamp's worth of text laid over it.
+ */
+const SCAN_TEXT_MIN = 40;
+
+/** Whether what `pdftotext` found is too little to be the document: then it is a scan. */
+export function looksScanned(text: string): boolean {
+  return text.replace(/\s+/g, '').length < SCAN_TEXT_MIN;
+}
+
+/**
+ * The question that goes with a scanned PDF's pages (2026-10-14, by direction —
+ * Noah told the group "I couldn't read 1.pdf … it's a scan", ISS-20261014-001).
+ *
+ * The pages travel as pictures in front of these words, in order. Pages past
+ * the cap are named, so an answer is never quietly based on the first part of
+ * a long scan.
+ */
+export function scanQuestion(input: {
+  readonly caption: string;
+  readonly fileName: string;
+  readonly shown: number;
+  readonly total: number;
+  readonly replied: boolean;
+}): string {
+  const asked = input.caption.trim() || 'Read this document: say what it is and what stands out in it, and ask what they want done with it.';
+  const pages = input.total === 1 ? 'one page' : `${input.total} pages`;
+  const which = input.shown === 1 ? 'that page is the picture above' : `pages 1–${input.shown} are the pictures above, in order`;
+  const rest =
+    input.total > input.shown
+      ? ` Pages ${input.shown + 1}–${input.total} were NOT shown to you: say so, and ask for them in another message (a PDF of those pages, or photos of them).`
+      : '';
+  return (
+    `${asked}\n\n[A scanned PDF, "${input.fileName}"${input.replied ? ', from the message they replied to,' : ''} is attached: it has ${pages} and ${which}. ` +
+    `It has no text inside, so read it from the pictures — exactly what is written; name anything you cannot make out instead of guessing.${rest}]`
+  );
 }
 
 /**

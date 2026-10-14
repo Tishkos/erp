@@ -106,6 +106,8 @@ export type AgentMessage =
 export interface AskedPicture {
   readonly mediaType: ImageBlock['source']['media_type'];
   readonly base64: string;
+  /** A page of a scanned PDF, counted from 1 (2026-10-14); a photo has none. */
+  readonly page?: number;
 }
 
 /** One exchange already in the chat, oldest first. */
@@ -905,6 +907,13 @@ const MAX_ROUNDS = 16;
 /** How many pictures of theirs one question may carry to the model. */
 export const MAX_ASKED_PICTURES = 3;
 
+/**
+ * How many pages of a scanned PDF one question may carry, besides those
+ * pictures (2026-10-14): a supplier's invoice set runs to a few pages, and a
+ * page past this is named to him as not shown (`scanQuestion`).
+ */
+export const MAX_ASKED_PAGES = 10;
+
 /** Where a question comes from: the WhatsApp group, or the AI dock in the application (2026-10-07). */
 export type AgentMedium = 'whatsapp' | 'web';
 
@@ -956,7 +965,10 @@ export async function runAgent(input: {
     // the bot said. Tool traffic from earlier questions is not replayed.
     messages.push(turn.role === 'user' ? { role: 'user', content: turn.text } : { role: 'assistant', content: turn.text });
   }
-  const pictures = (input.pictures ?? []).slice(0, MAX_ASKED_PICTURES);
+  const pictures = [
+    ...(input.pictures ?? []).filter((picture) => picture.page === undefined).slice(0, MAX_ASKED_PICTURES),
+    ...(input.pictures ?? []).filter((picture) => picture.page !== undefined).slice(0, MAX_ASKED_PAGES),
+  ];
   messages.push(
     pictures.length > 0
       ? {

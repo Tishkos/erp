@@ -75,11 +75,11 @@ import { cliAgentClient, cliReady } from '../../src/server/services/whatsapp-cli
 import { AI_TRIGGER, isSelfChat, listensTo, maySendTo, triggerOf } from '../../src/server/domain/whatsapp';
 import { nameOf } from '../../src/server/domain/whatsapp-names';
 import { EVERYONE_TAG, readTags, rosterForPrompt, rosterFrom, tagEveryone, writeTags, type Member, type Participant } from '../../src/server/domain/whatsapp-people';
-import type { AskedPicture } from '../../src/server/domain/whatsapp-agent';
+import { MAX_ASKED_PAGES, type AskedPicture } from '../../src/server/domain/whatsapp-agent';
 import { knownNames, rememberNames } from '../../src/server/services/whatsapp-names';
-import { questionForFiles, type SentFile } from '../../src/server/domain/whatsapp-files';
+import { questionForFiles, scanQuestion, type SentFile } from '../../src/server/domain/whatsapp-files';
 import { expired, isConfirmation, isRefusal, type PendingAction } from '../../src/server/domain/whatsapp-do';
-import { extractSentFile } from '../../src/server/services/whatsapp-files';
+import { extractSentFile, pdfPagePictures } from '../../src/server/services/whatsapp-files';
 import * as doService from '../../src/server/services/whatsapp-do';
 
 const POLL_SECONDS = Math.max(5, Number(process.env.WA_POLL_SECONDS ?? '20'));
@@ -716,6 +716,8 @@ async function handleInbound(
    */
   const chat = groupJid ?? e164;
   const pictures: AskedPicture[] = [];
+  // A scanned PDF whose pages are shown to him as pictures (2026-10-14).
+  let scan: { readonly fileName: string; readonly shown: number; readonly total: number } | null = null;
   if (attached) {
     try {
       const buffer = (await downloadMediaMessage(
@@ -742,12 +744,26 @@ async function handleInbound(
         if (PICTURE_TYPES.includes(type) && buffer.length <= PICTURE_BYTES_CAP && pictures.length === 0) {
           pictures.push({ mediaType: type as AskedPicture['mediaType'], base64: buffer.toString('base64') });
         }
-        const read = await extractSentFile({
+        let read = await extractSentFile({
           buffer,
           fileName: attached.fileName,
           mimetype: attached.mimetype,
           caption: attached.caption,
         });
+        // A scan has no text to read: its pages go to him as pictures, in
+        // order, with the question (ISS-20261014-001).
+        if (read.kind === 'pdf' && read.scanned) {
+          const drawn = await pdfPagePictures(buffer, MAX_ASKED_PAGES);
+          for (const page of drawn.pages) pictures.push({ mediaType: 'image/jpeg', base64: page.base64, page: page.page });
+          scan = { fileName: read.fileName, shown: drawn.pages.length, total: drawn.total };
+          read = {
+            ...read,
+            note:
+              drawn.pages.length > 0
+                ? `a scan with no text in it: its first ${drawn.pages.length} of ${drawn.total} page(s) were shown to you as pictures with the question it came with — to look at it again, they reply to it with !ai`
+                : `a scan with no text in it, and ${drawn.note ?? 'its pages could not be drawn'}`,
+          };
+        }
         rememberFile(chat, read);
         log(
           `inbound from ${e164}: file ${read.fileName} (${read.kind}, ${read.bytes} bytes)${read.note ? ` — ${read.note}` : `, ${read.text.length} chars read`}`,
@@ -774,7 +790,9 @@ async function handleInbound(
   // file named in it — or, for a file sent with no words, one written for
   // them, because somebody putting a workbook in the group means "look".
   let asked = attached && pictures.length === 0 ? questionForFiles(text, files.slice(0, 1)) : text;
-  if (pictures.length > 0) {
+  if (scan && scan.shown > 0) {
+    asked = scanQuestion({ caption: text, fileName: scan.fileName, shown: scan.shown, total: scan.total, replied: Boolean(quotedFile) });
+  } else if (pictures.length > 0) {
     // A picture he can look at: no "its contents are in a tool" — it is in front of him.
     asked = `${text || 'Look at this picture: say what it shows and what should be done about it.'}\n\n[A picture is attached to this message${quotedFile ? ', from the message they replied to' : ''}: look at it and read exactly what is written in it.]`;
   }
