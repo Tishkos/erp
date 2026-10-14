@@ -38,6 +38,10 @@ import * as partners from '@/server/services/partners';
 import * as relationships from '@/server/services/relationships';
 import * as terms from '@/server/services/payment-terms';
 import * as supplierPayments from '@/server/services/supplier-payment';
+import * as payables from '@/server/services/payables';
+import * as applications from '@/server/services/payment-applications';
+import { importsSection } from '@/server/domain/statement-imports';
+import { SupplierImportsTable } from '@/components/admin/statement-extras';
 import { businessToday } from '@/server/domain/business-date';
 import { toDecimalString } from '@domain/money';
 import {
@@ -115,6 +119,12 @@ export default async function BusinessPartnerPage({
           row.isSupplier && can(principal, 'view', supplierPayments.PERMISSION_OBJECT)
             ? await supplierPayments.supplierAccount(tx, row.id, businessToday())
             : null,
+        // 2026-10-14 — the import applications bought from them, with what is
+        // paid and left (an import from the sheet has no invoice to show above).
+        imports:
+          row.isSupplier && can(principal, 'view', payables.PERMISSION_OBJECT)
+            ? await applications.importsOfSupplier(tx, row.id)
+            : [],
       };
     } catch (error) {
       if (error instanceof AdminNotFoundError) return null;
@@ -122,7 +132,9 @@ export default async function BusinessPartnerPage({
     }
   });
   if (!data) notFound();
-  const { row, paymentTerms, history, accounts, bankList, currencyRows, position } = data;
+  const { row, paymentTerms, history, accounts, bankList, currencyRows, position, imports } = data;
+  const importCurrencies = [...new Set(imports.map((entry) => entry.currency.trim()))];
+  const importsCurrency = importCurrencies.length === 1 ? importCurrencies[0]! : null;
   const iqd = (amount: bigint) => formatMoney(toDecimalString(amount, 4n), 'IQD', locale as Locale);
   const bankT = await getTranslations('admin.partners');
   const selected = accounts.find((account) => account.id === query.account) ?? null;
@@ -134,7 +146,8 @@ export default async function BusinessPartnerPage({
   const listRoute = routeRole === 'customer' ? '/sales/customers' : '/payables/suppliers';
   const selfHref = `${listRoute}/${encodeURIComponent(row.code)}?role=${routeRole}`;
   const accountHidden = (id: string) => ({ code: row.code, returnRole: routeRole, account: id });
-  const showBanks = row.isSupplier || accounts.length > 0;
+  // Every partner, customers too (2026-10-14, by direction: "it's important to know their bank details").
+  const showBanks = true;
   // Platform phase, Agent 9 — the chain of real records around this party, on the side the page is read as.
   const related = await withCurrentUser((tx) =>
     relationships.graphFor(tx, { principal, branchCode: context.scope.branchCode }, routeRole, row.code),
@@ -355,6 +368,19 @@ export default async function BusinessPartnerPage({
           {/* What we owe this supplier, by how late — the open invoices the position above adds up. */}
           {position && routeRole === 'supplier' ? <AgeingChart rows={position.openInvoices} side="supplier" /> : null}
 
+          {routeRole === 'supplier' && imports.length > 0 ? (
+            <Panel flush title={t('statement_extras.imports_title')}>
+              <div className="table-wrap">
+                <SupplierImportsTable
+                  currency={importsCurrency}
+                  rows={imports}
+                  showCurrency={importsCurrency === null}
+                  {...(importsCurrency ? { totals: importsSection(imports, importsCurrency).totals } : {})}
+                />
+              </div>
+            </Panel>
+          ) : null}
+
           {mayAdminister ? (
             <Panel title={row.active ? t('partners.deactivate_title') : t('reactivate')}>
               {row.active ? (
@@ -434,9 +460,10 @@ export default async function BusinessPartnerPage({
           ) : null}
 
 
-          {/* IMPROVEMENT-002 (sponsor, 2026-10-03) — the supplier's bank
+          {/* IMPROVEMENT-002 (sponsor, 2026-10-03) — the partner's bank
               accounts in full, several at once, each verified by somebody
-              other than the person who entered it before money goes to it. */}
+              other than the person who entered it before money goes to it.
+              A customer's too since 2026-10-14. */}
           {showBanks ? (
             <Panel
               actions={

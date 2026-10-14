@@ -431,6 +431,16 @@ By direction: "import this data very carefully — mostly PD and transfer data, 
 * **Before an apply on live** (`docs/RUNBOOK-payables-cutover.md` §1, and its table of the sheet's own mistakes): the six suppliers the sheet names that live does not, an active USD account at each of Mansour, Arab and National Bank of Iraq, and a true USD accounting rate — on 2026-10-13 the rate in force on live was 1.47 IQD (a trial entry), which would give every import an IQD figure nine hundred times too small.
 * Tests: `tests/unit/ap08-sheet-reading.test.ts`, `tests/unit/imp01-goods-journey.test.ts` (the last block), `tests/integration/ap08-migration.test.ts`.
 
+## The old books and the imports on a statement (2026-10-14)
+
+By direction ("the customer not created with their own statements … its important to know their banks details … suppliers we bought things from them didnt fix"). On live the 142 customers had one statement line each (the legacy opening balance), and the 33 sheet suppliers none — the sheet import is tracking, not accounting. The owner chose to show, not post:
+
+* **Old books** — `legacy-import.statementHistoryOf(tx, partnerId, side, currency)` over `legacy_document`, grouped per old document by `domain/legacy-history.historyFor` (sale and payment Debit, receipt and purchase Credit; dated first, undated sales after in the list's order; the statement's currency, the others counted in `elsewhere`). The old sales export has no dates. Its lines do not add up to the opening balance for most partners (98 of 147 on 2026-10-14) — the old balance holds entries the export lacks — so the window shows its own totals and never a difference or a running balance. Never posted (REQ-LEGACY-001 still holds).
+* **Import applications** — `payment-applications.importsOfSupplier(tx, supplierId)`: every live payable of the supplier with agreed, at the bank (`sent`), and paid / left from `totalsFor` (the import page's figures); `domain/statement-imports.importsSection` filters to the statement's currency and totals it. Drawn under `view` on `payable`.
+* Both are windows of `AccountStatement` (`components/admin/statement-extras.tsx`) and tables of the printed statement (`print/reports.ts` › `partnerStatement`); the supplier profile shows the imports panel (`SupplierImportsTable`, every currency). The partner profile's **Bank accounts** panel is now on every partner, customers too — the bank details are typed there (none were in the sheet or the old export).
+* Tests: `tests/unit/stm01-statement-extras.test.ts`. Guide: Customer Statements, Supplier Statements, Customers and Suppliers blocks.
+* Still open, the accountant's: seven customers whose live opening balance differs from the old client list in dinars (1000, 1011, 1087, 1170, 1173, 1220, 1221; 1015, 1106 and 1181 differ only by the dollar conversion at 1,470).
+
 ## Units of measure (REQ-FIX-001 FIX-4)
 
 * `services/item-units.ts` is the only writer of `item_uom` (add, defaults, deactivate with a reason — never deleted). The base unit is kept active by the service and by the `item_uom_base_stays_active` trigger (0254); one active purchase default and one sales default per item (partial unique indexes); with none flagged, the base unit is the default.

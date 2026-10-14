@@ -16,6 +16,11 @@ import * as openItems from '@/server/services/open-items';
 import { daysBetween } from '@domain/ageing';
 import * as partners from '@/server/services/partners';
 import * as statement from '@/server/services/partner-statement';
+import * as legacy from '@/server/services/legacy-import';
+import * as payables from '@/server/services/payables';
+import * as applications from '@/server/services/payment-applications';
+import { importsSection } from '@/server/domain/statement-imports';
+import { OldBooksWindow, SupplierImportsWindow } from './statement-extras';
 import { businessToday } from '@/server/domain/business-date';
 
 import { IntentSelect } from '@/components/admin/intent-select';
@@ -136,7 +141,7 @@ export async function AccountStatement({
 
   // The whole role, not only the active part of it: a partner stops trading
   // long before their account stops needing to be read.
-  const { roll, chosen, account, items, everyItem, balances } = await withCurrentUser(async (tx) => {
+  const { roll, chosen, account, items, everyItem, balances, oldBooks, imports } = await withCurrentUser(async (tx) => {
     const roll = await partners.listByRole(tx, side);
     /* Resolved from what was typed, not matched against the whole label.
        The box used to carry the partner's code in a hidden field, set only when
@@ -187,8 +192,26 @@ export async function AccountStatement({
           ...(chosen ? { partyCode: chosen.code } : {}),
         })
         .catch(() => []),
+      /*
+       * What the old books hold for the account, and a supplier's import
+       * applications (2026-10-14). Neither is a posting: the opening line
+       * carries the old balance, and an import from the sheet has no invoice.
+       */
+      oldBooks: chosen ? await legacy.statementHistoryOf(tx, chosen.id, side, currency) : null,
+      imports:
+        chosen && side === 'supplier' && can(context.principal, 'view', payables.PERMISSION_OBJECT)
+          ? importsSection(await applications.importsOfSupplier(tx, chosen.id), currency)
+          : null,
     };
   });
+
+  /** The same statement in another currency — where the old books or the imports have rows in it. */
+  const inCurrency = (code: string) => {
+    const next = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) if (typeof value === 'string') next.set(key, value);
+    next.set('currency', code);
+    return `${screen.route}?${next.toString()}`;
+  };
 
   const outcome = pickOutcome(
     roll,
@@ -413,6 +436,8 @@ export async function AccountStatement({
         </table>
       </ReportWindow>
 
+      {imports ? <SupplierImportsWindow currency={currency} hrefFor={inCurrency} section={imports} /> : null}
+
       {/* ── What is still owed ────────────────────────────────────────────
           Under the movements, where a reader arrives having read them: the
           statement says what happened, and this says what is left of it. With
@@ -607,6 +632,8 @@ export async function AccountStatement({
           ) : null}
         </ReportWindow>
       ) : null}
+
+      {oldBooks ? <OldBooksWindow history={oldBooks} hrefFor={inCurrency} /> : null}
     </AdminPage>
   );
 }

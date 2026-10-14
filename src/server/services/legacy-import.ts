@@ -42,6 +42,7 @@ import {
   type LegacyKind,
 } from '../domain/legacy-books';
 import { NoRateForDateError } from '../domain/exchange-rates';
+import { historyFor, type LegacyHistory } from '../domain/legacy-history';
 import { MONEY_SCALE, divideHalfUp, parseDecimal, toDecimalString } from '../domain/money';
 import { formatQuantity } from '../domain/uom';
 import { readWorkbook, XlsxReadError, type SheetRows } from '../xlsx-read';
@@ -727,6 +728,34 @@ export async function historyOf(tx: Tx, partnerId: string, limit = 200) {
     .where(eq(legacyDocument.partnerId, partnerId))
     .orderBy(desc(legacyDocument.documentDate), desc(legacyDocument.legacyNo), legacyDocument.lineNo)
     .limit(limit);
+}
+
+/**
+ * The old system's documents of one partner as a statement section — every
+ * line, grouped per old document, in the statement's currency (2026-10-14).
+ * Read-only history: nothing here is, or becomes, a posting.
+ */
+export async function statementHistoryOf(
+  tx: Tx,
+  partnerId: string,
+  side: 'customer' | 'supplier',
+  currency: string,
+): Promise<LegacyHistory> {
+  const lines = await tx
+    .select({
+      kind: legacyDocument.kind,
+      legacyNo: legacyDocument.legacyNo,
+      lineNo: legacyDocument.lineNo,
+      documentDate: sql<string | null>`${legacyDocument.documentDate}::text`,
+      itemName: legacyDocument.itemName,
+      quantity: legacyDocument.quantity,
+      unit: legacyDocument.unit,
+      amount: legacyDocument.amount,
+      currency: legacyDocument.currency,
+    })
+    .from(legacyDocument)
+    .where(eq(legacyDocument.partnerId, partnerId));
+  return historyFor(lines, side, currency);
 }
 
 /** Opening journals this module has posted — so a re-import after a reversal is seen. */

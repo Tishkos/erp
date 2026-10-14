@@ -46,6 +46,7 @@ import {
   partnerBankAccount,
   payable,
   payableInstalment,
+  payableStage,
   paymentApplication,
   paymentApplicationPaper,
   attachment,
@@ -1479,6 +1480,75 @@ export async function totalsFor(tx: Tx, payableId: string) {
     })),
     ...(await payables.directPayments(tx, payableId)),
   ]);
+}
+
+/**
+ * A supplier's imports: what each agreed, what is with the bank and what is
+ * paid (2026-10-14, by direction: "suppliers we bought things from them" —
+ * their statement showed nothing of the imports the sheet brought in). The
+ * supplier statement's Imports section and the supplier profile read it.
+ *
+ * Tracking, not the ledger: an import from the sheet has no invoice and no
+ * journal, so none of this is on the statement's lines or its balance. Paid
+ * and left are `totalsFor`'s — the import page's own figures; *with the bank*
+ * is the applications sent and not yet paid. A cancelled import is left out.
+ */
+export interface SupplierImportRow {
+  readonly payableNo: string;
+  readonly reference: string | null;
+  readonly documentDate: string | null;
+  readonly currency: string;
+  readonly stageName: string;
+  readonly fromSheet: boolean;
+  readonly closed: boolean;
+  readonly agreedTxn: string;
+  readonly withBankTxn: string;
+  readonly paidTxn: string;
+  readonly remainingTxn: string;
+}
+
+export async function importsOfSupplier(tx: Tx, supplierId: string): Promise<SupplierImportRow[]> {
+  const rows = await tx
+    .select({
+      id: payable.id,
+      payableNo: payable.payableNo,
+      reference: payable.supplierReference,
+      documentDate: sql<string | null>`${payable.documentDate}::text`,
+      currency: payable.currency,
+      stageName: payableStage.name,
+      source: payable.source,
+      closedAt: payable.closedAt,
+      agreedTxn: payable.amountTxn,
+      sentTxn: sql<string>`coalesce((
+        select sum(pa.amount_txn) from payment_application pa
+         where pa.payable_id = ${payable.id} and pa.status = 'sent'), 0)::text`,
+    })
+    .from(payable)
+    .innerJoin(
+      payableStage,
+      and(eq(payableStage.payableTypeCode, payable.payableTypeCode), eq(payableStage.code, payable.stageCode)),
+    )
+    .where(and(eq(payable.supplierId, supplierId), isNull(payable.cancelledAt)))
+    .orderBy(asc(payable.documentDate), asc(payable.payableNo));
+
+  const result: SupplierImportRow[] = [];
+  for (const row of rows) {
+    const sums = await totalsFor(tx, row.id);
+    result.push({
+      payableNo: row.payableNo,
+      reference: row.reference,
+      documentDate: row.documentDate,
+      currency: row.currency,
+      stageName: row.stageName,
+      fromSheet: row.source === 'sheet_import',
+      closed: row.closedAt !== null,
+      agreedTxn: row.agreedTxn,
+      withBankTxn: toDecimalString(parseDecimal(row.sentTxn, MONEY_SCALE)),
+      paidTxn: toDecimalString(sums.paidTxn),
+      remainingTxn: toDecimalString(sums.remainingTxn),
+    });
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------

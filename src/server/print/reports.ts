@@ -1,5 +1,5 @@
 import { eq, inArray } from 'drizzle-orm';
-import { formatBusinessDate, formatStatementAmount, formatTimestamp, type Locale } from '@/i18n/config';
+import { formatBusinessDate, formatQuantity, formatStatementAmount, formatTimestamp, type Locale } from '@/i18n/config';
 import { levelFrom, maxLevel, rollUp } from '@domain/report-levels';
 import { matches } from '@/lib/search';
 import { pickOne } from '@domain/pick';
@@ -19,6 +19,12 @@ import * as statements from '../services/financial-statements';
 import * as inventoryReports from '../services/inventory-reports';
 import * as partners from '../services/partners';
 import * as statement from '../services/partner-statement';
+import * as legacy from '../services/legacy-import';
+import * as payables from '../services/payables';
+import * as applications from '../services/payment-applications';
+import { importsSection, type ImportsSection } from '../domain/statement-imports';
+import type { LegacyHistory } from '../domain/legacy-history';
+import { can } from '../domain/permissions';
 import * as stock from '../services/stock-operations';
 import * as shipments from '../services/supplier-shipment';
 import * as openItemsService from '../services/open-items';
@@ -113,6 +119,102 @@ function statementTable(m: Messages, account: statement.PartnerStatement): Table
       cells: { debit: account.totalDebit, credit: account.totalCredit, balance: account.closing },
       // The closing balance is the running balance's last figure, not a sum.
       sum: ['debit', 'credit'],
+    },
+  };
+}
+
+/**
+ * The supplier's import applications in the statement's currency, as the
+ * screen's Imports window (2026-10-14). Tracking: none of it is on the lines
+ * above. No imports in the currency prints no table.
+ */
+function importsTable(m: Messages, section: ImportsSection<applications.SupplierImportRow>): Table | null {
+  if (section.rows.length === 0) return null;
+  return {
+    title: m.admin('statement_extras.imports_title'),
+    columns: [
+      { key: 'import', label: m.admin('statement_extras.col_import'), kind: 'code' },
+      { key: 'reference', label: m.admin('statement_extras.col_reference'), kind: 'code' },
+      { key: 'date', label: m.admin('statement_extras.col_date'), kind: 'date' },
+      { key: 'stage', label: m.admin('statement_extras.col_stage'), kind: 'text' },
+      { key: 'agreed', label: m.admin('statement_extras.col_agreed'), kind: 'money' },
+      { key: 'withBank', label: m.admin('statement_extras.col_with_bank'), kind: 'money' },
+      { key: 'paid', label: m.admin('statement_extras.col_paid'), kind: 'money' },
+      { key: 'left', label: m.admin('statement_extras.col_left'), kind: 'money' },
+    ],
+    rows: section.rows.map(
+      (row): Row => ({
+        cells: {
+          // The number alone: a code cell prints left to right, and the screen's
+          // "From the sheet" tag would be read backwards inside it in Arabic.
+          import: row.payableNo,
+          reference: row.reference,
+          date: row.documentDate,
+          stage: row.stageName,
+          agreed: row.agreedTxn,
+          withBank: isZero(row.withBankTxn) ? null : row.withBankTxn,
+          paid: row.paidTxn,
+          left: row.remainingTxn,
+        },
+      }),
+    ),
+    empty: '',
+    totals: {
+      label: m.admin('statement_extras.total'),
+      cells: {
+        agreed: section.totals.agreed,
+        withBank: section.totals.withBank,
+        paid: section.totals.paid,
+        left: section.totals.remaining,
+      },
+    },
+  };
+}
+
+/**
+ * The old books' documents of the account in the statement's currency, as the
+ * screen's window (2026-10-14). History, never posted; a sale carries no date
+ * because the old export has none.
+ */
+function oldBooksTable(m: Messages, history: LegacyHistory, locale: Locale): Table | null {
+  if (history.rows.length === 0) return null;
+  const shown = 3;
+  return {
+    title: m.admin('statement_extras.history_title'),
+    columns: [
+      { key: 'date', label: m.admin('statement_extras.col_date'), kind: 'date' },
+      { key: 'no', label: m.admin('statement_extras.col_no'), kind: 'code' },
+      { key: 'kind', label: m.admin('statement_extras.col_kind'), kind: 'text' },
+      { key: 'items', label: m.admin('statement_extras.col_items'), kind: 'text', weight: 3 },
+      { key: 'debit', label: m.admin('partners.statement_debit'), kind: 'money' },
+      { key: 'credit', label: m.admin('partners.statement_credit'), kind: 'money' },
+    ],
+    rows: history.rows.map(
+      (row): Row => ({
+        cells: {
+          date: row.date,
+          no: row.legacyNo,
+          kind: m.admin(`statement_extras.kind_${row.kind}`),
+          items:
+            row.items.length === 0
+              ? null
+              : [
+                  ...row.items
+                    .slice(0, shown)
+                    .map((item) =>
+                      item.quantity ? `${item.name} × ${formatQuantity(item.quantity, locale)}${item.unit ? ` ${item.unit}` : ''}` : item.name,
+                    ),
+                  ...(row.items.length > shown ? [m.admin('statement_extras.items_more', { count: row.items.length - shown })] : []),
+                ].join(locale === 'ar' ? '، ' : ', '),
+          debit: isZero(row.debit) ? null : row.debit,
+          credit: isZero(row.credit) ? null : row.credit,
+        },
+      }),
+    ),
+    empty: '',
+    totals: {
+      label: m.admin('statement_extras.total'),
+      cells: { debit: history.totalDebit, credit: history.totalCredit },
     },
   };
 }
@@ -303,6 +405,13 @@ export async function partnerStatement(
   if (!chosen) return null;
   const account = await statement.statementFor(tx, side, chosen.code, { from, to, currency });
   const outstanding = await outstandingTable(ctx, side, chosen.code, agedAt, view);
+  // The screen's two stacked windows (2026-10-14), read by the same readers.
+  const imports =
+    side === 'supplier' && can(ctx.principal, 'view', payables.PERMISSION_OBJECT)
+      ? importsTable(m, importsSection(await applications.importsOfSupplier(tx, chosen.id), currency))
+      : null;
+  const oldBooks = await legacy.statementHistoryOf(tx, chosen.id, side, currency);
+  const oldBooksPrinted = oldBooksTable(m, oldBooks, locale);
 
   const title = m.print(`titles.${side}_statement`);
   return built(
@@ -316,7 +425,12 @@ export async function partnerStatement(
         { label: m.admin('reports.to'), value: day(to, locale), ltr: true },
         { label: m.admin('reports.currency'), value: currency, ltr: true },
       ],
-      tables: [statementTable(m, account), ...outstanding.tables],
+      tables: [
+        statementTable(m, account),
+        ...(imports ? [imports] : []),
+        ...outstanding.tables,
+        ...(oldBooksPrinted ? [oldBooksPrinted] : []),
+      ],
       summary: [
         {
           label: m.admin('partners.statement_closing'),
