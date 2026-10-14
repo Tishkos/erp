@@ -133,8 +133,7 @@ export default async function BusinessPartnerPage({
   });
   if (!data) notFound();
   const { row, paymentTerms, history, accounts, bankList, currencyRows, position, imports } = data;
-  const importCurrencies = [...new Set(imports.map((entry) => entry.currency.trim()))];
-  const importsCurrency = importCurrencies.length === 1 ? importCurrencies[0]! : null;
+  const importsShown = importsSection(imports);
   const iqd = (amount: bigint) => formatMoney(toDecimalString(amount, 4n), 'IQD', locale as Locale);
   const bankT = await getTranslations('admin.partners');
   const selected = accounts.find((account) => account.id === query.account) ?? null;
@@ -371,12 +370,7 @@ export default async function BusinessPartnerPage({
           {routeRole === 'supplier' && imports.length > 0 ? (
             <Panel flush title={t('statement_extras.imports_title')}>
               <div className="table-wrap">
-                <SupplierImportsTable
-                  currency={importsCurrency}
-                  rows={imports}
-                  showCurrency={importsCurrency === null}
-                  {...(importsCurrency ? { totals: importsSection(imports, importsCurrency).totals } : {})}
-                />
+                <SupplierImportsTable rows={importsShown.rows} totals={importsShown.totals} />
               </div>
             </Panel>
           ) : null}

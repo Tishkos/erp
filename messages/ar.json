@@ -8490,8 +8490,6 @@
       "items_more": "+{count} أخرى",
       "total": "المجموع",
       "net": "صافي هذه الأسطر",
-      "elsewhere": "{count} أخرى بعملة {currency}",
-      "history_empty": "لا توجد مستندات من النظام القديم بعملة {currency}.",
       "imports_title": "معاملات الاستيراد",
       "imports_meta": "{count} معاملة · للمتابعة، ليست ضمن الأسطر أعلاه",
       "col_import": "المعاملة",
@@ -8501,8 +8499,7 @@
       "col_with_bank": "لدى البنك — غير مدفوع",
       "col_paid": "المدفوع",
       "col_left": "المتبقي",
-      "from_sheet": "من الجدول",
-      "imports_empty": "لا توجد معاملات استيراد بعملة {currency}."
+      "from_sheet": "من الجدول"
     }
   },
   "profile": {

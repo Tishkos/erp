@@ -732,15 +732,10 @@ export async function historyOf(tx: Tx, partnerId: string, limit = 200) {
 
 /**
  * The old system's documents of one partner as a statement section — every
- * line, grouped per old document, in the statement's currency (2026-10-14).
+ * line, grouped per old document, each in its own currency (2026-10-14).
  * Read-only history: nothing here is, or becomes, a posting.
  */
-export async function statementHistoryOf(
-  tx: Tx,
-  partnerId: string,
-  side: 'customer' | 'supplier',
-  currency: string,
-): Promise<LegacyHistory> {
+export async function statementHistoryOf(tx: Tx, partnerId: string, side: 'customer' | 'supplier'): Promise<LegacyHistory> {
   const lines = await tx
     .select({
       kind: legacyDocument.kind,
@@ -755,7 +750,7 @@ export async function statementHistoryOf(
     })
     .from(legacyDocument)
     .where(eq(legacyDocument.partnerId, partnerId));
-  return historyFor(lines, side, currency);
+  return historyFor(lines, side);
 }
 
 /** Opening journals this module has posted — so a re-import after a reversal is seen. */

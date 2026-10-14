@@ -26,13 +26,13 @@ export function display(
     case 'money': {
       if (column.sides) {
         const amount = Number(value);
-        const figure = formatStatementAmount(Math.abs(amount), model.currency, locale);
+        const figure = formatStatementAmount(Math.abs(amount), column.currency ?? model.currency, locale);
         return amount === 0 ? figure : `${figure} ${amount < 0 ? column.sides.credit : column.sides.debit}`;
       }
       if (column.decimals !== undefined) {
         return new Intl.NumberFormat(locale, { maximumFractionDigits: column.decimals }).format(Number(value));
       }
-      return formatStatementAmount(value, model.currency, locale);
+      return formatStatementAmount(value, column.currency ?? model.currency, locale);
     }
     case 'quantity':
       return formatQuantity(value, locale);
@@ -45,7 +45,7 @@ export function display(
 
 /** A money column says its currency once, in the heading. */
 export function heading(column: Column, model: Pick<PrintModel, 'currency'>): string {
-  return column.kind === 'money' ? `${column.label} · ${model.currency}` : column.label;
+  return column.kind === 'money' ? `${column.label} · ${column.currency ?? model.currency}` : column.label;
 }
 
 export function printedAt(iso: string, locale: Locale): string {

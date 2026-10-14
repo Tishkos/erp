@@ -45,6 +45,12 @@ export interface Column {
    * Cr — while the workbook keeps the signed number.
    */
   readonly sides?: { readonly debit: string; readonly credit: string };
+  /**
+   * A money column in another currency than the model's — a supplier's dollar
+   * imports printed on a statement run in dinars (2026-10-14). Its heading and
+   * its figures follow this; every other money column follows the model.
+   */
+  readonly currency?: string;
 }
 
 /** A cell holds the service's value, never a formatted one. Null is blank. */

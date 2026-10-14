@@ -117,7 +117,7 @@ export async function renderXlsx(model: PrintModel, head: Letterhead): Promise<B
 
 function headerRow(columns: readonly Column[], model: PrintModel): SheetRow {
   return columns.map((column) => ({
-    value: column.kind === 'money' ? `${column.label} (${model.currency})` : column.label,
+    value: column.kind === 'money' ? `${column.label} (${column.currency ?? model.currency})` : column.label,
     type: String,
     fontWeight: 'bold',
     backgroundColor: HEAD_FILL,
@@ -223,24 +223,25 @@ function numberCell(
 ): SheetCell | null {
   const number = Number(value);
   if (!Number.isFinite(number) || value.trim() === '') return null;
-  const format = column ? numberFormat(column, model) : moneyFormat(model);
+  const format = column ? numberFormat(column, model) : moneyFormat(model.currency);
   return { value: number, type: Number, ...(format ? { format } : {}), ...style } as SheetCell;
 }
 
-function moneyFormat(model: PrintModel): string {
-  return model.currency === 'USD' ? '#,##0.00;(#,##0.00)' : '#,##0;(#,##0)';
+function moneyFormat(currency: string): string {
+  return currency === 'USD' ? '#,##0.00;(#,##0.00)' : '#,##0;(#,##0)';
 }
 
 function numberFormat(column: Column, model: PrintModel): string | undefined {
   // A quantity keeps Excel's General format: whole units without a point,
   // fractions as far as they go.
   if (column.kind !== 'money') return undefined;
+  const currency = column.currency ?? model.currency;
   if (column.sides) {
-    const figure = model.currency === 'USD' ? '#,##0.00' : '#,##0';
+    const figure = currency === 'USD' ? '#,##0.00' : '#,##0';
     return `${figure} "${column.sides.debit}";${figure} "${column.sides.credit}";0`;
   }
   if (column.decimals !== undefined) return `#,##0.${'0'.repeat(Math.min(2, column.decimals))}${'#'.repeat(Math.max(0, column.decimals - 2))}`;
-  return moneyFormat(model);
+  return moneyFormat(currency);
 }
 
 function columnWidth(column: Column | undefined): number {

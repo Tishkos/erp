@@ -8490,8 +8490,6 @@
       "items_more": "+{count} more",
       "total": "Total",
       "net": "Net of these lines",
-      "elsewhere": "{count} more in {currency}",
-      "history_empty": "No old-system documents in {currency}.",
       "imports_title": "Import applications",
       "imports_meta": "{count} imports · tracking, not on the lines above",
       "col_import": "Import",
@@ -8501,8 +8499,7 @@
       "col_with_bank": "At the bank, not paid",
       "col_paid": "Paid",
       "col_left": "Left",
-      "from_sheet": "From the sheet",
-      "imports_empty": "No imports in {currency}."
+      "from_sheet": "From the sheet"
     }
   },
   "profile": {

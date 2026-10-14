@@ -124,99 +124,100 @@ function statementTable(m: Messages, account: statement.PartnerStatement): Table
 }
 
 /**
- * The supplier's import applications in the statement's currency, as the
- * screen's Imports window (2026-10-14). Tracking: none of it is on the lines
- * above. No imports in the currency prints no table.
+ * The supplier's import applications, one table per currency, each amount in
+ * its own (2026-10-14) — as the screen's Imports window, which shows every
+ * currency whatever the statement is run in. Tracking: none of it is on the
+ * lines above. No imports prints no table.
  */
-function importsTable(m: Messages, section: ImportsSection<applications.SupplierImportRow>): Table | null {
-  if (section.rows.length === 0) return null;
-  return {
-    title: m.admin('statement_extras.imports_title'),
-    columns: [
-      { key: 'import', label: m.admin('statement_extras.col_import'), kind: 'code' },
-      { key: 'reference', label: m.admin('statement_extras.col_reference'), kind: 'code' },
-      { key: 'date', label: m.admin('statement_extras.col_date'), kind: 'date' },
-      { key: 'stage', label: m.admin('statement_extras.col_stage'), kind: 'text' },
-      { key: 'agreed', label: m.admin('statement_extras.col_agreed'), kind: 'money' },
-      { key: 'withBank', label: m.admin('statement_extras.col_with_bank'), kind: 'money' },
-      { key: 'paid', label: m.admin('statement_extras.col_paid'), kind: 'money' },
-      { key: 'left', label: m.admin('statement_extras.col_left'), kind: 'money' },
-    ],
-    rows: section.rows.map(
-      (row): Row => ({
-        cells: {
-          // The number alone: a code cell prints left to right, and the screen's
-          // "From the sheet" tag would be read backwards inside it in Arabic.
-          import: row.payableNo,
-          reference: row.reference,
-          date: row.documentDate,
-          stage: row.stageName,
-          agreed: row.agreedTxn,
-          withBank: isZero(row.withBankTxn) ? null : row.withBankTxn,
-          paid: row.paidTxn,
-          left: row.remainingTxn,
-        },
-      }),
-    ),
-    empty: '',
-    totals: {
-      label: m.admin('statement_extras.total'),
-      cells: {
-        agreed: section.totals.agreed,
-        withBank: section.totals.withBank,
-        paid: section.totals.paid,
-        left: section.totals.remaining,
+function importsTables(m: Messages, section: ImportsSection<applications.SupplierImportRow>): Table[] {
+  return section.totals.map((total): Table => {
+    const money = (key: string, label: string): Column => ({ key, label: m.admin(label), kind: 'money', currency: total.currency });
+    return {
+      title: `${m.admin('statement_extras.imports_title')} · ${total.currency}`,
+      columns: [
+        { key: 'import', label: m.admin('statement_extras.col_import'), kind: 'code' },
+        { key: 'reference', label: m.admin('statement_extras.col_reference'), kind: 'code' },
+        { key: 'date', label: m.admin('statement_extras.col_date'), kind: 'date' },
+        { key: 'stage', label: m.admin('statement_extras.col_stage'), kind: 'text' },
+        money('agreed', 'statement_extras.col_agreed'),
+        money('withBank', 'statement_extras.col_with_bank'),
+        money('paid', 'statement_extras.col_paid'),
+        money('left', 'statement_extras.col_left'),
+      ],
+      rows: section.rows
+        .filter((row) => row.currency === total.currency)
+        .map(
+          (row): Row => ({
+            cells: {
+              // The number alone: a code cell prints left to right, and the screen's
+              // "From the sheet" tag would be read backwards inside it in Arabic.
+              import: row.payableNo,
+              reference: row.reference,
+              date: row.documentDate,
+              stage: row.stageName,
+              agreed: row.agreedTxn,
+              withBank: isZero(row.withBankTxn) ? null : row.withBankTxn,
+              paid: row.paidTxn,
+              left: row.remainingTxn,
+            },
+          }),
+        ),
+      empty: '',
+      totals: {
+        label: m.admin('statement_extras.total'),
+        cells: { agreed: total.agreed, withBank: total.withBank, paid: total.paid, left: total.remaining },
       },
-    },
-  };
+    };
+  });
 }
 
 /**
- * The old books' documents of the account in the statement's currency, as the
+ * The old books' documents of the account, one table per currency, as the
  * screen's window (2026-10-14). History, never posted; a sale carries no date
  * because the old export has none.
  */
-function oldBooksTable(m: Messages, history: LegacyHistory, locale: Locale): Table | null {
-  if (history.rows.length === 0) return null;
+function oldBooksTables(m: Messages, history: LegacyHistory, locale: Locale): Table[] {
   const shown = 3;
-  return {
-    title: m.admin('statement_extras.history_title'),
+  return history.totals.map((total): Table => ({
+    title: `${m.admin('statement_extras.history_title')} · ${total.currency}`,
     columns: [
       { key: 'date', label: m.admin('statement_extras.col_date'), kind: 'date' },
       { key: 'no', label: m.admin('statement_extras.col_no'), kind: 'code' },
       { key: 'kind', label: m.admin('statement_extras.col_kind'), kind: 'text' },
       { key: 'items', label: m.admin('statement_extras.col_items'), kind: 'text', weight: 3 },
-      { key: 'debit', label: m.admin('partners.statement_debit'), kind: 'money' },
-      { key: 'credit', label: m.admin('partners.statement_credit'), kind: 'money' },
+      { key: 'debit', label: m.admin('partners.statement_debit'), kind: 'money', currency: total.currency },
+      { key: 'credit', label: m.admin('partners.statement_credit'), kind: 'money', currency: total.currency },
     ],
-    rows: history.rows.map(
-      (row): Row => ({
-        cells: {
-          date: row.date,
-          no: row.legacyNo,
-          kind: m.admin(`statement_extras.kind_${row.kind}`),
-          items:
-            row.items.length === 0
-              ? null
-              : [
-                  ...row.items
-                    .slice(0, shown)
-                    .map((item) =>
-                      item.quantity ? `${item.name} × ${formatQuantity(item.quantity, locale)}${item.unit ? ` ${item.unit}` : ''}` : item.name,
-                    ),
-                  ...(row.items.length > shown ? [m.admin('statement_extras.items_more', { count: row.items.length - shown })] : []),
-                ].join(locale === 'ar' ? '، ' : ', '),
-          debit: isZero(row.debit) ? null : row.debit,
-          credit: isZero(row.credit) ? null : row.credit,
-        },
-      }),
-    ),
+    rows: history.rows
+      .filter((row) => row.currency === total.currency)
+      .map(
+        (row): Row => ({
+          cells: {
+            date: row.date,
+            no: row.legacyNo,
+            kind: m.admin(`statement_extras.kind_${row.kind}`),
+            items:
+              row.items.length === 0
+                ? null
+                : [
+                    ...row.items
+                      .slice(0, shown)
+                      .map((item) =>
+                        item.quantity ? `${item.name} × ${formatQuantity(item.quantity, locale)}${item.unit ? ` ${item.unit}` : ''}` : item.name,
+                      ),
+                    ...(row.items.length > shown ? [m.admin('statement_extras.items_more', { count: row.items.length - shown })] : []),
+                  ].join(locale === 'ar' ? '، ' : ', '),
+            debit: isZero(row.debit) ? null : row.debit,
+            credit: isZero(row.credit) ? null : row.credit,
+          },
+        }),
+      ),
     empty: '',
     totals: {
       label: m.admin('statement_extras.total'),
-      cells: { debit: history.totalDebit, credit: history.totalCredit },
+      cells: { debit: total.debit, credit: total.credit },
     },
-  };
+  }));
 }
 
 /**
@@ -408,10 +409,9 @@ export async function partnerStatement(
   // The screen's two stacked windows (2026-10-14), read by the same readers.
   const imports =
     side === 'supplier' && can(ctx.principal, 'view', payables.PERMISSION_OBJECT)
-      ? importsTable(m, importsSection(await applications.importsOfSupplier(tx, chosen.id), currency))
-      : null;
-  const oldBooks = await legacy.statementHistoryOf(tx, chosen.id, side, currency);
-  const oldBooksPrinted = oldBooksTable(m, oldBooks, locale);
+      ? importsTables(m, importsSection(await applications.importsOfSupplier(tx, chosen.id)))
+      : [];
+  const oldBooks = oldBooksTables(m, await legacy.statementHistoryOf(tx, chosen.id, side), locale);
 
   const title = m.print(`titles.${side}_statement`);
   return built(
@@ -427,9 +427,10 @@ export async function partnerStatement(
       ],
       tables: [
         statementTable(m, account),
-        ...(imports ? [imports] : []),
+        // In the screen's order: under the lines, before what is still owed.
+        ...imports,
+        ...oldBooks,
         ...outstanding.tables,
-        ...(oldBooksPrinted ? [oldBooksPrinted] : []),
       ],
       summary: [
         {

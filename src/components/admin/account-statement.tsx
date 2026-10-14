@@ -197,21 +197,14 @@ export async function AccountStatement({
        * applications (2026-10-14). Neither is a posting: the opening line
        * carries the old balance, and an import from the sheet has no invoice.
        */
-      oldBooks: chosen ? await legacy.statementHistoryOf(tx, chosen.id, side, currency) : null,
+      // Every currency, each in its own — not only the statement's (second pass, 2026-10-14).
+      oldBooks: chosen ? await legacy.statementHistoryOf(tx, chosen.id, side) : null,
       imports:
         chosen && side === 'supplier' && can(context.principal, 'view', payables.PERMISSION_OBJECT)
-          ? importsSection(await applications.importsOfSupplier(tx, chosen.id), currency)
+          ? importsSection(await applications.importsOfSupplier(tx, chosen.id))
           : null,
     };
   });
-
-  /** The same statement in another currency — where the old books or the imports have rows in it. */
-  const inCurrency = (code: string) => {
-    const next = new URLSearchParams();
-    for (const [key, value] of Object.entries(query)) if (typeof value === 'string') next.set(key, value);
-    next.set('currency', code);
-    return `${screen.route}?${next.toString()}`;
-  };
 
   const outcome = pickOutcome(
     roll,
@@ -436,7 +429,10 @@ export async function AccountStatement({
         </table>
       </ReportWindow>
 
-      {imports ? <SupplierImportsWindow currency={currency} hrefFor={inCurrency} section={imports} /> : null}
+      {/* Right under the lines, where a reader looks next (2026-10-14: at the
+          foot of the page they read as not there). */}
+      {imports ? <SupplierImportsWindow rows={imports.rows} totals={imports.totals} /> : null}
+      {oldBooks ? <OldBooksWindow history={oldBooks} /> : null}
 
       {/* ── What is still owed ────────────────────────────────────────────
           Under the movements, where a reader arrives having read them: the
@@ -632,8 +628,6 @@ export async function AccountStatement({
           ) : null}
         </ReportWindow>
       ) : null}
-
-      {oldBooks ? <OldBooksWindow history={oldBooks} hrefFor={inCurrency} /> : null}
     </AdminPage>
   );
 }

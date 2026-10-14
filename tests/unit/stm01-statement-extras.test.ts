@@ -32,15 +32,16 @@ describe('the old books on a statement', () => {
   ];
 
   it('makes one row per old document, its lines in the old order', () => {
-    const history = historyFor(lines, 'customer', 'IQD');
+    const history = historyFor(lines, 'customer');
     const sale = history.rows.find((row) => row.kind === 'sale' && row.legacyNo === '3')!;
     expect(sale.debit).toBe('57350000.0000');
+    expect(sale.currency).toBe('IQD');
     expect(sale.items.map((item) => item.name)).toEqual(['CABLE 2*6 DC', 'LONGI 585W']);
-    expect(history.rows).toHaveLength(5);
+    expect(history.rows).toHaveLength(6);
   });
 
   it('puts sales and payments in Debit, receipts and purchases in Credit', () => {
-    const history = historyFor([...lines, line({ kind: 'purchase', legacyNo: '9', documentDate: '2025-07-12', amount: '25000000' })], 'customer', 'IQD');
+    const history = historyFor([...lines, line({ kind: 'purchase', legacyNo: '9', documentDate: '2025-07-12', amount: '25000000' })], 'customer');
     const by = (kind: string) => history.rows.find((row) => row.kind === kind)!;
     expect(by('payment')).toMatchObject({ debit: '390000.0000', credit: '0.0000' });
     expect(by('receipt')).toMatchObject({ debit: '0.0000' });
@@ -48,34 +49,33 @@ describe('the old books on a statement', () => {
   });
 
   it('dates first in date order, the undated sales after in the list’s order', () => {
-    const history = historyFor(lines, 'customer', 'IQD');
+    const history = historyFor(lines, 'customer');
     expect(history.rows.map((row) => `${row.kind}:${row.legacyNo}`)).toEqual([
       'receipt:101',
       'payment:10',
+      'receipt:200',
       'receipt:1,017',
       'sale:3',
       'sale:12',
     ]);
   });
 
-  it('reads the net the way each side reads its statement', () => {
-    const customer = historyFor(lines, 'customer', 'IQD');
-    expect(customer.totalDebit).toBe('58740000.0000');
-    expect(customer.totalCredit).toBe('51600000.0000');
-    expect(customer.net).toBe('7140000.0000');
-    expect(historyFor(lines, 'supplier', 'IQD').net).toBe('-7140000.0000');
+  it('reads the net the way each side reads its statement, one total per currency, dinars first', () => {
+    const customer = historyFor(lines, 'customer');
+    expect(customer.totals).toEqual([
+      { currency: 'IQD', debit: '58740000.0000', credit: '51600000.0000', net: '7140000.0000' },
+      { currency: 'USD', debit: '0.0000', credit: '500.0000', net: '-500.0000' },
+    ]);
+    expect(historyFor(lines, 'supplier').totals[0]!.net).toBe('-7140000.0000');
   });
 
-  it('keeps to the statement’s currency and counts the documents in the others', () => {
-    expect(historyFor(lines, 'customer', 'IQD').elsewhere).toEqual({ USD: 1 });
-    const usd = historyFor(lines, 'customer', 'USD');
-    expect(usd.rows).toHaveLength(1);
-    expect(usd.totalCredit).toBe('500.0000');
-    expect(usd.elsewhere).toEqual({ IQD: 5 });
+  it('shows every currency whatever the statement is run in — a dollar receipt stays dollars', () => {
+    const receipt = historyFor(lines, 'customer').rows.find((row) => row.legacyNo === '200')!;
+    expect(receipt).toMatchObject({ currency: 'USD', credit: '500.0000' });
   });
 
   it('reads a line with no currency as dinars', () => {
-    expect(historyFor([line({ currency: null, amount: '5' })], 'customer', 'IQD').totalDebit).toBe('5.0000');
+    expect(historyFor([line({ currency: null, amount: '5' })], 'customer').totals).toEqual([{ currency: 'IQD', debit: '5.0000', credit: '0.0000', net: '5.0000' }]);
   });
 });
 
@@ -94,19 +94,18 @@ describe('the imports on a supplier statement', () => {
     row('IQD', '5000000.0000', '0', '0', '5000000.0000'),
   ];
 
-  it('totals the imports in the statement’s currency exactly', () => {
-    const section = importsSection(rows, 'USD');
-    expect(section.rows).toHaveLength(2);
-    expect(section.totals).toEqual({
-      agreed: '1442307.8000',
-      withBank: '20000.0000',
-      paid: '1371787.0000',
-      remaining: '70520.8000',
-    });
-    expect(section.elsewhere).toEqual({ IQD: 1 });
+  it('keeps every import and totals each currency exactly, never across', () => {
+    const section = importsSection(rows);
+    expect(section.rows).toHaveLength(3);
+    expect(section.totals).toEqual([
+      { currency: 'IQD', agreed: '5000000.0000', withBank: '0.0000', paid: '0.0000', remaining: '5000000.0000' },
+      { currency: 'USD', agreed: '1442307.8000', withBank: '20000.0000', paid: '1371787.0000', remaining: '70520.8000' },
+    ]);
   });
 
   it('reads a padded currency code as its code', () => {
-    expect(importsSection([row('USD', '1', '0', '0', '1')].map((r) => ({ ...r, currency: 'USD ' })), 'USD').rows).toHaveLength(1);
+    const section = importsSection([row('USD', '1', '0', '0', '1')].map((r) => ({ ...r, currency: 'USD ' })));
+    expect(section.rows[0]!.currency).toBe('USD');
+    expect(section.totals.map((total) => total.currency)).toEqual(['USD']);
   });
 });

@@ -45,21 +45,27 @@ export interface LegacyHistoryRow {
   readonly kind: LegacyHistoryKind;
   readonly legacyNo: string;
   readonly date: string | null;
+  /** The document's own currency: IQD, or USD for the old system's dollar vouchers. */
+  readonly currency: string;
   /** The goods on a sale or a purchase, in the old list's order. */
   readonly items: readonly LegacyHistoryItem[];
   readonly debit: string;
   readonly credit: string;
 }
 
-export interface LegacyHistory {
+/** What the rows in one currency come to. */
+export interface LegacyHistoryTotal {
   readonly currency: string;
-  readonly rows: readonly LegacyHistoryRow[];
-  readonly totalDebit: string;
-  readonly totalCredit: string;
+  readonly debit: string;
+  readonly credit: string;
   /** Debit less Credit for a customer, Credit less Debit for a supplier. */
   readonly net: string;
-  /** Documents in each other currency, so the screen can offer that statement. */
-  readonly elsewhere: Readonly<Record<string, number>>;
+}
+
+export interface LegacyHistory {
+  readonly rows: readonly LegacyHistoryRow[];
+  /** One per currency the rows are in, dinars first. */
+  readonly totals: readonly LegacyHistoryTotal[];
 }
 
 const DEBIT_KINDS: ReadonlySet<LegacyHistoryKind> = new Set(['sale', 'payment']);
@@ -84,25 +90,37 @@ export function currencyOfLine(line: Pick<LegacyHistoryLine, 'currency'>): strin
   return (line.currency ?? '').trim().toUpperCase() || 'IQD';
 }
 
-export function historyFor(
-  lines: readonly LegacyHistoryLine[],
-  side: 'customer' | 'supplier',
-  currency: string,
-): LegacyHistory {
-  const elsewhere: Record<string, Set<string>> = {};
+/** Dinars first, then the others by code: the order every per-currency list takes. */
+export function currencyOrder(a: string, b: string): number {
+  if (a === b) return 0;
+  if (a === 'IQD') return -1;
+  if (b === 'IQD') return 1;
+  return a < b ? -1 : 1;
+}
+
+/**
+ * Every currency the account's old documents are in (2026-10-14, the second
+ * pass: a statement run in dinars hid a customer's dollar receipts behind a
+ * link, and the owner read that as "still didn't show"). Each row keeps its
+ * own currency; the totals are one per currency, never added across.
+ */
+export function historyFor(lines: readonly LegacyHistoryLine[], side: 'customer' | 'supplier'): LegacyHistory {
   const groups = new Map<
     string,
-    { kind: LegacyHistoryKind; legacyNo: string; date: string | null; items: (LegacyHistoryItem & { lineNo: number })[]; amount: bigint }
+    {
+      kind: LegacyHistoryKind;
+      legacyNo: string;
+      currency: string;
+      date: string | null;
+      items: (LegacyHistoryItem & { lineNo: number })[];
+      amount: bigint;
+    }
   >();
 
   for (const line of lines) {
-    const lineCurrency = currencyOfLine(line);
-    const key = `${line.kind}|${line.legacyNo}`;
-    if (lineCurrency !== currency) {
-      (elsewhere[lineCurrency] ??= new Set()).add(key);
-      continue;
-    }
-    const group = groups.get(key) ?? { kind: line.kind, legacyNo: line.legacyNo, date: null, items: [], amount: 0n };
+    const currency = currencyOfLine(line);
+    const key = `${line.kind}|${line.legacyNo}|${currency}`;
+    const group = groups.get(key) ?? { kind: line.kind, legacyNo: line.legacyNo, currency, date: null, items: [], amount: 0n };
     group.amount += amountOf(line);
     group.date ??= line.documentDate;
     if (line.itemName) group.items.push({ name: line.itemName, quantity: line.quantity, unit: line.unit, lineNo: line.lineNo });
@@ -116,13 +134,14 @@ export function historyFor(
     return numberOf(a.legacyNo) - numberOf(b.legacyNo) || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0);
   });
 
-  let totalDebit = 0n;
-  let totalCredit = 0n;
+  const sums = new Map<string, { debit: bigint; credit: bigint }>();
   const rows = ordered.map((group): LegacyHistoryRow => {
     const debit = DEBIT_KINDS.has(group.kind) ? group.amount : 0n;
     const credit = DEBIT_KINDS.has(group.kind) ? 0n : group.amount;
-    totalDebit += debit;
-    totalCredit += credit;
+    const sum = sums.get(group.currency) ?? { debit: 0n, credit: 0n };
+    sum.debit += debit;
+    sum.credit += credit;
+    sums.set(group.currency, sum);
     const items = [...group.items]
       .sort((a, b) => a.lineNo - b.lineNo)
       .map(({ name, quantity, unit }) => ({ name, quantity, unit }));
@@ -130,18 +149,21 @@ export function historyFor(
       kind: group.kind,
       legacyNo: group.legacyNo,
       date: group.date,
+      currency: group.currency,
       items,
       debit: toDecimalString(debit),
       credit: toDecimalString(credit),
     };
   });
 
-  return {
-    currency,
-    rows,
-    totalDebit: toDecimalString(totalDebit),
-    totalCredit: toDecimalString(totalCredit),
-    net: toDecimalString(side === 'customer' ? totalDebit - totalCredit : totalCredit - totalDebit),
-    elsewhere: Object.fromEntries(Object.entries(elsewhere).map(([code, keys]) => [code, keys.size])),
-  };
+  const totals = [...sums.entries()]
+    .sort(([a], [b]) => currencyOrder(a, b))
+    .map(([currency, sum]): LegacyHistoryTotal => ({
+      currency,
+      debit: toDecimalString(sum.debit),
+      credit: toDecimalString(sum.credit),
+      net: toDecimalString(side === 'customer' ? sum.debit - sum.credit : sum.credit - sum.debit),
+    }));
+
+  return { rows, totals };
 }
