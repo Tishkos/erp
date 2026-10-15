@@ -150,6 +150,16 @@ export const apInvoice = pgTable(
     isImport: boolean('is_import').notNull().default(false),
 
     /**
+     * The balance an import from the sheet still owed at the cut-over, put on
+     * the supplier's account as a posted invoice (0422, 2026-10-15, by
+     * direction: "post them to the ledger"). Owed, aged, stated and paid as
+     * any bill; not the goods' invoice, so the import's own reads — its stage,
+     * its goods journey, its figures — leave it out. `import-opening-balance.ts`
+     * is the only writer.
+     */
+    isImportOpening: boolean('is_import_opening').notNull().default(false),
+
+    /**
      * D12 — expenses are purchase invoices. The type of fee (rent, freight
      * forwarding, customs brokerage …) is the expense category; it carries the
      * default expense account the line posts to.

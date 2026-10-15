@@ -151,6 +151,17 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
     ],
   },
   {
+    /*
+     * 0422 (2026-10-15, by direction: "post them to the ledger") — what an
+     * import brought in from the sheet still owed at the cut-over: the
+     * supplier credited, the goods it bought debited. Either way round, because
+     * money the bank's copy shows left before the cut-over takes it back off
+     * through the same two lines (`import-opening-balance.settleBeforeCutOver`).
+     */
+    event: 'payables.import_opening_balance',
+    lines: [line('supplier_payable', 'either', true, 'supplier'), line('goods_in_transit', 'either', true)],
+  },
+  {
     event: 'purchasing.supplier_credit_memo',
     lines: [
       line('supplier_payable', 'debit', true, 'supplier'),

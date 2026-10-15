@@ -8888,7 +8888,8 @@
       "hr_employee_advance_repayment": "Employee advance repaid in cash",
       "hr_expense_claim": "Expense claim reimbursed",
       "sales_customer_credit_note": "Customer Credit Note",
-      "sales_customer_debit_note": "Customer Debit Note"
+      "sales_customer_debit_note": "Customer Debit Note",
+      "payables_import_opening_balance": "Import opening balance (from the sheet)"
     },
     "role": {
       "inventory": "The stock issued to the project, or returned from it",
@@ -8925,7 +8926,8 @@
       "payroll_withholding": "Withheld from pay and owed on (social security, income tax)",
       "net_pay": "Net pay owed to the people, until it is paid",
       "employee_advance": "What people owe the company on advances and loans",
-      "employee_expense": "What people spent for the company and are reimbursed"
+      "employee_expense": "What people spent for the company and are reimbursed",
+      "goods_in_transit": "Goods bought on an import, not yet invoiced (its opening balance)"
     }
   },
   "print": {

@@ -64,6 +64,7 @@ export async function factsFor(tx: Tx, principal: Principal, payableId: string):
   const owner = await payables.load(tx, payableId);
 
   // The import's invoices, oldest first — what they agreed in front, and which posted.
+  // Not an opening balance (0422): it is the sheet's debt on the books, not the goods' invoice.
   const invoices = await tx
     .select({
       id: apInvoice.id,
@@ -78,7 +79,14 @@ export async function factsFor(tx: Tx, principal: Principal, payableId: string):
       advanceApplicationId: apInvoice.advanceApplicationId,
     })
     .from(apInvoice)
-    .where(and(eq(apInvoice.payableId, payableId), ne(apInvoice.status, 'reversed'), isNull(apInvoice.reversedAt)))
+    .where(
+      and(
+        eq(apInvoice.payableId, payableId),
+        ne(apInvoice.status, 'reversed'),
+        isNull(apInvoice.reversedAt),
+        eq(apInvoice.isImportOpening, false),
+      ),
+    )
     .orderBy(asc(apInvoice.invoiceDate), asc(apInvoice.invoiceNo));
 
   // An advance is agreed by percentage or by amount (0411); a row from before 0411 has a percentage and no basis.

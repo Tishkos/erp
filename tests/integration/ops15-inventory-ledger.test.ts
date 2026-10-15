@@ -152,6 +152,8 @@ beforeEach(async () => {
     ['supplier_advance', 'A000001', 'Supplier Advances', null],
     ['exchange_gain', 'R000001', 'Realised Exchange Gain', null],
     ['exchange_loss', 'X000001', 'Realised Exchange Loss', null],
+    // 0422 — a sheet import's opening balance is debited to the goods it bought.
+    ['goods_in_transit', 'A000001', 'Goods in Transit', null],
     // REQ-HR-001 HR-3 — a payroll run's cost, what it withholds and the net it owes.
     ['salary_expense', 'X000001', 'Salaries and Wages', null],
     ['payroll_employer_cost', 'X000001', 'Employer Social Security', null],

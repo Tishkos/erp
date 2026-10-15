@@ -1008,12 +1008,17 @@ export async function confirm(tx: Tx, ctx: ActorContext, id: string, input: Conf
     )
     .orderBy(asc(apInvoice.invoiceDate), asc(apInvoice.invoiceNo));
   const owing = invoices.filter((invoice) => payments.outstandingOn(invoice) > 0n);
+  // 0422 — an import from the sheet whose balance is on the books as its
+  // opening: the money pays the supplier, whatever the opening still owes in
+  // dinars (at a dearer dollar its dinars run out before its dollars do; the
+  // exchange difference closes the rest once the import is paid in full).
+  const opened = owing.length === 0 && (await (await import('./import-opening-balance')).hasOpening(tx, row.payableId));
 
   let supplierPaymentId: string | null = null;
   let supplierAdvanceId: string | null = null;
   let documentNo: string;
 
-  if (owing.length > 0) {
+  if (owing.length > 0 || opened) {
     // An invoice is posted: a supplier payment, allocated to it.
     const created = await payments.create(tx, ctx, {
       supplierId: row.supplierId,
@@ -1190,6 +1195,15 @@ export async function confirmBeforeCutOver(tx: Tx, ctx: ActorContext, id: string
       updatedAt: new Date(),
     })
     .where(eq(paymentApplication.id, id));
+
+  // 0422 — the import's opening balance counted this money as owed; it left
+  // before the cut-over, so it comes off the opening (nothing when there is none).
+  await (await import('./import-opening-balance')).settleBeforeCutOver(tx, ctx, {
+    id: row.id,
+    applicationNo: row.applicationNo,
+    payableId: row.payableId,
+    amountTxn: row.amountTxn,
+  });
 
   await events.record(tx, {
     payableId: row.payableId,
@@ -1565,8 +1579,9 @@ export async function totalsFor(tx: Tx, payableId: string) {
  * their statement showed nothing of the imports the sheet brought in). The
  * supplier statement's Imports section and the supplier profile read it.
  *
- * Tracking, not the ledger: an import from the sheet has no invoice and no
- * journal, so none of this is on the statement's lines or its balance. Paid
+ * Tracking, not the ledger: an import's own figures, beside the statement's
+ * lines. An import from the sheet is on those lines only once its opening
+ * balance is posted (0422, `import-opening-balance.ts`), for what it still owed. Paid
  * and left are `totalsFor`'s — the import page's own figures; *with the bank*
  * is the applications sent and not yet paid. A cancelled import is left out.
  */
@@ -1904,7 +1919,11 @@ export async function view(tx: Tx, applicationNo: string) {
     },
     checks,
     position,
-    confirmPostsAs: owing.length > 0 ? ('payment' as const) : ('advance' as const),
+    // An import with an opening balance (0422) is paid as a bill, as `confirm` does.
+    confirmPostsAs:
+      owing.length > 0 || (await (await import('./import-opening-balance')).hasOpening(tx, row.payableId))
+        ? ('payment' as const)
+        : ('advance' as const),
     owingInvoices: owing.map((invoice) => invoice.invoiceNo),
     daysWaiting:
       row.status === 'sent' && row.applicationDate ? daysBetween(row.applicationDate, today()) : null,

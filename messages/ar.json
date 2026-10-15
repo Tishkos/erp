@@ -8888,7 +8888,8 @@
       "hr_employee_advance_repayment": "سداد نقدي لسلفة موظف",
       "hr_expense_claim": "تسديد مطالبة مصاريف",
       "sales_customer_credit_note": "إشعار دائن للعميل",
-      "sales_customer_debit_note": "إشعار مدين للعميل"
+      "sales_customer_debit_note": "إشعار مدين للعميل",
+      "payables_import_opening_balance": "الرصيد الافتتاحي للاستيراد (من الجدول)"
     },
     "role": {
       "inventory": "المخزون المصروف للمشروع أو المرتجع منه",
@@ -8925,7 +8926,8 @@
       "payroll_withholding": "المستقطع من الرواتب والمستحق للغير (الضمان الاجتماعي، ضريبة الدخل)",
       "net_pay": "صافي الرواتب المستحق للموظفين حتى يُصرف",
       "employee_advance": "ما يدين به الموظفون للشركة من سلف وقروض",
-      "employee_expense": "ما أنفقه الموظفون للشركة ويُسدَّد لهم"
+      "employee_expense": "ما أنفقه الموظفون للشركة ويُسدَّد لهم",
+      "goods_in_transit": "بضاعة مشتراة على استيراد ولم تصدر فاتورتها بعد (رصيده الافتتاحي)"
     }
   },
   "print": {

@@ -534,3 +534,44 @@ export const payableExchangeDifference = pgTable(
     check('payable_exchange_difference_positive', sql`${t.amountIqd} > 0`),
   ],
 );
+
+/**
+ * 0422 — what a sheet import's opening balance counted as owed and is not,
+ * each with its journal (`import-opening-balance.ts` is the only writer):
+ *
+ *   paid_before_cut_over  a migrated application the sheet left "sent", whose
+ *                         SWIFT the bank's copy dates on or before the day the
+ *                         import was brought in — it comes off the opening;
+ *   absorbed_by_invoice   the supplier's own invoice for the import, posted
+ *                         later — the opening already holds that debt, so the
+ *                         invoice is settled by it. Undone, once, when that
+ *                         invoice is reversed (the only change the trigger allows).
+ *
+ * The keys are checked by the migration's foreign keys (the invoice and
+ * application tables import this module).
+ */
+export const importOpeningSettlement = pgTable(
+  'import_opening_settlement',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** The opening. */
+    apInvoiceId: uuid('ap_invoice_id').notNull(),
+    kind: text('kind', { enum: ['paid_before_cut_over', 'absorbed_by_invoice'] }).notNull(),
+    paymentApplicationId: uuid('payment_application_id'),
+    absorbedInvoiceId: uuid('absorbed_invoice_id'),
+    amountTxn: numeric('amount_txn', { precision: 19, scale: 4 }).notNull(),
+    amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }).notNull(),
+    journalEntryId: uuid('journal_entry_id').notNull(),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    reversedAt: timestamp('reversed_at', { withTimezone: true }),
+    reversedBy: uuid('reversed_by').references(() => appUser.id),
+    reversalJournalEntryId: uuid('reversal_journal_entry_id'),
+  },
+  (t) => [
+    index('import_opening_settlement_invoice_idx').on(t.apInvoiceId),
+    check('import_opening_settlement_positive', sql`${t.amountIqd} > 0 and ${t.amountTxn} > 0`),
+  ],
+);

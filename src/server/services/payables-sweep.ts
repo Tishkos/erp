@@ -265,6 +265,8 @@ const CHECK_QUERIES: Readonly<Record<string, CheckQuery>> = {
                          and i.status in ('posted', 'partially_executed')
                          and i.reversed_at is null
                          and i.total_iqd > i.settled_amount_iqd
+                         -- An opening balance (0422) is a sheet import's old debt, not a new bill waiting to be funded.
+                         and not i.is_import_opening
        where p.cancelled_at is null and p.closed_at is null
          and not exists (
                select 1 from payment_application pa

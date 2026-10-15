@@ -170,6 +170,7 @@ ap_invoice_note
 legacy_document
 legacy_import_run
 payables_migration_run
+import_opening_settlement
 payable_exchange_difference
 landed_cost_departure
 landed_cost_layer_adjustment

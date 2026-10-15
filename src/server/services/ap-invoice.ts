@@ -2218,6 +2218,11 @@ export async function post(
   // the supplier's account agree on what is still owed.
   await advances.applyToPostedInvoice(tx, ctx, id);
 
+  // 0422 — the supplier's invoice for an import from the sheet whose debt is
+  // already on the books as its opening balance: settled against it, so the
+  // supplier is not owed the same goods twice.
+  await (await import('./import-opening-balance')).absorbInvoice(tx, ctx, id);
+
   /*
    * §15.3 — the advance this invoice is paid in front, raised as a draft
    * (2026-10-03, by direction; a draft since 2026-10-06: "draft, send for
@@ -2505,7 +2510,7 @@ export async function reverse(
   id: string,
   input: { readonly reason: string },
 ): Promise<{ reversalEntryNo: string; movementsReversed: number }> {
-  const { invoice, lines } = await load(tx, id, { lock: true });
+  let { invoice, lines } = await load(tx, id, { lock: true });
 
   await authz.authorize(ctx.principal, 'reverse_cancel', PERMISSION_OBJECT, {
     branchCode: invoice.branchCode,
@@ -2518,6 +2523,22 @@ export async function reverse(
       invoice.invoiceNo,
       'a reversal records why the invoice was wrong (§14.3). Give a reason.',
     );
+  }
+
+  // 0422 — settled only by its import's opening balance (`absorbInvoice`):
+  // that settlement is undone first, and the invoice reversed as any other.
+  if (await (await import('./import-opening-balance')).undoAbsorption(tx, ctx, id, reason)) {
+    ({ invoice, lines } = await load(tx, id, { lock: true }));
+  }
+  // An opening with the supplier's own invoice settled against it holds that invoice up.
+  if (invoice.isImportOpening) {
+    const resting = await (await import('./import-opening-balance')).absorbedBy(tx, id);
+    if (resting.length > 0) {
+      throw new ApInvoiceNotReversibleError(
+        invoice.invoiceNo,
+        `purchase invoice ${resting.join(', ')} is settled against this opening balance. Reverse that invoice first.`,
+      );
+    }
   }
 
   // The specific refusals first, the status machine last — see `ar-invoice`.

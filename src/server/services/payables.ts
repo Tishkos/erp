@@ -334,7 +334,8 @@ export async function gatherFacts(tx: Tx, payableId: string): Promise<StageFacts
       approved: sql<number>`count(*) filter (where ${apInvoice.status} in ('approved','posted','partially_executed','settled'))::int`,
     })
     .from(apInvoice)
-    .where(and(eq(apInvoice.payableId, payableId), isNull(apInvoice.reversedAt)));
+    // An opening balance (0422) is the sheet's debt on the books, not an invoice the import reached.
+    .where(and(eq(apInvoice.payableId, payableId), isNull(apInvoice.reversedAt), eq(apInvoice.isImportOpening, false)));
 
   // Service lane (build Stage 2) — an approved confirmation of this payable.
   const [confirmation] = await tx
@@ -989,7 +990,7 @@ export async function openImportsForInvoice(tx: Tx) {
   const result = await tx.execute(sql`
     select p.id, p.payable_no as "payableNo", p.supplier_reference as "reference",
            bp.legal_name as "supplierName", p.supplier_id as "supplierId",
-           exists (select 1 from ap_invoice i where i.payable_id = p.id and i.reversed_at is null) as "invoiced"
+           exists (select 1 from ap_invoice i where i.payable_id = p.id and i.reversed_at is null and not i.is_import_opening) as "invoiced"
       from payable p
       join business_partner bp on bp.id = p.supplier_id
      where p.payable_type_code = 'import' and p.cancelled_at is null and p.closed_at is null
@@ -1212,7 +1213,8 @@ async function refreshFromInvoices(tx: Tx, payableId: string): Promise<void> {
       totalIqd: sql<string>`coalesce(sum(${apInvoice.totalIqd}) filter (where ${apInvoice.status} in ('posted','partially_executed','settled')), 0)::text`,
     })
     .from(apInvoice)
-    .where(and(eq(apInvoice.payableId, payableId), isNull(apInvoice.reversedAt)));
+    // Not an opening balance (0422): the import keeps the figures it was brought in with.
+    .where(and(eq(apInvoice.payableId, payableId), isNull(apInvoice.reversedAt), eq(apInvoice.isImportOpening, false)));
 
   if ((sums?.posted ?? 0) > 0) {
     // The quantity follows the posted invoices too, in base units (FIX-4): a
@@ -1225,6 +1227,7 @@ async function refreshFromInvoices(tx: Tx, payableId: string): Promise<void> {
         and(
           eq(apInvoice.payableId, payableId),
           isNull(apInvoice.reversedAt),
+          eq(apInvoice.isImportOpening, false),
           inArray(apInvoice.status, ['posted', 'partially_executed', 'settled']),
           isNotNull(apInvoiceLine.itemCode),
           isNotNull(apInvoiceLine.warehouseCode),
@@ -1583,14 +1586,14 @@ const HELD_SQL = sql`(
    where ai.payable_id = payable.id and ai.status <> 'reversed'
      and wh.shipment_stage = 'without_swift' and cl.remaining_quantity > 0)
   or (payable.source = 'sheet_import'
-    and not exists (select 1 from ap_invoice ai where ai.payable_id = payable.id and ai.status <> 'reversed' and ai.reversed_at is null)
+    and not exists (select 1 from ap_invoice ai where ai.payable_id = payable.id and ai.status <> 'reversed' and ai.reversed_at is null and not ai.is_import_opening)
     and not exists (select 1 from payment_application pa where pa.payable_id = payable.id and pa.status in ('confirmed', 'debited'))
     and exists (select 1 from payment_application pa where pa.payable_id = payable.id and pa.status not in ('rejected', 'cancelled'))
     and not exists (select 1 from bill_of_lading bl where bl.payable_id = payable.id and bl.cancelled_at is null)))`;
 
 /** In process before any container moves: an invoice posted (the journey's POSTED), or an application paid. */
 const UNDER_WAY_SQL = sql`(
-  exists (select 1 from ap_invoice ai where ai.payable_id = payable.id and ai.status in ('posted', 'partially_executed', 'settled'))
+  exists (select 1 from ap_invoice ai where ai.payable_id = payable.id and ai.status in ('posted', 'partially_executed', 'settled') and not ai.is_import_opening)
   or exists (select 1 from payment_application pa where pa.payable_id = payable.id and pa.status in ('confirmed', 'debited')))`;
 
 /** Where one container is — `containerWhere`'s order: the furthest its status or dates say. */

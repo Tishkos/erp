@@ -1793,6 +1793,13 @@
       "when": 1795900000228,
       "tag": "0421_project_initiation",
       "breakpoints": true
+    },
+    {
+      "idx": 256,
+      "version": "7",
+      "when": 1795900000229,
+      "tag": "0422_import_opening_balances",
+      "breakpoints": true
     }
   ]
 }

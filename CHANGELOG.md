@@ -7,6 +7,12 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 
 ## Unreleased
 
+### Added — the sheet's imports on the suppliers' accounts (2026-10-15)
+- **Supplier balances include the imports.** Each import brought in from the sheet that still owes something gets its opening balance: a posted purchase invoice for what it still owed when it was brought in (agreed less paid), on the supplier's account in dinars at that day's rate and in exact dollars. Supplier Statements, Payables Ageing, Supplier Reconciliation and the supplier's profile show it like any bill. The import's own figures, stage and goods position do not change.
+- **A payment on such an import can be confirmed.** It was refused (no invoice, no purchase order); it now pays the opening, and the exchange difference closes the supplier once the import is paid in full. Money the bank's copy shows left before the cut-over comes off the opening without a second payment.
+- **The supplier's own invoice for the import, entered later, is not owed twice:** it is settled against the opening. Reversing it undoes that; the opening is not reversed while such an invoice rests on it.
+- Migration: `0422_import_opening_balances` (a column on `ap_invoice`, the table `import_opening_settlement`, the posting event `payables.import_opening_balance`). After the deploy the openings are posted once on live with `var/sheet-work/import-openings.sh` (dry run, then `--apply`; a dump first). Rollback: the previous build; the openings are reversed invoice by invoice (Reverse, while nothing rests on them). Test evidence: `tests/integration/iob01-import-opening-balances.test.ts`; control C-96.
+
 ### Changed — Transfers & Applications (2026-10-15)
 - **Search by name, word by word.** Import Applications and Payment Applications find a row by any part of the supplier's name or code ("ham" finds Hama), words in any order; Import Applications also by the numbers of its payment applications, PDs, B/Ls, containers and invoices.
 - **More filters.** Import Applications: supplier, stage, payment (none / pending / at the bank / part paid / fully paid), where the goods are, open / cleared / cancelled. Payment Applications: status groups (pending, not with the bank yet, paid, closed) and every status, supplier, bank, currency.
