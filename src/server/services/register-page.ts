@@ -13,6 +13,7 @@
  */
 import { sql, type AnyColumn, type SQL } from 'drizzle-orm';
 import type { Tx } from '../db/client';
+import { likeEscape, searchWords } from '../domain/search';
 
 export const REGISTER_PAGE_SIZE = 50;
 
@@ -79,5 +80,35 @@ export function searchOf(
   return sql`(${sql.join(
     columns.map((column) => sql`coalesce(${column}::text, '') ilike ${pattern} escape '\\'`),
     sql` or `,
+  )})`;
+}
+
+/**
+ * A search box that reads words rather than one phrase (2026-10-15): every
+ * word must be found somewhere among the columns — "ham" finds Hama, "hama
+ * 2026" finds Hama's rows that say 2026 anywhere, and the order the words are
+ * typed in does not matter. Both sides go through `search_fold` (case, Arabic
+ * diacritics and letter forms, Arabic-Indic digits — Global Search's folding),
+ * so شركه finds شركة. A column may be an expression, such as the numbers of a
+ * record's related documents gathered with `string_agg`. Null when nothing is
+ * asked.
+ *
+ * Every row the filter sees is folded once per word, so it suits a register
+ * of thousands, not a table of hundreds of thousands (see Global Search for
+ * those).
+ */
+export function wordSearchOf(
+  columns: readonly (SQL | AnyColumn)[],
+  term: string | null | undefined,
+): SQL | null {
+  const words = searchWords(term);
+  if (words.length === 0 || columns.length === 0) return null;
+  const haystack = sql`search_fold(concat_ws(' ', ${sql.join(
+    columns.map((column) => sql`${column}::text`),
+    sql`, `,
+  )}))`;
+  return sql`(${sql.join(
+    words.map((word) => sql`${haystack} like ${`%${likeEscape(word)}%`} escape '\\'`),
+    sql` and `,
   )})`;
 }

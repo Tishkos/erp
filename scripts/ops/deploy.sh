@@ -72,9 +72,18 @@ else
 fi
 REVISION="$(git rev-parse HEAD) $BRANCH $(git log -1 --format=%cI)"
 
-say "Type check and unit tests"
-npm run typecheck
-npm run test:unit
+# SKIP_CHECKS=<reason> skips them here — when they were run elsewhere (on the
+# server, against a scratch copy) because this machine has not the memory for
+# them (2026-10-15). The server's `next build` still type-checks, and a build
+# that fails stops this script before the running site is touched.
+if [[ -n "${SKIP_CHECKS:-}" ]]; then
+  say "Type check and unit tests SKIPPED: $SKIP_CHECKS"
+  printf '%s  %s  skipped type check and unit tests: %s\n' "$STAMP" "$COMMIT" "$SKIP_CHECKS" >> var/deploy-skips.log
+else
+  say "Type check and unit tests"
+  npm run typecheck
+  npm run test:unit
+fi
 
 # ── The ledger rules, proved before the code reaches the books ────────────
 # The integration suite is what holds the stock ledger, the journals and the

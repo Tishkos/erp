@@ -20,7 +20,7 @@
  * `STAGE_CHANGED` when the answer moved. Later build stages extend the fact
  * gathering; the rails and rules do not change shape.
  */
-import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   apInvoice,
@@ -64,6 +64,7 @@ import * as execution from './project-execution';
 import * as units from './item-units';
 import { knownPayableDueSql, payableDueWaitsSql } from './known-due-date';
 import { datesOrder, withinDates } from './register-dates-sql';
+import { wordSearchOf } from './register-page';
 import type { RegisterDates } from '../domain/register-dates';
 
 export const PERMISSION_OBJECT = 'payable';
@@ -113,7 +114,7 @@ export async function typeOf(tx: Tx, code: string) {
 }
 
 /** A type's rail, for derivation and for the stage rail on screen. */
-export async function railFor(tx: Tx, typeCode: string): Promise<StageRow[]> {
+export async function railFor(tx: Tx, typeCode: string): Promise<(StageRow & { readonly name: string })[]> {
   const rows = await tx
     .select({
       code: payableStage.code,
@@ -1517,11 +1518,125 @@ export async function cancel(
 // The workbench (§21.2) and the page (§21.3)
 // ---------------------------------------------------------------------------
 
+/*
+ * The register's filters beyond type and stopped (2026-10-15, by direction:
+ * "much smarter, more options — pending etc, much more states"). Each is a
+ * question the import's own rows answer; nothing is stored for it.
+ *
+ *   * Payment — what the applications say: none raised; pending (raised, not
+ *     with the bank yet: draft, sent for approval, approved); at the bank
+ *     (sent, not paid); part paid; fully paid — paid as the Paid column
+ *     counts it (applications confirmed or debited).
+ *   * Goods — where the goods are, as the import page's "where the goods are
+ *     now" reads its containers (`domain/import-goods-journey.containerWhere`):
+ *     any container in that place, or, before any is loaded, the import's own
+ *     place — held for the advance (On Process (Without SWIFT)) or in process.
+ *   * State — open, cleared (closed), cancelled, or every one. Left out, the
+ *     list is open and cleared imports, as it always was.
+ */
+export const WORKBENCH_PAYMENT_STATES = ['none', 'pending', 'at_bank', 'part_paid', 'paid'] as const;
+export type WorkbenchPaymentState = (typeof WORKBENCH_PAYMENT_STATES)[number];
+export const WORKBENCH_GOODS_PLACES = ['on_process', 'in_process', 'on_board', 'at_port', 'cleared', 'received'] as const;
+export type WorkbenchGoodsPlace = (typeof WORKBENCH_GOODS_PLACES)[number];
+export const WORKBENCH_STATES = ['open', 'closed', 'cancelled', 'all'] as const;
+export type WorkbenchState = (typeof WORKBENCH_STATES)[number];
+
+/** A filter value from the address, when it is one of `allowed`; else null. */
+export function choiceOf<T extends string>(allowed: readonly T[], value: unknown): T | null {
+  return typeof value === 'string' && (allowed as readonly string[]).includes(value) ? (value as T) : null;
+}
+
+/*
+ * The SQL below names `payable` by its table name, never through a column
+ * reference: drizzle prints a column bare in a one-table select, and inside a
+ * subquery a bare "id" is the subquery's own.
+ */
+const PAID_SQL = sql`coalesce((select sum(pa.amount_txn) from payment_application pa
+   where pa.payable_id = payable.id and pa.status in ('confirmed', 'debited')), 0)`;
+
+const hasApplication = (statuses: readonly string[]) =>
+  sql`exists (select 1 from payment_application pa
+     where pa.payable_id = payable.id and pa.status in (${sql.join(statuses.map((one) => sql`${one}`), sql`, `)}))`;
+
+function paymentStateSql(state: WorkbenchPaymentState) {
+  switch (state) {
+    case 'none':
+      return sql`not exists (select 1 from payment_application pa
+         where pa.payable_id = payable.id and pa.status not in ('rejected', 'cancelled'))`;
+    case 'pending':
+      return hasApplication(['draft', 'submitted', 'approved']);
+    case 'at_bank':
+      return hasApplication(['sent']);
+    case 'part_paid':
+      return sql`(${PAID_SQL} > 0 and ${PAID_SQL} < payable.amount_txn)`;
+    case 'paid':
+      return sql`(payable.amount_txn > 0 and ${PAID_SQL} >= payable.amount_txn)`;
+  }
+}
+
+/** The import's goods held for its advance — `advance-hold.heldOf`'s read, or a sheet import still waiting for its first SWIFT. */
+const HELD_SQL = sql`(
+  exists (select 1 from cost_layer cl
+    join inventory_movement im on im.id = cl.created_by_movement_id
+    join warehouse wh on wh.code = cl.warehouse_code
+    join ap_invoice ai on ai.id::text = im.source_document_id
+   where ai.payable_id = payable.id and ai.status <> 'reversed'
+     and wh.shipment_stage = 'without_swift' and cl.remaining_quantity > 0)
+  or (payable.source = 'sheet_import'
+    and not exists (select 1 from ap_invoice ai where ai.payable_id = payable.id and ai.status <> 'reversed' and ai.reversed_at is null)
+    and not exists (select 1 from payment_application pa where pa.payable_id = payable.id and pa.status in ('confirmed', 'debited'))
+    and exists (select 1 from payment_application pa where pa.payable_id = payable.id and pa.status not in ('rejected', 'cancelled'))
+    and not exists (select 1 from bill_of_lading bl where bl.payable_id = payable.id and bl.cancelled_at is null)))`;
+
+/** In process before any container moves: an invoice posted (the journey's POSTED), or an application paid. */
+const UNDER_WAY_SQL = sql`(
+  exists (select 1 from ap_invoice ai where ai.payable_id = payable.id and ai.status in ('posted', 'partially_executed', 'settled'))
+  or exists (select 1 from payment_application pa where pa.payable_id = payable.id and pa.status in ('confirmed', 'debited')))`;
+
+/** Where one container is — `containerWhere`'s order: the furthest its status or dates say. */
+const CONTAINER_PLACE_SQL = sql`case
+    when sc.status_code = 'missing_damaged' then 'missing'
+    when sc.received_on is not null or sc.status_code = 'received' then 'received'
+    when sc.customs_cleared_on is not null or sc.status_code = 'customs_cleared' then 'cleared'
+    when sc.arrived_port_on is not null or sc.status_code = 'at_port' then 'at_port'
+    when sc.status_code in ('on_sea', 'late') then 'on_board'
+    else 'not_loaded' end`;
+
+const LIVE_CONTAINERS = sql`shipment_container sc join bill_of_lading bl on bl.id = sc.bl_id
+   where bl.payable_id = payable.id and bl.cancelled_at is null and sc.cancelled_at is null`;
+
+function goodsPlaceSql(place: WorkbenchGoodsPlace) {
+  if (place === 'on_process' || place === 'in_process') {
+    const held = place === 'on_process' ? HELD_SQL : sql`not ${HELD_SQL} and ${UNDER_WAY_SQL}`;
+    return sql`(${held} and (
+      not exists (select 1 from ${LIVE_CONTAINERS})
+      or exists (select 1 from ${LIVE_CONTAINERS} and (${CONTAINER_PLACE_SQL}) = 'not_loaded')))`;
+  }
+  return sql`exists (select 1 from ${LIVE_CONTAINERS} and (${CONTAINER_PLACE_SQL}) = ${place})`;
+}
+
+/**
+ * Every number a person may hold for an import, gathered for the search box:
+ * its applications, PDs (and the platform's invoice number), B/Ls, containers
+ * and purchase invoices (ours and the supplier's). Read under the viewer's
+ * row policies, like the rest of the list.
+ */
+const RELATED_NUMBERS_SQL = sql`concat_ws(' ',
+  (select string_agg(pa.application_no, ' ') from payment_application pa where pa.payable_id = payable.id),
+  (select string_agg(concat_ws(' ', cp.pd_no, cp.invoice_no), ' ') from customs_pd cp where cp.payable_id = payable.id),
+  (select string_agg(bl.bl_no, ' ') from bill_of_lading bl where bl.payable_id = payable.id and bl.cancelled_at is null),
+  (select string_agg(sc.container_no, ' ') from shipment_container sc where sc.payable_id = payable.id and sc.cancelled_at is null),
+  (select string_agg(concat_ws(' ', ai.invoice_no, ai.supplier_invoice_no), ' ') from ap_invoice ai where ai.payable_id = payable.id))`;
+
 export interface WorkbenchFilter {
   readonly typeCode?: string | null;
   readonly stageCode?: string | null;
   readonly stopped?: 'yes' | 'no' | 'needs_reason' | null;
   readonly supplierId?: string | null;
+  readonly payment?: WorkbenchPaymentState | null;
+  readonly goods?: WorkbenchGoodsPlace | null;
+  /** Left out: open and cleared, as before. `includeCancelled` is the older way of asking for `all`. */
+  readonly state?: WorkbenchState | null;
   readonly search?: string | null;
   readonly includeCancelled?: boolean;
   readonly page?: number;
@@ -1546,10 +1661,32 @@ export async function workbench(tx: Tx, filter: WorkbenchFilter = {}) {
   // The import's date: its document's.
   const day = payable.documentDate;
 
+  // Named by table, not `${payable.id}`: the count below is a select whose bare "id" would be the hold's own.
   const needsReason = sql<boolean>`exists (
     select 1 from payable_hold h
-     where h.payable_id = ${payable.id}
+     where h.payable_id = payable.id
        and h.status = 'open' and h.reason_code = 'PENDING_REASON')`;
+
+  const state: WorkbenchState | null = filter.state ?? (filter.includeCancelled ? 'all' : null);
+  // The search box reads words (2026-10-15): the supplier's name and code, the
+  // import's numbers and those of everything raised for it, in any order.
+  const words = wordSearchOf(
+    [
+      payable.payableNo,
+      payable.supplierReference,
+      payable.description,
+      businessPartner.code,
+      businessPartner.legalName,
+      businessPartner.tradeName,
+      payableStage.name,
+      payable.currency,
+      payable.branchCode,
+      RELATED_NUMBERS_SQL,
+    ],
+    filter.search,
+  );
+  // A reference typed without its dashes or spaces ("QS2026014") still finds "QS-2026/014".
+  const referenceKey = (filter.search ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
   const where = and(
     filter.typeCode ? eq(payable.payableTypeCode, filter.typeCode) : undefined,
@@ -1558,15 +1695,20 @@ export async function workbench(tx: Tx, filter: WorkbenchFilter = {}) {
     filter.stopped === 'yes' ? eq(payable.onHold, true) : undefined,
     filter.stopped === 'no' ? eq(payable.onHold, false) : undefined,
     filter.stopped === 'needs_reason' ? needsReason : undefined,
-    filter.includeCancelled ? undefined : isNull(payable.cancelledAt),
+    filter.payment ? paymentStateSql(filter.payment) : undefined,
+    filter.goods ? goodsPlaceSql(filter.goods) : undefined,
+    state === 'all'
+      ? undefined
+      : state === 'cancelled'
+        ? isNotNull(payable.cancelledAt)
+        : isNull(payable.cancelledAt),
+    state === 'open' ? isNull(payable.closedAt) : undefined,
+    state === 'closed' ? isNotNull(payable.closedAt) : undefined,
     withinDates(day, filter.dates),
-    filter.search
-      ? or(
-          ilike(payable.supplierReference, `%${filter.search}%`),
-          ilike(payable.payableNo, `%${filter.search}%`),
-          ilike(payable.description, `%${filter.search}%`),
-          sql`${payable.supplierReferenceKey} like ${'%' + filter.search.toUpperCase().replace(/[^A-Z0-9]/g, '') + '%'}`,
-        )
+    words
+      ? referenceKey.length >= 3
+        ? or(words, sql`${payable.supplierReferenceKey} like ${`%${referenceKey}%`}`)
+        : words
       : undefined,
   );
 
@@ -1650,12 +1792,28 @@ export async function workbench(tx: Tx, filter: WorkbenchFilter = {}) {
     .limit(pageSize)
     .offset((page - 1) * pageSize);
 
+  // The same joins as the rows: the search reads the supplier and the stage.
   const [{ total }] = (await tx
     .select({ total: sql<number>`count(*)::int` })
     .from(payable)
+    .innerJoin(
+      payableStage,
+      and(eq(payableStage.payableTypeCode, payable.payableTypeCode), eq(payableStage.code, payable.stageCode)),
+    )
+    .innerJoin(businessPartner, eq(businessPartner.id, payable.supplierId))
     .where(where)) as [{ total: number }];
 
   return { rows, total, page, pageSize };
+}
+
+/** The suppliers that have imports of this type, for the register's Supplier filter. */
+export async function workbenchSuppliers(tx: Tx, typeCode: string | null = 'import') {
+  return tx
+    .selectDistinct({ id: businessPartner.id, code: businessPartner.code, name: businessPartner.legalName })
+    .from(payable)
+    .innerJoin(businessPartner, eq(businessPartner.id, payable.supplierId))
+    .where(typeCode ? eq(payable.payableTypeCode, typeCode) : undefined)
+    .orderBy(asc(businessPartner.legalName), asc(businessPartner.code));
 }
 
 export interface WorkbenchView {

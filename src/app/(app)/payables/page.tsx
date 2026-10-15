@@ -82,12 +82,18 @@ export default async function PayablesWorkbench({
     params.stopped === 'yes' || params.stopped === 'no' || params.stopped === 'needs_reason'
       ? params.stopped
       : null;
+  // The filters beyond type and stopped (2026-10-15, by direction: "more options — pending etc, much more states").
+  const supplierFilter = typeof params.supplier === 'string' && params.supplier ? params.supplier : null;
+  const stageFilter = typeof params.stage === 'string' && params.stage ? params.stage : null;
+  const paymentFilter = payables.choiceOf(payables.WORKBENCH_PAYMENT_STATES, params.payment);
+  const goodsFilter = payables.choiceOf(payables.WORKBENCH_GOODS_PLACES, params.goods);
+  const stateFilter = payables.choiceOf(payables.WORKBENCH_STATES, params.state);
   const pageNo = Number(params.page) > 0 ? Number(params.page) : 1;
   const viewParam = typeof params.view === 'string' && params.view ? params.view : null;
   // The Filter's window of document dates and the order — newest first unless asked (2026-10-07).
   const dates = registerDatesOf(params);
 
-  const { rows, total, types, savedViews } =
+  const { rows, total, types, savedViews, suppliers, stages } =
     await withCurrentUser(
     async (tx) => {
       const stored = await payables.workbenchViews(tx);
@@ -111,6 +117,11 @@ export default async function PayablesWorkbench({
       const list = await payables.workbench(tx, {
         typeCode: typeFilter,
         stopped: stoppedFilter,
+        supplierId: supplierFilter,
+        stageCode: stageFilter,
+        payment: paymentFilter,
+        goods: goodsFilter,
+        state: stateFilter,
         search: outcome.q || null,
         page: pageNo,
         pageSize: 50,
@@ -121,6 +132,8 @@ export default async function PayablesWorkbench({
         ...list,
         types,
         savedViews: stored,
+        suppliers: await payables.workbenchSuppliers(tx, typeFilter),
+        stages: await payables.railFor(tx, typeFilter ?? 'import'),
       };
     },
   );
@@ -148,6 +161,15 @@ export default async function PayablesWorkbench({
         (q.get('stopped') ?? null) === stoppedFilter && (q.get('type') ?? null) === typeFilter
       );
     })?.key ?? '';
+
+  // The new filters, carried by the search box and the dates filter.
+  const kept: Record<string, string> = {
+    ...(supplierFilter ? { supplier: supplierFilter } : {}),
+    ...(stageFilter ? { stage: stageFilter } : {}),
+    ...(paymentFilter ? { payment: paymentFilter } : {}),
+    ...(goodsFilter ? { goods: goodsFilter } : {}),
+    ...(stateFilter ? { state: stateFilter } : {}),
+  };
 
   return (
     <AdminPage
@@ -213,9 +235,10 @@ export default async function PayablesWorkbench({
               ...(viewParam ? { view: viewParam } : {}),
               ...(typeof params.type === 'string' && params.type ? { type: params.type } : {}),
               ...(stoppedFilter && !viewParam ? { stopped: stoppedFilter } : {}),
+              ...kept,
               ...registerDatesParams(dates),
             }}
-            placeholder={admin('search_placeholder')}
+            placeholder={t('workbench_search_placeholder')}
             q={outcome.q}
             searchLabel={admin('search')}
           >
@@ -226,6 +249,7 @@ export default async function PayablesWorkbench({
                 view: viewParam,
                 type: typeof params.type === 'string' ? params.type : null,
                 stopped: typeof params.stopped === 'string' ? params.stopped : null,
+                ...kept,
               }}
               path="/payables"
             />
@@ -260,6 +284,42 @@ export default async function PayablesWorkbench({
                   { value: 'needs_reason', label: t('needs_reason') },
                   { value: 'no', label: t('moving') },
                 ]}
+              />
+              <Select
+                defaultValue={supplierFilter ?? ''}
+                emptyLabel={t('filter_all_suppliers')}
+                label={t('col_supplier')}
+                name="supplier"
+                options={suppliers.map((supplier) => ({ value: supplier.id, label: `${supplier.name} (${supplier.code})` }))}
+                searchable
+              />
+              <Select
+                defaultValue={stageFilter ?? ''}
+                emptyLabel={t('filter_all_stages')}
+                label={t('col_stage')}
+                name="stage"
+                options={stages.filter((stage) => stage.active || stage.code === stageFilter).map((stage) => ({ value: stage.code, label: `${stage.sequence}. ${stage.name}` }))}
+              />
+              <Select
+                defaultValue={paymentFilter ?? ''}
+                emptyLabel={t('filter_any_payment')}
+                label={t('filter_payment')}
+                name="payment"
+                options={payables.WORKBENCH_PAYMENT_STATES.map((state) => ({ value: state, label: t(`filter_payment_${state}`) }))}
+              />
+              <Select
+                defaultValue={goodsFilter ?? ''}
+                emptyLabel={t('filter_any_goods')}
+                label={t('filter_goods')}
+                name="goods"
+                options={payables.WORKBENCH_GOODS_PLACES.map((place) => ({ value: place, label: t(`journey_now_place_${place}`) }))}
+              />
+              <Select
+                defaultValue={stateFilter ?? ''}
+                emptyLabel={t('filter_state_live')}
+                label={t('filter_state')}
+                name="state"
+                options={payables.WORKBENCH_STATES.map((state) => ({ value: state, label: t(`filter_state_${state}`) }))}
               />
               <SubmitRow>
                 <Submit label={t('filter')} />

@@ -46,6 +46,51 @@ export function accountTypeFor(kind: ConfirmationKind): 'bank' | 'cash' {
   return kind === 'cash' ? 'cash' : 'bank';
 }
 
+// ---------------------------------------------------------------------------
+// One import, one bank (2026-10-15)
+// ---------------------------------------------------------------------------
+
+/*
+ * By direction: "if a supplier invoice is paid through a bank — an advance or
+ * a later payment — the bank payment for that import should be locked to the
+ * same bank as the first payment application; we are not going to change the
+ * bank". The import's first live application from a bank account names the
+ * bank; every later application from a bank account goes through that bank
+ * (another account there is fine — a second dollar account at the same bank).
+ * A rejected or cancelled application never sets it, so a bank that refused
+ * the first request can be left. Cash is not a bank and neither sets nor meets
+ * the rule.
+ */
+
+/** The account fields the rule reads. */
+export interface PayingAccount {
+  readonly id: string;
+  readonly accountType: string;
+  readonly bankCode: string | null;
+  /** The account's own free-text bank, for an account not linked to the bank list. */
+  readonly bankName: string | null;
+}
+
+/**
+ * What "the same bank" means for an account: its bank in the bank list, else
+ * the bank it names, else the account itself. Null for a cash account.
+ */
+export function bankKeyOf(account: PayingAccount): string | null {
+  if (account.accountType !== 'bank') return null;
+  if (account.bankCode) return `bank:${account.bankCode}`;
+  const named = account.bankName?.trim().toLowerCase().replace(/\s+/g, ' ');
+  return named ? `name:${named}` : `account:${account.id}`;
+}
+
+/** May an application be paid from `account` when the import is tied to `locked`'s bank? */
+export function keepsTheBank(locked: PayingAccount | null, account: PayingAccount): boolean {
+  if (!locked) return true;
+  const lockedKey = bankKeyOf(locked);
+  const key = bankKeyOf(account);
+  if (lockedKey === null || key === null) return true;
+  return lockedKey === key;
+}
+
 /** The event a confirmation writes, by what proved it. */
 export function confirmationEvent(kind: ConfirmationKind): string {
   switch (kind) {
@@ -111,6 +156,35 @@ export function isApplied(status: string): boolean {
 /** Paid (§15.5): confirmed or debited. */
 export function isPaid(status: string): boolean {
   return status === 'confirmed' || status === 'debited';
+}
+
+/*
+ * The register's Status filter (2026-10-15, by direction: "more options —
+ * pending etc, much more states"): every status on its own, and the groups an
+ * accountant asks for — what is still pending (raised, not yet paid), what is
+ * with the bank, what is paid, what is closed.
+ */
+export const STATUS_GROUPS = {
+  pending: ['draft', 'submitted', 'approved', 'sent'],
+  not_with_bank: ['draft', 'submitted', 'approved'],
+  paid: ['confirmed', 'debited'],
+  closed: ['rejected', 'cancelled'],
+} as const satisfies Record<string, readonly ApplicationStatus[]>;
+
+/** The register's earlier view names, still read from an address that carries one. */
+const STATUS_ALIASES: Readonly<Record<string, ApplicationStatus>> = {
+  drafts: 'draft',
+  to_approve: 'submitted',
+  to_send: 'approved',
+  waiting: 'sent',
+};
+
+/** The statuses a Status filter value names: a group, one status, or none (everything). */
+export function statusesOf(choice: string | null | undefined): readonly ApplicationStatus[] | null {
+  if (!choice) return null;
+  if (Object.hasOwn(STATUS_GROUPS, choice)) return STATUS_GROUPS[choice as keyof typeof STATUS_GROUPS];
+  if (Object.hasOwn(STATUS_ALIASES, choice)) return [STATUS_ALIASES[choice]!];
+  return (PAYMENT_APPLICATION_STATUSES as readonly string[]).includes(choice) ? [choice as ApplicationStatus] : null;
 }
 
 export interface TransitionRow {

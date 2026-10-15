@@ -53,7 +53,8 @@ export async function createApplication(formData: FormData): Promise<void> {
     },
     (value) => {
       const created = value as { applicationNo?: string } | null | undefined;
-      return created?.applicationNo ? record(created.applicationNo) : `${payableRecord(payableNo)}?pay=1`;
+      // A refusal comes back to the sheet, where what was typed is kept (2026-10-15) — not to the import.
+      return created?.applicationNo ? record(created.applicationNo) : `${LIST}/new?import=${encodeURIComponent(payableNo)}`;
     },
   );
 }
@@ -178,19 +179,21 @@ export async function submitApplication(formData: FormData): Promise<void> {
  */
 export async function addApplicationPaper(formData: FormData): Promise<void> {
   const applicationNo = text(formData, 'application_no');
+  const kind = text(formData, 'kind');
   const file = formData.get('file');
-  if (!(file instanceof File) || file.size === 0) {
+  const given = file instanceof File && file.size > 0 ? file : null;
+  // Rejected / cancelled needs its reason, not a file (2026-10-15, by direction); every other paper is its file.
+  if (!given && kind !== 'rejected_cancelled') {
     redirect(`${record(applicationNo)}?error=attachment_missing`);
   }
-  const upload = file as File;
-  const content = Buffer.from(await upload.arrayBuffer());
+  const content = given ? Buffer.from(await given.arrayBuffer()) : null;
   // Where files go and who may read them back — registered before the first upload of a cold process.
   registerAllRecords();
   await runAdminAndReturn(async (tx, ctx) => {
     const row = await applications.loadByNo(tx, applicationNo);
     return applications.addPaper(tx, ctx, row.id, {
-      kind: text(formData, 'kind'),
-      fileName: upload.name,
+      kind,
+      fileName: given?.name ?? null,
       content,
       date: text(formData, 'paper_date').trim() || null,
       reference: text(formData, 'paper_reference').trim() || null,

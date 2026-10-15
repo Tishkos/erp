@@ -34,9 +34,11 @@ if (!ownerUrl) {
   );
 }
 
-const appUrl = ownerUrl
-  .replace('erp_owner', 'erp_app')
-  .replace('owner_dev_password', 'app_dev_password');
+// DATABASE_URL_APP_TEST names the app role's URL where its password is not the
+// development one (a scratch database on the server, 2026-10-15).
+const appUrl =
+  process.env.DATABASE_URL_APP_TEST ??
+  ownerUrl.replace('erp_owner', 'erp_app').replace('owner_dev_password', 'app_dev_password');
 
 // Point the application's own client at the test database, as the app role.
 // Set before any test imports src/server/db/client.ts, which reads this at

@@ -31,7 +31,7 @@
  * The maker never approves their own application, and the approver of the
  * application is the approver of the advance it may become.
  */
-import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   apInvoice,
@@ -70,6 +70,7 @@ import {
   isConfirmationKind,
   isLive,
   isReserved,
+  keepsTheBank,
   needsPayeeAccount,
   payeeCheck,
   planAmounts,
@@ -96,7 +97,7 @@ import * as exchange from './import-exchange';
 import * as advanceHold from './advance-hold';
 import * as attachments from './attachments';
 import { allocateDocumentNumber } from './numbering';
-import { registerPage, searchOf, type RegisterPaging } from './register-page';
+import { registerPage, wordSearchOf, type RegisterPaging } from './register-page';
 import { businessDayOf, datesOrder, withinDates } from './register-dates-sql';
 import type { RegisterDates } from '../domain/register-dates';
 import { businessDateOf, businessToday } from '../domain/business-date';
@@ -161,6 +162,57 @@ async function accountOf(tx: Tx, id: string) {
   if (!row) throw new PaymentApplicationError(`No bank or cash account with id '${id}'.`);
   return row;
 }
+
+/** The bank an import's payments are tied to: its first live application's from a bank account. */
+export interface BankLock {
+  readonly applicationNo: string;
+  readonly accountId: string;
+  readonly accountCode: string;
+  readonly accountType: string;
+  readonly bankCode: string | null;
+  /** The bank list's name, else the account's own. */
+  readonly bankName: string | null;
+}
+
+/**
+ * One import, one bank (2026-10-15, by direction: "the bank payment for that
+ * import should be locked to the same bank as the first payment application;
+ * we are not going to change the bank"). The first application of the import
+ * — by when it was raised — that is neither rejected nor cancelled and is paid
+ * from a bank account; null while there is none. `domain/payment-applications
+ * .keepsTheBank` says whether another account is at the same bank.
+ */
+export async function bankLockOf(tx: Tx, payableId: string): Promise<BankLock | null> {
+  const [row] = await tx
+    .select({
+      applicationNo: paymentApplication.applicationNo,
+      accountId: bankCashAccount.id,
+      accountCode: bankCashAccount.code,
+      accountType: bankCashAccount.accountType,
+      bankCode: bankCashAccount.bankCode,
+      bankName: sql<string | null>`coalesce(${bank.name}, ${bankCashAccount.bankName})`,
+    })
+    .from(paymentApplication)
+    .innerJoin(bankCashAccount, eq(bankCashAccount.id, paymentApplication.bankCashAccountId))
+    .leftJoin(bank, eq(bank.code, bankCashAccount.bankCode))
+    .where(
+      and(
+        eq(paymentApplication.payableId, payableId),
+        notInArray(paymentApplication.status, ['rejected', 'cancelled']),
+        eq(bankCashAccount.accountType, 'bank'),
+      ),
+    )
+    .orderBy(asc(paymentApplication.createdAt), asc(paymentApplication.applicationNo))
+    .limit(1);
+  return row ?? null;
+}
+
+const lockedAccount = (lock: BankLock) => ({
+  id: lock.accountId,
+  accountType: lock.accountType,
+  bankCode: lock.bankCode,
+  bankName: lock.bankName,
+});
 
 async function transitions(tx: Tx) {
   return tx.select().from(paymentApplicationTransition);
@@ -368,6 +420,20 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateInput) {
     throw new PaymentApplicationError(
       `${account.code} holds ${account.currency} and ${row.payableNo} is in ${row.currency} (D3). ` +
         `Pay from an account in ${row.currency}.`,
+    );
+  }
+  // One import, one bank (2026-10-15): the payable is locked above, so two
+  // applications raised together cannot each pick a different first bank.
+  const bankLock = await bankLockOf(tx, row.id);
+  if (bankLock && !keepsTheBank(lockedAccount(bankLock), account)) {
+    const [chosenBank] = account.bankCode
+      ? await tx.select({ name: bank.name }).from(bank).where(eq(bank.code, account.bankCode)).limit(1)
+      : [];
+    throw new PaymentApplicationError(
+      `${row.payableNo} is paid through ${bankLock.bankName ?? bankLock.accountCode}: its first application, ` +
+        `${bankLock.applicationNo}, went there, and every later one goes through the same bank. ` +
+        `${account.code} is at ${chosenBank?.name ?? account.bankName ?? 'another bank'}; ` +
+        `pay from an account at ${bankLock.bankName ?? bankLock.accountCode} in ${row.currency}.`,
     );
   }
 
@@ -1348,8 +1414,13 @@ export function papersFor(status: string): readonly PaperKind[] {
 
 export interface PaperInput {
   readonly kind: string;
-  readonly fileName: string;
-  readonly content: Buffer;
+  /**
+   * The paper itself. Required for every kind but rejected / cancelled, whose
+   * reason is what is required (2026-10-15, by direction: "rejecting a payment
+   * application doesn't need an attachment, but it needs the reason").
+   */
+  readonly fileName?: string | null;
+  readonly content?: Buffer | null;
   /** Sent: the day it went to the bank. Paid: the SWIFT / transfer / voucher date. */
   readonly date?: string | null;
   /** Sent: the bank's reference. Paid: the MT103 / transfer / voucher reference — required. */
@@ -1388,6 +1459,10 @@ export async function addPaper(tx: Tx, ctx: ActorContext, id: string, input: Pap
         'Sent to the bank follows approval; paid follows sent.',
     );
   }
+  const file = input.fileName && input.content && input.content.length > 0 ? { fileName: input.fileName, content: input.content } : null;
+  if (!file && kind !== 'rejected_cancelled') {
+    throw new PaymentApplicationError(`Attach the paper — a "${kind.replace(/_/g, ' ')}" step is proved by its file.`);
+  }
   const date = input.date?.trim() || null;
   if (kind === 'sent_to_bank') {
     await send(tx, ctx, id, { applicationDate: date ?? businessToday(), bankReference: input.reference?.trim() || null, overrideReason: input.overrideReason?.trim() || null });
@@ -1401,12 +1476,14 @@ export async function addPaper(tx: Tx, ctx: ActorContext, id: string, input: Pap
     if (row.status === 'approved') await cancel(tx, ctx, id, reason);
     else await reject(tx, ctx, id, reason);
   }
+  // Rejected or cancelled with its reason and no paper: the step is the whole of it.
+  if (!file) return { attachmentId: null, kind };
 
   const stored = await attachments.upload(tx, ctx, {
     objectType: PERMISSION_OBJECT,
     objectId: row.id,
-    fileName: input.fileName,
-    content: input.content,
+    fileName: file.fileName,
+    content: file.content,
   });
   await tx.insert(paymentApplicationPaper).values({
     paymentApplicationId: row.id,
@@ -1417,7 +1494,7 @@ export async function addPaper(tx: Tx, ctx: ActorContext, id: string, input: Pap
   await events.record(tx, {
     payableId: row.payableId,
     eventCode: 'PAPER_ADDED',
-    summary: `${input.fileName} attached to ${row.applicationNo} as "${kind.replace(/_/g, ' ')}"`,
+    summary: `${file.fileName} attached to ${row.applicationNo} as "${kind.replace(/_/g, ' ')}"`,
     sourceType: PERMISSION_OBJECT,
     sourceId: row.id,
     sourceNo: row.applicationNo,
@@ -1566,6 +1643,11 @@ export interface RegisterFilter extends RegisterPaging {
   readonly search?: string | null;
   /** The Filter: a window of application dates and the order (newest first unless asked). */
   readonly dates?: RegisterDates | null;
+  /** The supplier paid (2026-10-15). */
+  readonly supplierId?: string | null;
+  /** The company's bank the money leaves through: a bank-list code (2026-10-15). */
+  readonly bankCode?: string | null;
+  readonly currency?: string | null;
 }
 
 const applicationColumns = {
@@ -1635,8 +1717,12 @@ export async function listForScreen(tx: Tx, filter: RegisterFilter = {}) {
   const day = sql`coalesce(${paymentApplication.applicationDate}, ${businessDayOf(paymentApplication.createdAt)})`;
   const where = and(
     statuses ? inArray(paymentApplication.status, statuses as never[]) : undefined,
+    filter.supplierId ? eq(paymentApplication.supplierId, filter.supplierId) : undefined,
+    filter.bankCode ? eq(bankCashAccount.bankCode, filter.bankCode) : undefined,
+    filter.currency ? eq(paymentApplication.currency, filter.currency) : undefined,
     withinDates(day, filter.dates),
-    searchOf(
+    // Words, not one phrase (2026-10-15): "ham swift" finds Hama's SWIFT applications.
+    wordSearchOf(
       [
         paymentApplication.applicationNo,
         paymentApplication.status,
@@ -1644,10 +1730,13 @@ export async function listForScreen(tx: Tx, filter: RegisterFilter = {}) {
         payable.supplierReference,
         businessPartner.code,
         businessPartner.legalName,
+        businessPartner.tradeName,
         paymentMethod.name,
         bankCashAccount.code,
         bankCashAccount.name,
         bank.name,
+        paymentApplication.bankReference,
+        paymentApplication.confirmationReference,
         paymentApplication.currency,
         paymentApplication.amountTxn,
         paymentApplication.branchCode,
@@ -1682,6 +1771,26 @@ export async function listForScreen(tx: Tx, filter: RegisterFilter = {}) {
       }));
     },
   });
+}
+
+/** What the register's Supplier, Bank and Currency filters offer: the values its applications use. */
+export async function registerChoices(tx: Tx) {
+  const suppliers = await tx
+    .selectDistinct({ id: businessPartner.id, code: businessPartner.code, name: businessPartner.legalName })
+    .from(paymentApplication)
+    .innerJoin(businessPartner, eq(businessPartner.id, paymentApplication.supplierId))
+    .orderBy(asc(businessPartner.legalName), asc(businessPartner.code));
+  const banks = await tx
+    .selectDistinct({ code: bank.code, name: bank.name })
+    .from(paymentApplication)
+    .innerJoin(bankCashAccount, eq(bankCashAccount.id, paymentApplication.bankCashAccountId))
+    .innerJoin(bank, eq(bank.code, bankCashAccount.bankCode))
+    .orderBy(asc(bank.name), asc(bank.code));
+  const currencies = await tx
+    .selectDistinct({ code: paymentApplication.currency })
+    .from(paymentApplication)
+    .orderBy(asc(paymentApplication.currency));
+  return { suppliers, banks, currencies: currencies.map((row) => row.code) };
 }
 
 export async function view(tx: Tx, applicationNo: string) {
@@ -1822,13 +1931,28 @@ export async function pickersFor(tx: Tx, payableId: string) {
       accountType: bankCashAccount.accountType,
       currency: bankCashAccount.currency,
       bankName: bank.name,
+      bankCode: bankCashAccount.bankCode,
+      ownBankName: bankCashAccount.bankName,
     })
     .from(bankCashAccount)
     .leftJoin(bank, eq(bank.code, bankCashAccount.bankCode))
     .where(and(eq(bankCashAccount.active, true), eq(bankCashAccount.currency, owner.currency)))
     .orderBy(asc(bankCashAccount.code));
+  // One import, one bank (2026-10-15): once an application went through a
+  // bank, only that bank's accounts are offered (cash accounts stay).
+  const bankLock = await bankLockOf(tx, payableId);
+  const offered = bankLock
+    ? accounts.filter((account) =>
+        keepsTheBank(lockedAccount(bankLock), {
+          id: account.id,
+          accountType: account.accountType,
+          bankCode: account.bankCode,
+          bankName: account.ownBankName,
+        }),
+      )
+    : accounts;
   const withAvailable = [];
-  for (const account of accounts) {
+  for (const account of offered) {
     const position = await treasury.accountPosition(tx, account.id);
     withAvailable.push({ ...account, availableIqd: money(position.availableIqd) });
   }
@@ -1859,7 +1983,7 @@ export async function pickersFor(tx: Tx, payableId: string) {
     .from(instalmentTrigger)
     .where(eq(instalmentTrigger.active, true))
     .orderBy(asc(instalmentTrigger.sortOrder));
-  return { methods, accounts: withAvailable, payees, funding, loans: fundingLoans, instalments, triggers };
+  return { methods, accounts: withAvailable, bankLock, payees, funding, loans: fundingLoans, instalments, triggers };
 }
 
 /** §21.13 — the application a supplier payment was confirmed from, if any. */
@@ -1876,7 +2000,7 @@ export async function forSupplierPayment(tx: Tx, supplierPaymentId: string) {
 export async function payableImports(tx: Tx) {
   const result = await tx.execute(sql`
     select p.payable_no as "payableNo", p.supplier_reference as "reference", bp.legal_name as "supplierName",
-           p.currency, p.amount_txn::text as "amountTxn"
+           bp.code as "supplierCode", p.currency, p.amount_txn::text as "amountTxn"
       from payable p
       join business_partner bp on bp.id = p.supplier_id
      where p.payable_type_code = 'import' and p.cancelled_at is null and p.closed_at is null
@@ -1885,6 +2009,7 @@ export async function payableImports(tx: Tx) {
     payableNo: string;
     reference: string;
     supplierName: string;
+    supplierCode: string;
     currency: string;
     amountTxn: string;
   }[];

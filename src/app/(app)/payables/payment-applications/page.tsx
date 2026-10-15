@@ -24,6 +24,7 @@ import * as applications from '@/server/services/payment-applications';
 import { STATUS_CHIP, statusKey } from './status';
 import { DatesHidden, RegisterFilter } from '@/components/admin/register-filter';
 import { registerDatesOf, registerDatesParams, registerDatesQuery } from '@/server/domain/register-dates';
+import { PAYMENT_APPLICATION_STATUSES, STATUS_GROUPS, statusLabelKey, statusesOf } from '@/server/domain/payment-applications';
 
 /**
  * Payment applications — REQ-AP-001 §21.7.
@@ -36,15 +37,13 @@ import { registerDatesOf, registerDatesParams, registerDatesQuery } from '@/serv
  */
 export const dynamic = 'force-dynamic';
 
-const VIEWS: Readonly<Record<string, readonly string[]>> = {
-  drafts: ['draft'],
-  // Sent for approval (2026-10-06): what an approver acts on.
-  to_approve: ['submitted'],
-  to_send: ['approved'],
-  waiting: ['sent'],
-  paid: ['confirmed', 'debited'],
-  closed: ['rejected', 'cancelled'],
-};
+/*
+ * The Status filter (2026-10-15, by direction: "more options — pending etc,
+ * much more states"): the groups first — pending (raised, not paid), not with
+ * the bank yet, paid, closed — then every status on its own. The earlier view
+ * names (drafts, to_approve, to_send, waiting) are still read from an address.
+ */
+const GROUPS = Object.keys(STATUS_GROUPS) as (keyof typeof STATUS_GROUPS)[];
 
 export default async function PaymentApplicationsPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/payables/payment-applications')) notFound();
@@ -66,16 +65,40 @@ export default async function PaymentApplicationsPage({ searchParams }: { search
 
   const params = await searchParams;
   const viewParam = typeof params.view === 'string' ? params.view : '';
-
-  const inView = Object.hasOwn(VIEWS, viewParam) ? VIEWS[viewParam] : undefined;
+  const inView = statusesOf(viewParam) ?? undefined;
+  const pick = (name: string) => (typeof params[name] === 'string' && params[name] ? (params[name] as string) : null);
+  const supplierFilter = pick('supplier');
+  const bankFilter = pick('bank');
+  const currencyFilter = pick('currency');
   // The Filter's window of application dates and the order — newest first unless asked (2026-10-07).
   const dates = registerDatesOf(params);
-  const { result } = await withCurrentUser(async (tx) => ({
-    result: await applications.listForScreen(tx, { statuses: inView ?? null, search: outcome.q, page: outcome.page, dates }),
+  const { result, choices } = await withCurrentUser(async (tx) => ({
+    result: await applications.listForScreen(tx, {
+      statuses: inView ?? null,
+      supplierId: supplierFilter,
+      bankCode: bankFilter,
+      currency: currencyFilter,
+      search: outcome.q,
+      page: outcome.page,
+      dates,
+    }),
+    choices: await applications.registerChoices(tx),
   }));
   const shown = result.rows;
+  // The filters the search box, the dates filter and the pager carry along.
+  const kept: Record<string, string> = {
+    ...(inView ? { view: viewParam } : {}),
+    ...(supplierFilter ? { supplier: supplierFilter } : {}),
+    ...(bankFilter ? { bank: bankFilter } : {}),
+    ...(currencyFilter ? { currency: currencyFilter } : {}),
+  };
   const query = (p: number) =>
-    [outcome.q ? `q=${encodeURIComponent(outcome.q)}` : '', inView ? `view=${viewParam}` : '', registerDatesQuery(dates), `page=${p}`]
+    [
+      outcome.q ? `q=${encodeURIComponent(outcome.q)}` : '',
+      new URLSearchParams(kept).toString(),
+      registerDatesQuery(dates),
+      `page=${p}`,
+    ]
       .filter(Boolean)
       .join('&');
 
@@ -109,23 +132,48 @@ export default async function PaymentApplicationsPage({ searchParams }: { search
             clearHref="/payables/payment-applications"
             clearLabel={admin('clear_search')}
             countLabel={admin('rows_shown', { count: result.total })}
-            hidden={{ ...(inView ? { view: viewParam } : {}), ...registerDatesParams(dates) }}
-            placeholder={admin('search_placeholder')}
+            hidden={{ ...kept, ...registerDatesParams(dates) }}
+            placeholder={t('search_placeholder')}
             q={outcome.q}
             searchLabel={admin('search')}
           >
-            <RegisterFilter dates={dates} keep={{ q: outcome.q, view: inView ? viewParam : null }} path="/payables/payment-applications" />
+            <RegisterFilter dates={dates} keep={{ q: outcome.q, ...kept }} path="/payables/payment-applications" />
           </ListToolbar>
 
           <form className={s.filterBar} method="get">
             <DatesHidden dates={dates} />
             <FilterRow>
               <Select
-                defaultValue={viewParam}
+                defaultValue={inView ? viewParam : ''}
                 emptyLabel={t('view_all')}
-                label={t('view')}
+                label={t('col_status')}
                 name="view"
-                options={Object.keys(VIEWS).map((key) => ({ value: key, label: t(`view_${key}`) }))}
+                options={[
+                  ...GROUPS.map((key) => ({ value: key, label: t(`view_${key}`) })),
+                  ...PAYMENT_APPLICATION_STATUSES.map((status) => ({ value: status, label: t(statusLabelKey(status)) })),
+                ]}
+              />
+              <Select
+                defaultValue={supplierFilter ?? ''}
+                emptyLabel={t('filter_all_suppliers')}
+                label={t('col_supplier')}
+                name="supplier"
+                options={choices.suppliers.map((supplier) => ({ value: supplier.id, label: `${supplier.name} (${supplier.code})` }))}
+                searchable
+              />
+              <Select
+                defaultValue={bankFilter ?? ''}
+                emptyLabel={t('filter_all_banks')}
+                label={t('filter_bank')}
+                name="bank"
+                options={choices.banks.map((one) => ({ value: one.code, label: one.name }))}
+              />
+              <Select
+                defaultValue={currencyFilter ?? ''}
+                emptyLabel={t('filter_all_currencies')}
+                label={t('filter_currency')}
+                name="currency"
+                options={choices.currencies.map((code) => ({ value: code, label: code }))}
               />
               <SubmitRow>
                 <Submit label={t('filter')} />

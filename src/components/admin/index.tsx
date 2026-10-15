@@ -348,6 +348,7 @@ export function Select({
   emptyLabel,
   multiple,
   size,
+  searchable,
   id: idOverride,
 }: {
   readonly label: string;
@@ -371,6 +372,8 @@ export function Select({
   readonly emptyLabel?: string | undefined;
   readonly multiple?: boolean | undefined;
   readonly size?: number | undefined;
+  /** A search box above the list, however short (a longer list than a dozen has one anyway). */
+  readonly searchable?: boolean | undefined;
   /** The element id, when the field name is not unique on the page (as `Field`'s). */
   readonly id?: string | undefined;
 }) {
@@ -392,6 +395,7 @@ export function Select({
         name={name}
         options={options}
         required={required}
+        searchable={searchable}
         size={size}
       />
       {hint ? (

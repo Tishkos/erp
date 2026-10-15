@@ -311,13 +311,16 @@ export default async function PaymentApplicationPage({
    * A paper and the step it proves (2026-10-06, by direction: "once posted it
    * has attachments; whenever someone updates them it has to be pointed out
    * what this attachment is"). One form per kind, each asking only what that
-   * step needs; the file is required.
+   * step needs; the file is required — but for rejected / cancelled, which
+   * asks the reason and takes a paper only if there is one (2026-10-15, by
+   * direction: "rejection doesn't need attachments mandatory but needs the
+   * reason").
    */
-  const paperFile = (
+  const paperFile = (optional: boolean) => (
     <label className={s.uploadPicker}>
       <Upload aria-hidden="true" />
-      <span>{admin('attachments.choose')}</span>
-      <input name="file" required type="file" />
+      <span>{optional ? t('paper_file_optional') : admin('attachments.choose')}</span>
+      <input name="file" required={!optional} type="file" />
     </label>
   );
   const paperDialog = (kind: 'sent_to_bank' | 'paid' | 'rejected_cancelled') => (
@@ -361,7 +364,7 @@ export default async function PaymentApplicationPage({
         {kind === 'rejected_cancelled' ? (
           <Field label={t('paper_reason')} name="paper_reason" required wide />
         ) : null}
-        {paperFile}
+        {kind !== 'rejected_cancelled' ? paperFile(false) : mayAttach ? paperFile(true) : null}
         <SubmitRow>
           <Submit label={t(`paper_action_${kind}`)} />
         </SubmitRow>
@@ -411,7 +414,7 @@ export default async function PaymentApplicationPage({
             ) : null}
             {maySend && mayAttach ? paperDialog('sent_to_bank') : null}
             {mayConfirm && mayAttach ? paperDialog('paid') : null}
-            {mayRefusePaper && mayAttach ? paperDialog('rejected_cancelled') : null}
+            {mayRefusePaper ? paperDialog('rejected_cancelled') : null}
             {mayConfirmMigrated ? (
               <NewRecordDialog
                 buttonLabel={t('confirm_before_cut_over')}

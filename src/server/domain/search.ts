@@ -86,6 +86,31 @@ export function likeEscape(value: string): string {
   return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
 }
 
+/** The most words a register's search box reads. */
+export const MAX_SEARCH_WORDS = 6;
+
+/**
+ * A register's search box, read as words (2026-10-15, by direction: "search
+ * by name, not just by code … if the supplier is Hama I can search by ham,
+ * much smarter"): the phrase compatibility-normalised, split on spaces,
+ * folded as `search_fold` folds, each word once, at most `MAX_SEARCH_WORDS`.
+ * Every word is then looked for on its own, anywhere in the row.
+ */
+export function searchWords(term: string | null | undefined): string[] {
+  const display = (term ?? '')
+    .normalize('NFKC')
+    .replace(/[​-‏‪-‮⁦-⁩﻿]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_QUERY_LENGTH);
+  if (!display) return [];
+  const words = foldText(display)
+    .split(' ')
+    .map((word) => word.trim())
+    .filter((word) => word.length > 0);
+  return [...new Set(words)].slice(0, MAX_SEARCH_WORDS);
+}
+
 // ---------------------------------------------------------------------------
 // The phrase
 // ---------------------------------------------------------------------------

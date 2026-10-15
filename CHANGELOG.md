@@ -7,6 +7,14 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 
 ## Unreleased
 
+### Changed — Transfers & Applications (2026-10-15)
+- **Search by name, word by word.** Import Applications and Payment Applications find a row by any part of the supplier's name or code ("ham" finds Hama), words in any order; Import Applications also by the numbers of its payment applications, PDs, B/Ls, containers and invoices.
+- **More filters.** Import Applications: supplier, stage, payment (none / pending / at the bank / part paid / fully paid), where the goods are, open / cleared / cancelled. Payment Applications: status groups (pending, not with the bank yet, paid, closed) and every status, supplier, bank, currency.
+- **One import, one bank.** Once an import has a live payment application from a bank, every later one goes through the same bank; the form offers only that bank's accounts.
+- **What is typed is kept.** The new payment application form keeps its values in the browser per import — through a tab change, a reload or a refused save — and lists the applications in progress.
+- **Rejected / cancelled needs the reason, not a file.**
+- Migrations: none. Rollback: the previous build (`.next-prev`). Test evidence: `tests/unit/ta01-transfers-applications.test.ts`, `tests/integration/ta01-transfers-applications.test.ts`.
+
 ### Changed — the WhatsApp group
 - **A notice for the whole team is tagged `@all`** (by direction, 2026-10-13: "the tagging should be @all, not specific names"). The team's message no longer lists the people it could tag by name; it says `@all`, and every member of the group is notified. A person's own alert still tags that person. An answer written by the AI cannot tag the whole group.
 

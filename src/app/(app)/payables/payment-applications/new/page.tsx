@@ -16,10 +16,13 @@ import * as applications from '@/server/services/payment-applications';
 import * as payables from '@/server/services/payables';
 import { createApplication, startApplication } from '../actions';
 import { IntentSelect } from '@/components/admin/intent-select';
+import { FormDrafts, FormMemory } from '@/components/admin/form-memory';
 
 export const dynamic = 'force-dynamic';
 
 const LIST = '/payables/payment-applications';
+/** The kept forms of this sheet, one per import (`FormMemory`). */
+const DRAFT_PREFIX = 'payapp-new:';
 
 /**
  * A payment application on a sheet of its own — by direction 2026-10-06
@@ -73,17 +76,27 @@ export default async function NewPaymentApplicationPage({ searchParams }: { sear
   const { owner, pickers, totals } = found;
 
   // Step one: which import. The import's own page skips it by naming the import in the address.
+  // Every unfinished application of this person's on this browser, one per import (2026-10-15).
+  const drafts = (
+    <FormDrafts
+      labels={{ title: t('drafts_title'), open: t('drafts_open'), discard: t('drafts_discard'), saved: t('drafts_saved', { time: '{time}' }) }}
+      owner={principal.userId}
+      prefix={DRAFT_PREFIX}
+    />
+  );
+
   if (!owner || !pickers || !totals) {
     const fields: DocumentField[] = [
       {
         label: t('import'),
         control: true,
+        // Searched by any part of the import's number, its reference or the supplier's name or code (2026-10-15).
         value: (
-          <IntentSelect aria-label={t('import')} defaultValue="" name="payable_no" required>
+          <IntentSelect aria-label={t('import')} defaultValue="" name="payable_no" required searchable>
             <option value="" />
             {found.imports.map((row) => (
               <option key={row.payableNo} value={row.payableNo}>
-                {`${row.payableNo} · ${row.reference} · ${row.supplierName}`}
+                {`${row.payableNo} · ${row.reference} · ${row.supplierName} (${row.supplierCode}) · ${row.currency}`}
               </option>
             ))}
           </IntentSelect>
@@ -104,6 +117,7 @@ export default async function NewPaymentApplicationPage({ searchParams }: { sear
             </table>
           </DocumentWindow>
         </form>
+        {drafts}
       </AdminPage>
     );
   }
@@ -150,23 +164,35 @@ export default async function NewPaymentApplicationPage({ searchParams }: { sear
       control: true,
       // No account in the import's currency: say so and where to add one, rather than an empty
       // required box that only refuses to send (2026-10-07: "the Paid from doesn't load").
-      value:
-        pickers.accounts.length === 0 ? (
-          <span className={s.sapEnteredNote}>
-            {t('no_paid_from', { currency: row.currency })}{' '}
-            <a className={s.sapLink} href="/master-data/bank-accounts">
-              {t('no_paid_from_link')}
-            </a>
-          </span>
-        ) : (
-          <IntentSelect aria-label={t('col_account')} defaultValue={pickers.accounts[0]?.id ?? ''} name="bank_cash_account_id" required>
-            {pickers.accounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {`${account.code} · ${account.name}${account.bankName ? ` · ${account.bankName}` : ''} — ${t('available_short')} ${money(account.availableIqd, 'IQD')}`}
-              </option>
-            ))}
-          </IntentSelect>
-        ),
+      value: (
+        <>
+          {pickers.accounts.length === 0 ? (
+            <span className={s.sapEnteredNote}>
+              {t('no_paid_from', { currency: row.currency })}{' '}
+              <a className={s.sapLink} href="/master-data/bank-accounts">
+                {t('no_paid_from_link')}
+              </a>
+            </span>
+          ) : (
+            <IntentSelect aria-label={t('col_account')} defaultValue={pickers.accounts[0]?.id ?? ''} name="bank_cash_account_id" required>
+              {pickers.accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {`${account.code} · ${account.name}${account.bankName ? ` · ${account.bankName}` : ''} — ${t('available_short')} ${money(account.availableIqd, 'IQD')}`}
+                </option>
+              ))}
+            </IntentSelect>
+          )}
+          {/* One import, one bank (2026-10-15): the first application's bank holds for the rest. */}
+          {pickers.bankLock ? (
+            <span className={s.sapEnteredNote} data-bank-lock={pickers.bankLock.bankCode ?? pickers.bankLock.accountCode}>
+              {t('bank_locked', {
+                bank: pickers.bankLock.bankName ?? pickers.bankLock.accountCode,
+                applicationNo: pickers.bankLock.applicationNo,
+              })}
+            </span>
+          ) : null}
+        </>
+      ),
     },
     {
       // The supplier's accounts are set up and verified on its profile; the one in this import's currency is chosen.
@@ -220,6 +246,14 @@ export default async function NewPaymentApplicationPage({ searchParams }: { sear
       <Flash error={outcome.error} errorTitle={admin('error_title')} saved={false} savedLabel="" />
       <form action={createApplication}>
         <input name="payable_no" type="hidden" value={row.payableNo} />
+        {/* What is typed is kept in this browser until it is saved (2026-10-15): another tab, a reload, a refusal. */}
+        <FormMemory
+          href={`${LIST}/new?import=${encodeURIComponent(row.payableNo)}`}
+          labels={{ restored: t('form_restored', { time: '{time}' }), discard: t('drafts_discard') }}
+          owner={principal.userId}
+          storageKey={`${DRAFT_PREFIX}${row.payableNo}`}
+          title={`${row.payableNo} · ${owner.supplier?.name ?? ''}`}
+        />
         <DocumentWindow
           actions={pickers.accounts.length === 0 ? null : <Submit label={t('create')} variant="document" />}
           documentType={page('payment_applications')}
@@ -245,6 +279,7 @@ export default async function NewPaymentApplicationPage({ searchParams }: { sear
           </table>
         </DocumentWindow>
       </form>
+      {drafts}
     </AdminPage>
   );
 }
