@@ -40,6 +40,7 @@ import type { Tx } from '../db/client';
 import type { ActorContext } from './chart-of-accounts';
 import * as audit from './audit';
 import { businessDateOf } from '../domain/business-date';
+import { demoMode } from './demo';
 
 /** better-auth's name for a password credential. */
 const CREDENTIAL_PROVIDER = 'credential';
@@ -194,6 +195,9 @@ export function temporaryPasswordExpired(
 
 /** Whether this account must present a second factor, and why. */
 export async function secondFactorRequirement(tx: Tx, userId: string) {
+  // The demo asks nobody (domain/demo.ts): its one account is shared by name.
+  if (demoMode()) return { required: false, reason: '' };
+
   const [user] = await tx
     .select({ isSuperUser: appUser.isSuperUser })
     .from(appUser)

@@ -14,11 +14,15 @@
 import type { AgentClient } from '../domain/whatsapp-agent';
 import { cliAgentClient } from './whatsapp-cli-brain';
 import { agentClientFor } from './whatsapp-router';
+import { demoMode } from './demo';
 
 /** How hard the reader thinks. The same default as the bridge's. */
 const EFFORT = process.env.WA_CLI_EFFORT?.trim() || 'high';
 
 export async function readerFor(): Promise<AgentClient | null> {
+  // The demo (domain/demo.ts) reads with nothing: its visitors are anybody, and
+  // the host's CLI is the company's own account.
+  if (demoMode()) return null;
   const wanted = (process.env.WA_BRAIN ?? '').trim().toLowerCase();
   const key = process.env.ANTHROPIC_API_KEY;
 

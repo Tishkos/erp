@@ -45,10 +45,13 @@ export function EmailField({
   id,
   label,
   placeholder,
+  type = 'email',
 }: {
   readonly id: string;
   readonly label: string;
   readonly placeholder: string;
+  /** `text` on the demo, which takes a bare user name (domain/demo.ts). */
+  readonly type?: 'email' | 'text';
 }) {
   return (
     <div className="grid gap-1.5">
@@ -66,7 +69,7 @@ export function EmailField({
           name="email"
           placeholder={placeholder}
           required
-          type="email"
+          type={type}
         />
       </div>
     </div>

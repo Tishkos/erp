@@ -361,7 +361,10 @@
     "locked": "Too many failed attempts. Wait fifteen minutes and try again.",
     "temporary_expired": "The temporary password has expired. Ask an administrator for a new one.",
     "captcha_label": "Confirm you are not a robot",
-    "captcha_failed": "Tick “I’m not a robot” and sign in again."
+    "captcha_failed": "Tick “I’m not a robot” and sign in again.",
+    "demo_hint": "This is the demo. Sign in with the user name admin and the password admin.",
+    "demo_user": "User name",
+    "demo_user_placeholder": "admin"
   },
   "column": {
     "branch": "Branch",

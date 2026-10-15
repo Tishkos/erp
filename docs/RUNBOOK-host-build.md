@@ -192,6 +192,16 @@ The seed refuses while `var/LIVE` exists and refuses a database named like
 the live one; drop `erp_load` afterwards. Write the figures into
 REQ-HARDEN-001 §3.I beside the last run's.
 
+### The demo (accounting.qs-groups.com)
+
+Same host, database `erp_demo`, tree `/opt/qs-erp-demo` on port 3300, pm2
+`qs-erp-demo`, vhost `deploy/nginx.demo.conf`, `ERP_DEMO=on`, one account
+(admin / admin), no crontab and no `var/LIVE`. Built once with
+`bash /opt/qs-erp-next/scripts/ops/demo-instance.sh create`; `deploy.sh`
+refreshes it after every live deploy (`… demo-instance.sh refresh` by hand).
+To start it over: `pm2 delete qs-erp-demo`, drop `erp_demo`, remove
+`/opt/qs-erp-demo`, run `create` again. AGENTS.md › "The demo".
+
 ## 10. Secrets escrow
 
 Held by the owner, off the server and off the deployer's laptop (a password

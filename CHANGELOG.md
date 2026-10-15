@@ -7,6 +7,11 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 
 ## Unreleased
 
+### Added — the demo at accounting.qs-groups.com (2026-10-16)
+- **A demo of the system, signed in as admin / admin.** The same release on its own database (`erp_demo`, built from nothing: the chart, a fiscal year, the stage warehouses), its own process and files, one account. It replaces the Odoo trial that answered at that address (stopped, not removed). The demo sends nothing — no mail, no WhatsApp, no AI — and follows every live deploy.
+- **Demo mode** (`ERP_DEMO=on`, ignored on the live database): the sign-in takes a user name, nobody is asked for an authenticator, and the demo account's password cannot be changed, so the next visitor can sign in. Live is unchanged.
+- Rollout: deploy, then on the server `bash /opt/qs-erp-next/scripts/ops/demo-instance.sh create`. Rollback: `pm2 delete qs-erp-demo`, copy the kept vhost back, `docker start qs-odoo-odoo-1 qs-odoo-db-1`. Test evidence: `tests/unit/demo-mode.test.ts`; the build of `erp_demo` and the admin / admin sign-in rehearsed on a scratch database.
+
 ### Added — the sheet's imports on the suppliers' accounts (2026-10-15)
 - **Supplier balances include the imports.** Each import brought in from the sheet that still owes something gets its opening balance: a posted purchase invoice for what it still owed when it was brought in (agreed less paid), on the supplier's account in dinars at that day's rate and in exact dollars. Supplier Statements, Payables Ageing, Supplier Reconciliation and the supplier's profile show it like any bill. The import's own figures, stage and goods position do not change.
 - **A payment on such an import can be confirmed.** It was refused (no invoice, no purchase order); it now pays the opening, and the exchange difference closes the supplier once the import is paid in full. Money the bank's copy shows left before the cut-over comes off the opening without a second payment.

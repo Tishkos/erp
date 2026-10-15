@@ -51,6 +51,10 @@ const LIVE_USE: Readonly<Record<string, string>> = {
     'a way back into a live install nobody can sign into; writes one credential, revokes the sessions behind it, audited, and prints the password once',
   'scripts/ops/install-cron.sh': 'writes the crontab, not the database',
   'scripts/ops/make-staging-copy.sh': 'writes only a database that is not the live one; refuses the live name',
+  'scripts/ops/demo-instance.sh':
+    'builds and refreshes the demo (accounting.qs-groups.com) on its own database erp_demo: runs with only the demo .env, asks the database its name before writing, and refuses the live name',
+  'scripts/ops/demo-admin.ts':
+    "sets the demo account's published password: refuses unless ERP_DEMO=on on a database that is not the live books, and touches admin@demo.qs-groups.com alone",
   'scripts/verify-recovery.ts': 'reads a restored database',
   'scripts/ops/account-statement-check.ts': 'reads',
   'scripts/ops/statement-coverage.ts': 'reads',

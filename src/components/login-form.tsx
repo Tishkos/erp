@@ -196,6 +196,7 @@ export async function LoginForm({
   failed,
   mfa,
   captcha,
+  demo = false,
   className,
 }: {
   readonly action: (formData: FormData) => Promise<void>;
@@ -205,14 +206,26 @@ export async function LoginForm({
   readonly mfa: boolean;
   /** The reCAPTCHA site key, when the server has one; null draws no box. */
   readonly captcha?: string | null;
+  /** The demo instance (domain/demo.ts): a user name instead of an e-mail, and the card says which. */
+  readonly demo?: boolean;
   readonly className?: string;
 }) {
   const [t, locale] = await Promise.all([getTranslations('auth'), getLocale()]);
 
   return (
-    <AuthCard className={className} eyebrow={t('eyebrow')} foot={t('need_access')} heading={t('welcome')} hint={t('welcome_hint')}>
+    <AuthCard
+      className={className}
+      eyebrow={t('eyebrow')}
+      foot={t('need_access')}
+      heading={t('welcome')}
+      hint={demo ? t('demo_hint') : t('welcome_hint')}
+    >
       <form action={action} className="grid gap-4">
-        <EmailField id="email" label={t('email')} placeholder={t('email_placeholder')} />
+        {demo ? (
+          <EmailField id="email" label={t('demo_user')} placeholder={t('demo_user_placeholder')} type="text" />
+        ) : (
+          <EmailField id="email" label={t('email')} placeholder={t('email_placeholder')} />
+        )}
         <PasswordField
           capsLockLabel={t('caps_lock')}
           hideLabel={t('hide_password')}

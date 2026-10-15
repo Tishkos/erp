@@ -43,8 +43,17 @@ import {
   setPassword,
   verifyCredentials,
 } from './authentication';
+import { isDemoAccount } from '../domain/demo';
+import { demoMode } from './demo';
 
 export const PERMISSION_OBJECT = 'app_user';
+
+/** The demo's own accounts keep their passwords, so the next visitor can sign in (domain/demo.ts). */
+function assertPasswordMayChange(email: string, field: string) {
+  if (demoMode() && isDemoAccount(email)) {
+    throw new AdminValidationError(field, 'this is the demo account; its password stays as it is, so the next visitor can sign in');
+  }
+}
 
 export interface UserInput {
   readonly email: string;
@@ -267,7 +276,8 @@ export async function setActive(
 /** Issues a new temporary password, ending the old sessions. Returned once. */
 export async function resetPassword(tx: Tx, ctx: ActorContext, id: string) {
   await permit(ctx, 'administer', PERMISSION_OBJECT, id);
-  await get(tx, id);
+  const user = await get(tx, id);
+  assertPasswordMayChange(user.email, 'password');
   const password = temporaryPassword();
   await setPassword(tx, id, password, { temporary: true });
   await revokeAllSessionsFor(tx, ctx, id, 'Password reset by administrator');
@@ -452,6 +462,7 @@ export async function changeOwnPassword(
 ) {
   const id = ctx.principal.userId;
   const user = await get(tx, id);
+  assertPasswordMayChange(user.email, 'newPassword');
   if (input.newPassword !== input.confirm) {
     throw new AdminValidationError('confirm', 'the two new passwords do not match');
   }

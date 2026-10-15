@@ -5,6 +5,8 @@ import { signIn as authenticate } from '@/server/services/authentication';
 import { optionalContext, RESTRICTION_ROUTE, SESSION_COOKIE } from '@/server/session';
 import { AuthShell, LoginForm } from '@/components/login-form';
 import { recaptchaSiteKey, verifyRecaptcha } from '@/server/services/recaptcha';
+import { demoMode } from '@/server/services/demo';
+import { demoSignInEmail } from '@domain/demo';
 
 /**
  * Sign-in — Phase 01.1's authentication, given a screen in Phase 01.12.
@@ -23,7 +25,9 @@ export const dynamic = 'force-dynamic';
 async function signIn(formData: FormData) {
   'use server';
 
-  const email = String(formData.get('email') ?? '').trim();
+  // The demo takes a bare user name: `admin` is `admin@demo.qs-groups.com` (domain/demo.ts).
+  const typed = String(formData.get('email') ?? '').trim();
+  const email = demoMode() ? demoSignInEmail(typed) : typed;
   const password = String(formData.get('password') ?? '');
   // Unticked, the cookie is dropped when the browser closes; ticked, it lasts
   // as long as the session the server issued. Neither extends the session.
@@ -128,7 +132,7 @@ export default async function SignInPage({
   // the system is — is `AuthShell`'s; the password screen wears the same.
   return (
     <AuthShell pillars>
-      <LoginForm action={signIn} captcha={recaptchaSiteKey()} failed={failed} mfa={mfa} />
+      <LoginForm action={signIn} captcha={recaptchaSiteKey()} demo={demoMode()} failed={failed} mfa={mfa} />
     </AuthShell>
   );
 }

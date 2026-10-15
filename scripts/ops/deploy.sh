@@ -211,6 +211,14 @@ fi
 # OP-7 — the crontab is the file in the repository.
 APP="\$APP" bash "\$APP/scripts/ops/install-cron.sh"
 printf '%s  %s  %s  deployed\n' "\$STAMP" "\$(cut -c1-12 REVISION)" "\$DEPLOYER" >> "\$APP/var/deploys.log"
+
+# The demo (accounting.qs-groups.com) follows every release: this build, its own
+# database migrated (scripts/ops/demo-instance.sh). Live is already up; a demo
+# that fails to refresh says so and never fails the deploy.
+if [ -d /opt/qs-erp-demo ]; then
+  bash "\$APP/scripts/ops/demo-instance.sh" refresh \
+    || echo "demo refresh failed — the live deploy is done; run scripts/ops/demo-instance.sh refresh on the server" >&2
+fi
 REMOTE
 
 # ── Did it come up? ───────────────────────────────────────────────────────
