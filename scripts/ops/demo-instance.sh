@@ -12,8 +12,9 @@
 # create   once: the database erp_demo built from nothing (migrations, the company's
 #          setup, the chart, the stage warehouses), the one account admin / admin,
 #          the tree /opt/qs-erp-demo with its own .env, the pm2 process qs-erp-demo
-#          on 127.0.0.1:3300, the vhost (the Odoo one it replaces is kept under
-#          /root/nginx-backups/), and the Odoo containers stopped — not removed.
+#          on 127.0.0.1:3300, and the vhost (the one it replaces is kept under
+#          /root/nginx-backups/). The Odoo trial that answered at this name was
+#          removed for good on 2026-10-16, by direction.
 # refresh  the live tree's current build copied in, the demo database migrated, the
 #          process restarted. deploy.sh runs it after every live deploy.
 #
@@ -41,7 +42,6 @@ PM2_NAME=qs-erp-demo
 HOST=accounting.qs-groups.com
 FILES=/var/lib/qs-erp-demo/attachments
 LOGS=/var/log/qs-erp-demo
-ODOO=(qs-odoo-odoo-1 qs-odoo-db-1)
 
 [[ "$DB" != "erp" ]] || { echo "Refusing: the demo database cannot be the live one." >&2; exit 1; }
 
@@ -261,15 +261,6 @@ create() {
     exit 1
   fi
   systemctl reload nginx
-
-  say "Odoo"
-  local name
-  for name in "${ODOO[@]}"; do
-    if [[ "$(docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null || true)" == "true" ]]; then
-      docker stop "$name" >/dev/null && echo "stopped $name (kept, with its data)"
-    fi
-  done
-  echo "to bring it back: docker start ${ODOO[*]}, then copy the kept vhost back and reload nginx"
 
   say "Done"
   printf 'https://%s/sign-in -> %s\n' "$HOST" "$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://$HOST/sign-in" || echo '?')"
