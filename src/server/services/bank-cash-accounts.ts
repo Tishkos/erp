@@ -176,7 +176,12 @@ export async function availableGlAccounts(tx: Tx, keep?: string | null) {
     .orderBy(asc(chartOfAccount.code));
 }
 
-async function assertGlAccount(tx: Tx, id: string, keep?: string | null): Promise<string> {
+async function assertGlAccount(
+  tx: Tx,
+  id: string,
+  keep?: string | null,
+  currency?: { readonly code: string; readonly changed: boolean },
+): Promise<string> {
   const [account] = await tx
     .select({
       id: chartOfAccount.id,
@@ -184,6 +189,7 @@ async function assertGlAccount(tx: Tx, id: string, keep?: string | null): Promis
       accountType: chartOfAccount.accountType,
       isActive: chartOfAccount.isActive,
       controlAccount: chartOfAccount.controlAccount,
+      currencyRestriction: chartOfAccount.currencyRestriction,
     })
     .from(chartOfAccount)
     .where(eq(chartOfAccount.id, id))
@@ -205,6 +211,17 @@ async function assertGlAccount(tx: Tx, id: string, keep?: string | null): Promis
     throw new AdminValidationError(
       'glAccountId',
       `is the ${account.controlAccount} control account, which its own subledger maintains — choose a cash or bank account`,
+    );
+  }
+
+  // A ledger account that takes one currency only must take this account's (2026-10-21: CASH-000001,
+  // an IQD till, was linked to "Cash on hand (USD)" and every receipt into it was refused at posting).
+  // Allowed when it is the one the record already carries, so a mis-linked record can still be opened.
+  const restriction = account.currencyRestriction?.trim();
+  if (currency && restriction && restriction !== currency.code && (id !== keep || currency.changed)) {
+    throw new AdminValidationError(
+      'glAccountId',
+      `takes ${restriction} only, and this account is in ${currency.code} — choose a ${currency.code} ledger account, or change the currency`,
     );
   }
 
@@ -332,7 +349,7 @@ export async function create(tx: Tx, ctx: ActorContext, kind: AccountKind, input
     name,
     accountType: kind,
     currency: assertCurrency(input.currency),
-    glAccountId: await assertGlAccount(tx, input.glAccountId),
+    glAccountId: await assertGlAccount(tx, input.glAccountId, null, { code: assertCurrency(input.currency), changed: true }),
     approvalLimitIqd: assertAmount(input.approvalLimitIqd, 'approvalLimitIqd'),
     ...(await shapeFor(tx, kind, input)),
     active: true,
@@ -357,7 +374,11 @@ export async function update(tx: Tx, ctx: ActorContext, code: string, input: Acc
   const values = {
     name: requireText(input.name, 'name'),
     currency: assertCurrency(input.currency),
-    glAccountId: await assertGlAccount(tx, input.glAccountId, before.glAccountId),
+    glAccountId: await assertGlAccount(tx, input.glAccountId, before.glAccountId, {
+      code: assertCurrency(input.currency),
+      // A currency changed on the same ledger account is a new choice too.
+      changed: assertCurrency(input.currency) !== before.currency.trim(),
+    }),
     approvalLimitIqd: assertAmount(input.approvalLimitIqd, 'approvalLimitIqd'),
     ...(await shapeFor(tx, kind, input)),
   };

@@ -7,6 +7,17 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 
 ## Unreleased
 
+## 1.1.3 — 2026-10-21
+
+### Fixed — a cash or bank account linked to a ledger account of another currency
+- A cash account in dinars could be linked to "Cash on hand (USD)", a ledger account that takes dollars only, and then every receipt into it was refused at posting (CASH-000001 on live). Bank/Cash Accounts now refuses a ledger account whose currency is not the account's own, when it is chosen or when the currency is changed; an account already linked that way can still be opened, renamed and corrected.
+
+### Migrations
+- None. Rollback: the previous build.
+
+### Test evidence
+- `tests/integration/fx1-bank-deposits.test.ts` (the currency rule), `ops06-bank-cash.test.ts`.
+
 ## 1.1.2 — 2026-10-21
 
 ### Fixed — a SWIFT paid from a USD bank account could not be recorded

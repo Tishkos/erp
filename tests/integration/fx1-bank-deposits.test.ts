@@ -202,3 +202,25 @@ describe('FX3 · bank deposits', () => {
     expect(found.rows.map((row) => row.payer)).toEqual(['Insurance claim']);
   });
 });
+
+describe('A bank or cash account takes a ledger account of its own currency (2026-10-21)', () => {
+  it('an IQD till on a USD-only ledger account is refused; on an IQD one it is made; a mis-linked one can still be opened', async () => {
+    const usdCash = await account('A000001', 'Cash on hand (USD) — currency test');
+    await ownerPool.query(`update chart_of_account set currency_restriction = 'USD' where id = $1`, [usdCash]);
+    const create = (currency: string) =>
+      withScope(scope(manager), (tx) => banks.create(tx, manager, 'cash', { name: 'Till 2', glAccountId: usdCash, currency, custodianUserId: manager.principal.userId }));
+    // As CASH-000001 was made on live: refused now, before any receipt can be.
+    await expect(create('IQD')).rejects.toThrow(/takes USD only, and this account is in IQD/);
+    const made = await create('USD');
+    // Changing the currency away from what its ledger account takes is a new choice, refused too.
+    await expect(
+      withScope(scope(manager), (tx) => banks.update(tx, manager, made.code, { name: 'Till 2', glAccountId: usdCash, currency: 'IQD', custodianUserId: manager.principal.userId })),
+    ).rejects.toThrow(/takes USD only/);
+    // One made before the rule keeps its account and can still be renamed.
+    await ownerPool.query(`update bank_cash_account set currency = 'IQD' where id = $1`, [made.id]);
+    const renamed = await withScope(scope(manager), (tx) =>
+      banks.update(tx, manager, made.code, { name: 'Till 2 — renamed', glAccountId: usdCash, currency: 'IQD', custodianUserId: manager.principal.userId }),
+    );
+    expect(renamed.name).toBe('Till 2 — renamed');
+  });
+});
