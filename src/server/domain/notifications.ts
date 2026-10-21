@@ -210,10 +210,14 @@ export function renderNotification(
   context: Readonly<Record<string, string | number | null | undefined>> = {},
 ): { subject: string; body: string } {
   const label = event.eventType.replace(/[._]/g, ' ');
-  const reference = context.reference ?? event.objectId;
+  // A person reads the record's own number, never its database id (2026-10-21: the holds'
+  // escalations were titled "Payable hold escalated — 215182bf-…"). The caller's `reference`
+  // first, else the first number the context carries (payableNo, invoiceNo …), else the id.
+  const numberKey = context.reference ? null : Object.keys(context).find((key) => /No$/.test(key) && typeof context[key] === 'string' && String(context[key]).trim());
+  const reference = context.reference ?? (numberKey ? context[numberKey] : null) ?? event.objectId;
 
   const details = Object.entries(context)
-    .filter(([key, value]) => key !== 'reference' && value !== null && value !== undefined)
+    .filter(([key, value]) => key !== 'reference' && key !== numberKey && value !== null && value !== undefined)
     .map(([key, value]) => `${humanise(key)}: ${value}`);
 
   return {

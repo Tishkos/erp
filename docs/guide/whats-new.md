@@ -2,25 +2,32 @@
 
 What changed in each version of the system, newest first: what is new, what was fixed, and what a person has to do. Answer "what is new", "the newest update", "the latest version", "the changelog", "release notes", «ما الجديد», «آخر تحديث», «التحديث الجديد», «شنو الجديد» from here. The version that is running is shown in the footer of every screen.
 
-## What is new on 21 October 2026 (ما الجديد في 21 تشرين الأول 2026)
-These changes are the newest (الأحدث). What to do: reload the page once (حدّثوا الصفحة مرة واحدة).
+## What is new in version 1.1.1 (ما الجديد في الإصدار 1.1.1)
+Version 1.1.1 is the newest version of the system (الإصدار الأحدث). It went live on 21 October 2026. What to do: reload the page once (حدّثوا الصفحة مرة واحدة).
 Also asked as: the newest update, the latest update, what changed today — آخر تحديث، التحديث الجديد، شنو الجديد.
 
-### New: Leads → Opportunities → Projects — What is new on 21 October 2026
+### New: Leads → Opportunities → Projects — What is new in version 1.1.1
 - Under Projects → Projects & Planning there are now **Leads** (العملاء المحتملون — the old Project Initiation register), **Opportunities** (الفرص) and the **Pipeline Board** (لوحة المسار), then Project Master. A client keeps one number (PIN-…) from lead to project.
 - The board shows every client as a card in its column and updates by itself; record pages show an **Updates** list and refresh by themselves too (the green **Live** badge).
 
-### New: Financed customers (Renewable Energy Financing) — What is new on 21 October 2026
+### New: Financed customers (Renewable Energy Financing) — What is new in version 1.1.1
 - **New initiation** offers a third type: **Financed Customer** (عميل ممول). Seven stages: Customer (name, city, phone) → Quotation Sent (agreed / refused) → Bank Approval (approved / rejected) → Loan — First Payment → Installation → Contract → Loan — Fully Granted, then it becomes a project.
 
-### New: Live container tracking — What is new on 21 October 2026
+### New: Live container tracking — What is new in version 1.1.1
 - Each container's page has **Live tracking**: where the shipping line says the box is, the vessel, the line's expected arrival beside ours, and every event — refreshed every five minutes, never saved. A link opens the line's own tracking page. The live feed for each line starts once its API key is entered on the server.
 
-### Fixed: invoices that would not post for want of a COGS account — What is new on 21 October 2026
+### Fixed: invoices that would not post for want of a COGS account — What is new in version 1.1.1
 - Items → **Category accounts** (حسابات الفئات) sets the inventory and COGS accounts per item category, and a company default. Saving fills every item that had none, and new items take them. A sales invoice that was refused can then be posted again; its approval stands.
 
+### Fixed: notification titles — What is new in version 1.1.1
+- A reminder such as "Payable hold escalated" showed a long code instead of the import's number. It now shows the number (for example IMP-HQ-2026-000002). Reminders already sent keep their old title.
+
+### Changed: not enough money, and who sees balances — What is new in version 1.1.1
+- A payment application is no longer stopped when its bank or cash account does not hold enough money: it can be submitted, approved, sent and paid, and its page warns that paying it takes the account below zero.
+- Only people who may see bank balances (Bank and Cash Reporting) see the amounts; everyone else sees the warning without figures. No error message shows an account's balance any more.
+
 ## What is new in version 1.1.0 (ما الجديد في الإصدار 1.1.0)
-Version 1.1.0 went live before the changes of 21 October 2026 above. It went live on 13 October 2026.
+Version 1.1.0 went live on 13 October 2026, before version 1.1.1 above. It went live on 13 October 2026.
 What to do: reload the page once (حدّثوا الصفحة مرة واحدة) so the browser loads the new version. Nothing else is needed; no data was changed.
 In short: one new screen — **Project Initiation** (تأسيس المشاريع) — and four fixes. The blocks below say each in detail.
 Also asked as: the newest update, the latest update, the latest version, the new version, the changelog, the release notes, what changed, what was updated — آخر تحديث، التحديث الجديد، التحديث الأخير، الإصدار الجديد، شنو الجديد، ما الذي تغيّر، سجل التغييرات.

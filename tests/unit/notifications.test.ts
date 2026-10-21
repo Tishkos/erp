@@ -165,6 +165,18 @@ describe('the rendered message', () => {
     expect(body).toContain('Amount Iqd: 1000.0000');
   });
 
+  it('names the record by its own number when the context carries one, never by its id (2026-10-21)', () => {
+    const { subject, body } = renderNotification(
+      { eventType: 'payable.hold.escalated', objectType: 'payable', objectId: '215182bf-9913-4770-a53e-8a64a178c4dc' },
+      { payableNo: 'IMP-HQ-2026-000002', days: 4 },
+    );
+    expect(subject).toBe('Payable hold escalated — IMP-HQ-2026-000002');
+    expect(body).not.toContain('215182bf');
+    expect(body).toContain('Days: 4');
+    // The number is the title; it is not said twice.
+    expect(body).not.toContain('Payable No:');
+  });
+
   it('falls back to the object id when there is no friendlier reference', () => {
     const { subject } = renderNotification({
       eventType: 'chart_of_account.submitted',

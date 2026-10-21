@@ -7,6 +7,41 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 
 ## Unreleased
 
+## 1.1.1 — 2026-10-21
+
+What went live today (57e78c8, deployed 2026-10-21 03:32 Baghdad) and the
+fix after it, with the earlier unnumbered deploys listed below it since 1.1.0.
+
+### Added — Leads → Opportunities → Projects
+- **Three screens over one record.** Projects & Planning now reads **Leads** (the Project Initiation register), **Opportunities** (past the first stage, not yet a project) and the **Pipeline Board**, then Project Master. A client keeps one number (PIN-…) from lead to project.
+- **The Renewable Energy Financing Initiative** is a third type, *Financed Customer*: Customer → Quotation sent (agreed / refused) → Bank approval → Loan, first payment → Installation → Contract → Loan fully granted, then an Active Project (type FINANCING). Each stage moves on only on its good outcome.
+- **Live:** every record has an Updates list; record pages and the board redraw themselves when something changes.
+
+### Added — live container tracking
+- Each container's page asks its shipping line where the box is (DCSA Track & Trace; the line from the container number or the B/L) and shows the events, the vessel and the line's expected arrival beside ours. Kept in memory, never stored. Live per line once its API key is on the server (`TRACKING_<LINE>_URL` / `_KEY`); meanwhile a link to the line's own tracking page.
+
+### Fixed — a sales invoice refused for want of a COGS account
+- Items → **Category accounts**: inventory and COGS defaults per item category and for the company; saving fills the items that had none, new items take them.
+
+### Changed — not enough money; who sees a balance
+- **A payment application goes on when its account is short** — submitted, approved, sent and paid — and its page warns that paying it takes the account below zero. Other payments are still refused; money into an account below zero now always goes in (before, such an account refused even deposits).
+- **A balance is shown only to whoever reads the treasury's balances** (Bank and Cash Reporting); no error message names what an account holds any more.
+
+### Fixed — notification titles
+- A notice whose sender gave no reference was titled with the record's database id ("Payable hold escalated — 215182bf-…"); it is titled with the record's number now (IMP-HQ-2026-000002). Notices already sent keep their titles.
+
+### Migrations
+- `0423_item_category_accounts` — a table; no data changed.
+- `0424_project_initiation_financing` — columns and checks on `project_initiation`, the guard per road, project type FINANCING; no data changed.
+- `0425_bank_overdraft_payment_applications` — C-20 narrowed (`assert_bank_not_negative(account, entry)`); no data changed.
+
+### Rollback
+- The previous build (`.next-prev`). The three migrations are additive; with the old build 0425's guard stays, which only lets more through, and the new columns are unread.
+
+### Test evidence
+- Unit suite (2,647 tests); integration `pg01-project-initiation`, `item-category-accounts`, `ap03-payments`, `treasury`, `treasury-cash-advance`, `pa02`, `adv01`, `wa19`, `ta01`; e2e `project-initiation.spec.ts` (three tests). The deploy of 57e78c8 ran with `SKIP_INTEGRATION` ("targeted suites green 2026-10-21 …").
+
+
 ### Added — the demo at accounting.qs-groups.com (2026-10-16)
 - **A demo of the system, signed in as admin / admin.** The same release on its own database (`erp_demo`, built from nothing: the chart, a fiscal year, the stage warehouses), its own process and files, one account. It replaces the Odoo trial that answered at that address, which was removed for good. The demo sends nothing — no mail, no WhatsApp, no AI — and follows every live deploy.
 - **Demo mode** (`ERP_DEMO=on`, ignored on the live database): the sign-in takes a user name, nobody is asked for an authenticator, and the demo account's password cannot be changed, so the next visitor can sign in. Live is unchanged.
