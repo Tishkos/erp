@@ -637,13 +637,15 @@ describe('a document that has not posted can never pass for one that has', () =>
   it('marks the waiting invoice DRAFT / NOT POSTED in all three formats, and the posted one in none', async () => {
     const draft = await takeAll('purchase_invoice', { id: doc.draftPurchase!.no });
     expect(draft.pdf.text).toContain('DRAFT / NOT POSTED');
-    // Word: the watermark image sits behind the text in the page header.
-    expect(draft.docx.headers).toMatch(/behindDoc="1"/);
+    // Word: the watermark image sits behind the text in the page header —
+    // beside the faint logo every page carries, posted or not (2026-10-21).
+    const behind = (headers: string) => (headers.match(/behindDoc="1"/g) ?? []).length;
+    expect(behind(draft.docx.headers)).toBe(2);
     expect(draft.xlsx.strings).toContain('DRAFT / NOT POSTED');
 
     const posted = await takeAll('purchase_invoice', { id: doc.purchase!.no });
     expect(posted.pdf.text).not.toContain('DRAFT / NOT POSTED');
-    expect(posted.docx.headers).not.toMatch(/behindDoc="1"/);
+    expect(behind(posted.docx.headers)).toBe(1);
     expect(posted.xlsx.strings).not.toContain('DRAFT / NOT POSTED');
   });
 });
@@ -917,7 +919,7 @@ describe('Arabic · right to left, in the embedded font, with nothing missing', 
     expect(paper.text).toContain([...'فاتورة'].reverse().join(''));
     expect(paper.text).toContain(doc.purchase!.no);
     expect(paper.text).toContain(money(25_000_000));
-    expect(paper.fonts).toEqual(expect.arrayContaining(['IBMPlexSansArabic-Regular', 'IBMPlexSansArabic-Bold']));
+    expect(paper.fonts).toEqual(expect.arrayContaining(['Vazirmatn-Regular', 'Vazirmatn-Bold']));
     expect(paper.unmappedGlyphs).toBe(0);
 
     const book = readWorkbook(body(xlsx));
@@ -931,7 +933,7 @@ describe('Arabic · right to left, in the embedded font, with nothing missing', 
     expect(word.body).toMatch(/<w:cantSplit\/>/);
     expect(word.text).toContain('فاتورة شراء');
     expect(word.text).toContain('شركة النور للتجارة العامة');
-    expect(word.fontNames).toEqual(['IBM Plex Sans Arabic']);
+    expect(word.fontNames).toEqual(['Vazirmatn']);
   });
 
   it('draws every character the Arabic prints use from the embedded font — no box anywhere', async () => {
@@ -963,7 +965,9 @@ describe('Arabic · right to left, in the embedded font, with nothing missing', 
       const heading = locale === 'ar' ? [...'رمز الصنف'].reverse().join('') : 'Item Code';
       for (const [index, page] of paper.pageText.entries()) {
         expect(page).toContain('Qimah Al-Safinah');
-        expect(page).toContain(heading);
+        // The table's heading on every page the table runs onto; the amount
+        // in words and the signatures may take a page of their own after it.
+        if (page.includes('ITM-')) expect(page).toContain(heading);
         // "Page 2 of 5" — in Arabic "صفحة 2 من 5", read back in the order it is drawn.
         expect(page).toMatch(
           locale === 'ar'

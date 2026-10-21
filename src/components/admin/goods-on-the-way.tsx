@@ -1,7 +1,7 @@
 import { getLocale, getTranslations } from 'next-intl/server';
 import { admin as s } from '@/components/admin';
 import { ProfileLink } from '@/components/admin/profile-link';
-import { formatBusinessDate, type Locale } from '@/i18n/config';
+import { formatBusinessDate, formatQuantity as groupedQuantity, type Locale } from '@/i18n/config';
 import { formatQuantity, parseQuantity } from '@domain/uom';
 import { GOODS_ON_THE_WAY_CAP, type GoodsOnTheWayPlace, type GoodsOnTheWayRow } from '@/server/services/payables';
 
@@ -26,7 +26,8 @@ export async function GoodsOnTheWay({
     getTranslations('admin.payables'),
     getLocale(),
   ]);
-  const units = (quantity: string) => formatQuantity(parseQuantity(quantity));
+  // Exact from the scaled integer, grouped (522,070) only as it is written.
+  const units = (quantity: string) => groupedQuantity(formatQuantity(parseQuantity(quantity)), locale as Locale);
 
   return (
     <div className={s.sapTableWrap} id="on-the-way">

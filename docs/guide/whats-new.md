@@ -2,8 +2,20 @@
 
 What changed in each version of the system, newest first: what is new, what was fixed, and what a person has to do. Answer "what is new", "the newest update", "the latest version", "the changelog", "release notes", «ما الجديد», «آخر تحديث», «التحديث الجديد», «شنو الجديد» from here. The version that is running is shown in the footer of every screen.
 
+## What is new in version 1.1.5 (ما الجديد في الإصدار 1.1.5)
+Version 1.1.5 is the newest version of the system (الإصدار الأحدث). It went live on 21 October 2026. What to do: reload the page once (حدّثوا الصفحة مرة واحدة).
+
+### New: printed copies in the company's look — What is new in version 1.1.5
+- Every printout and PDF (invoices, payments, statements, reports, and the PDFs Noah sends) now carries the company's look (تصميم الشركة): the Q logo, the logo's dark blue, a clean table, the details on a soft card, and the logo faint behind every page. The system's name is no longer printed anywhere.
+- A new, clearer Arabic font (خط عربي جديد) that also writes Kurdish letters; text copied from the PDF reads correctly.
+- **The amount in words** (المبلغ كتابةً) under the figures, in English and Arabic — for example "فقط ألفان دينار عراقي لا غير".
+- Tables fit the page better: numbers take only the room they need, so descriptions stay on one line and long reports take fewer pages.
+
+### New: the transit warehouses list their goods — What is new in version 1.1.5
+- On Inventory → Warehouses Report, the goods of imports on their way are listed among the items of their warehouse — On Process (Without SWIFT), In Process, On Board, At Port — marked **On the way (not in stock)** (في الطريق (ليست في المخزون)), and the item search finds them. The summary's Items and Units count them too, said under the figure.
+
 ## What is new in version 1.1.4 (ما الجديد في الإصدار 1.1.4)
-Version 1.1.4 is the newest version of the system (الإصدار الأحدث). It went live on 21 October 2026. What to do: reload the page once (حدّثوا الصفحة مرة واحدة).
+Version 1.1.4 went live on 21 October 2026, before version 1.1.5 above. What to do: reload the page once (حدّثوا الصفحة مرة واحدة).
 
 ### New: goods on the way in the warehouses — What is new in version 1.1.4
 - Inventory → Warehouses Report now shows **Goods on the way — not in stock yet** (بضائع في الطريق — لم تدخل المخزون بعد): every container not yet received, at On Process (Without SWIFT), In Process, On board, At port or Customs cleared, with its import, supplier, goods, quantity and expected arrival. Choose On Board (or another stage) under Warehouse Name to see only that stage. These goods are not stock yet — they enter a warehouse when the container is received.

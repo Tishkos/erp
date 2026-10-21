@@ -1,22 +1,11 @@
 import Image from 'next/image';
-import localFont from 'next/font/local';
-import mainLogo from '../../../mainLogo.png';
+import mainLogoMark from '../../../mainLogoMark.png';
+import logoBackdrop from '../../server/print/assets/logo-backdrop.png';
 import { display, heading, printedAt } from '@/server/print/format';
 import { isNumeric, type Letterhead, type PrintModel, type Table } from '@/server/print/model';
+import { amountInWords, spelledAmountOf } from '@/server/print/words';
+import { printFont } from './print-font';
 import styles from './print.module.css';
-
-/**
- * The embedded face the PDF and the Word file use, so the browser's print
- * shows Arabic shaped by the same font on any machine — never a system
- * substitute, never a box.
- */
-const printFont = localFont({
-  src: [
-    { path: '../../server/print/assets/IBMPlexSansArabic-Regular.ttf', weight: '400', style: 'normal' },
-    { path: '../../server/print/assets/IBMPlexSansArabic-Bold.ttf', weight: '700', style: 'normal' },
-  ],
-  display: 'block',
-});
 
 /**
  * The document on paper, for the browser's own print (Ctrl+P).
@@ -36,6 +25,8 @@ export function PrintSheet({ model, head }: { readonly model: PrintModel; readon
   const dir = head.locale === 'ar' ? 'rtl' : 'ltr';
   const draft = model.kind === 'document' && model.posted === false;
   const names = head.locale === 'ar' ? [head.companyAr, head.companyEn] : [head.companyEn, head.companyAr];
+  const spelled = spelledAmountOf(model);
+  const words = spelled ? amountInWords(spelled.amount, spelled.currency, head.locale) : null;
 
   return (
     <div
@@ -50,27 +41,31 @@ export function PrintSheet({ model, head }: { readonly model: PrintModel; readon
         </div>
       ) : null}
       <div className={styles.sheet}>
+        <Image alt="" aria-hidden className={styles.backdrop} loading="eager" src={logoBackdrop} />
         <header className={styles.head}>
-          <Image alt="" loading="eager" src={mainLogo} />
-          <div className={styles.company}>
-            <strong>{names[0]}</strong>
-            <span>{names[1]}</span>
+          <div className={styles.brand}>
+            <Image alt="" className={styles.mark} loading="eager" src={mainLogoMark} />
+            <div className={styles.company}>
+              <strong>{names[0]}</strong>
+              <span>{names[1]}</span>
+            </div>
           </div>
-          <div className={styles.provenanceBlock}>
-            <span>{`${head.labels.branch}: ${head.branch}`}</span>
-            <span>{`${head.labels.printedAt}: ${printedAt(head.printedAt, head.locale)}`}</span>
-            <span>{`${head.labels.printedBy}: ${head.printedBy}`}</span>
+          <div className={styles.docname}>
+            <h1 className={styles.title}>{model.title}</h1>
+            <div className={styles.pills}>
+              {model.status ? (
+                <span className={styles.status} data-posted={model.posted === undefined ? undefined : String(model.posted)}>
+                  {model.status}
+                </span>
+              ) : null}
+              {model.number ? (
+                <bdi className={styles.number} dir="ltr">
+                  {model.number}
+                </bdi>
+              ) : null}
+            </div>
           </div>
         </header>
-
-        <div className={styles.titleRow}>
-          <h1 className={styles.title}>{model.title}</h1>
-          {model.number ? (
-            <bdi className={styles.number} dir="ltr">
-              {model.number}
-            </bdi>
-          ) : null}
-        </div>
 
         {model.fields.length > 0 ? <Facts facts={model.fields} /> : null}
         {model.filters.length > 0 ? (
@@ -95,6 +90,13 @@ export function PrintSheet({ model, head }: { readonly model: PrintModel; readon
           </dl>
         ) : null}
 
+        {words ? (
+          <p className={styles.inWords}>
+            <span>{head.labels.amountInWords}</span>
+            <strong>{head.labels.amountWordsOnly.replace('{amount}', words)}</strong>
+          </p>
+        ) : null}
+
         {model.signatures ? (
           <div className={styles.signatureBoxes}>
             <span>{head.labels.preparedBy}</span>
@@ -102,6 +104,13 @@ export function PrintSheet({ model, head }: { readonly model: PrintModel; readon
             <span>{head.labels.receivedBy}</span>
           </div>
         ) : null}
+
+        <footer className={styles.provenanceBlock}>
+          <span>{names[0]}</span>
+          <span>{`${head.labels.printedBy}: ${head.printedBy}`}</span>
+          <span>{`${head.labels.printedAt}: ${printedAt(head.printedAt, head.locale)}`}</span>
+          <span>{`${head.labels.branch}: ${head.branch}`}</span>
+        </footer>
       </div>
     </div>
   );

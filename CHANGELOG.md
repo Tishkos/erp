@@ -7,6 +7,24 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 
 ## Unreleased
 
+## 1.1.5 — 2026-10-21
+
+### New — printed copies in the company's look
+- Every PDF (documents, reports, statements, the copies Noah sends), the Word file and the browser's print carry the company's look: the Q mark alone — no product name anywhere on paper or in the file's properties — the logo's navy as one solid colour (the band at the top and foot of each page, the table heading, the result's bar), the header fields on a soft card, soft alternate rows, signature lines, and who printed it, when and where in the foot of every page.
+- A new font, **Vazirmatn**: Arabic, Kurdish and Persian letters and Latin, every letter one glyph, so a copy or a search of the PDF's text reads as printed. Arrows and other characters it lacks come from IBM Plex Sans Arabic instead of printing as a box.
+- The type follows the page: a table's size follows its columns and the orientation, figures and codes take only the width they need, so descriptions read on one line (a 70-line ledger: 6 pages → 4). The browser's print reads in one column on a phone.
+- **The amount in words** under the figures, in English and Arabic ("Two thousand Iraqi dinars only" / "فقط ألفان دينار عراقي لا غير"), dollars with their cents: a payment's or receipt's amount, an invoice's total, a payslip's and a payroll run's net; reports are not spelt.
+- **The logo, faint, behind every page** in all three formats.
+
+### New — the transit warehouses' items are not empty
+- On the Warehouses Report the imports' goods on the way are listed among the items of their stage warehouse (On Process (Without SWIFT), In Process, On Board, At Port) — one line per item or description and unit, marked *On the way (not in stock)*, with no cost or value and outside the totals — and the item search finds them. The summary's Items and Units add them, said under the figure ("incl. 4 on the way"); an item both in stock and on the way counts once. Quantities are written with thousands separators.
+
+### Migrations
+- None. Rollback: the previous build.
+
+### Test evidence
+- `tests/unit/print-words.test.ts`, `tests/unit/print-format.test.ts`, `tests/integration/ops14-print-export.test.ts` (25), `tests/integration/wh01-goods-on-the-way.test.ts` (6), `tests/e2e/inventory-screens.spec.ts` (Warehouses Report, Warehouses).
+
 ## 1.1.4 — 2026-10-21
 
 ### New — where the imports' goods are, on the warehouse screens

@@ -54,6 +54,8 @@ export async function letterheadFor(
       preparedBy: t('prepared_by'),
       approvedBy: t('approved_by'),
       receivedBy: t('received_by'),
+      amountInWords: t('amount_in_words'),
+      amountWordsOnly: t('amount_words_only', { amount: '{amount}' }),
     },
   };
 }

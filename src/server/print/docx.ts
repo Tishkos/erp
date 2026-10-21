@@ -30,6 +30,7 @@ import { hasRightToLeft } from './bidi';
 import { display, heading, printedAt } from './format';
 import { columnWidths } from './pdf';
 import { isNumeric, type Fact, type Letterhead, type PrintModel, type Table as PrintTable } from './model';
+import { amountInWords, spelledAmountOf } from './words';
 
 /**
  * The Word document — the PDF's layout as an editable document.
@@ -47,7 +48,15 @@ import { isNumeric, type Fact, type Letterhead, type PrintModel, type Table as P
  * watermarks.
  */
 
-const FONT = 'IBM Plex Sans Arabic';
+const FONT = 'Vazirmatn';
+/** The logo's blues (pdf.ts has the same), and the soft tints under them. */
+const NAVY = '012579';
+const BRAND = '0147B2';
+const MUTED = '5A6478';
+const HAIR = 'D9E2F1';
+const TINT = 'E8F0FE';
+const ROW_TINT = 'F5F8FE';
+const CARD = 'F7F9FE';
 const TWIP_PER_PT = 20;
 const MARGIN = 680; // 12 mm
 const BODY = 17; // half-points: 8.5 pt
@@ -97,8 +106,8 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
   };
 
   // ------------------------------------------------------------ letterhead
-  const logoWidth = 60;
-  const logoHeight = Math.round((logoWidth * 324) / 360);
+  const logoWidth = 52;
+  const logoHeight = Math.round((logoWidth * 296) / 300);
   const companies = rtl ? [head.companyAr, head.companyEn] : [head.companyEn, head.companyAr];
   const provenance = [
     `${head.labels.branch}: ${head.branch}`,
@@ -113,7 +122,7 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
     visuallyRightToLeft: rtl,
     borders: {
       ...noBorders,
-      bottom: { style: BorderStyle.SINGLE, size: 16, color: '111111' },
+      bottom: { style: BorderStyle.SINGLE, size: 12, color: BRAND },
     },
     rows: [
       new TableRow({
@@ -125,7 +134,7 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
               paragraph([
                 new ImageRun({
                   type: 'png',
-                  data: asset('logo-print.png'),
+                  data: asset('logo-mark.png'),
                   transformation: { width: logoWidth, height: logoHeight },
                 }),
               ]),
@@ -135,14 +144,14 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
             width: { size: headerWidths[1]!, type: WidthType.DXA },
             verticalAlign: VerticalAlignTable.CENTER,
             children: [
-              paragraph([run(companies[0]!, { bold: true, size: 27 })]),
-              paragraph([run(companies[1]!, { bold: true, size: 22, color: '4A4A4A' })]),
+              paragraph([run(companies[0]!, { bold: true, size: 28, color: NAVY })]),
+              paragraph([run(companies[1]!, { bold: true, size: 19, color: BRAND })]),
             ],
           }),
           new TableCell({
             width: { size: headerWidths[2]!, type: WidthType.DXA },
             verticalAlign: VerticalAlignTable.CENTER,
-            children: provenance.map((line) => paragraph([run(line, { size: SMALL, color: '4A4A4A' })], { end: true })),
+            children: provenance.map((line) => paragraph([run(line, { size: SMALL, color: MUTED })], { end: true })),
           }),
         ],
       }),
@@ -150,6 +159,28 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
   });
 
   const headerChildren: (Paragraph | Table)[] = [letterhead];
+  // The mark, faint, behind every page — the PDF's backdrop, as Word places
+  // its own watermarks (its opacity is in the image).
+  {
+    const size = Math.round(((pageWidth - 2 * MARGIN) / TWIP_PER_PT) * (landscape ? 0.42 : 0.62));
+    headerChildren.push(
+      new Paragraph({
+        children: [
+          new ImageRun({
+            type: 'png',
+            data: asset('logo-backdrop.png'),
+            transformation: { width: size, height: Math.round((size * 472) / 478) },
+            floating: {
+              horizontalPosition: { relative: HorizontalPositionRelativeFrom.PAGE, align: HorizontalPositionAlign.CENTER },
+              verticalPosition: { relative: VerticalPositionRelativeFrom.PAGE, align: VerticalPositionAlign.CENTER },
+              behindDocument: true,
+              allowOverlap: true,
+            },
+          }),
+        ],
+      }),
+    );
+  }
   if (model.kind === 'document' && model.posted === false) {
     const mark = asset(rtl ? 'watermark-ar.png' : 'watermark-en.png');
     const [w, h] = rtl ? [1028, 680] : [1384, 877];
@@ -180,16 +211,17 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
       new Paragraph({
         alignment: AlignmentType.CENTER,
         bidirectional: rtl,
-        border: { top: { style: BorderStyle.SINGLE, size: 4, color: '888888', space: 4 } },
+        border: { top: { style: BorderStyle.SINGLE, size: 4, color: HAIR, space: 4 } },
         children: [
           new TextRun({
             children: [before, PageNumber.CURRENT, middle, PageNumber.TOTAL_PAGES, after],
             size: SMALL,
             font: FONT,
-            color: '4A4A4A',
+            color: BRAND,
+            bold: true,
             rightToLeft: rtl,
           }),
-          new TextRun({ text: `   ·   ${model.fileName}`, size: SMALL, font: FONT, color: '4A4A4A' }),
+          new TextRun({ text: `   ·   ${model.fileName}`, size: SMALL, font: FONT, color: MUTED }),
         ],
       }),
     ],
@@ -209,12 +241,12 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
           children: [
             new TableCell({
               children: [
-                paragraph([run(model.title, { bold: true, size: 31 })], { spacingAfter: 40 }),
+                paragraph([run(model.title, { bold: true, size: 32, color: NAVY })], { spacingAfter: 40 }),
               ],
             }),
             new TableCell({
               verticalAlign: VerticalAlignTable.CENTER,
-              children: model.number ? [paragraph([run(model.number, { bold: true, size: 38 })], { end: true })] : [paragraph([])],
+              children: model.number ? [paragraph([run(model.number, { bold: true, size: 30, color: BRAND })], { end: true })] : [paragraph([])],
             }),
           ],
         }),
@@ -237,13 +269,15 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
         cells.push(
           new TableCell({
             width: { size: widths[slot * 2]!, type: WidthType.DXA },
-            borders: { bottom: { style: BorderStyle.SINGLE, size: 2, color: '9A9A9A' } },
-            children: [paragraph(fact ? [run(fact.label, { bold: true, color: '4A4A4A' })] : [])],
+            borders: { bottom: { style: BorderStyle.SINGLE, size: 2, color: HAIR } },
+            shading: { type: ShadingType.CLEAR, color: 'auto', fill: CARD },
+            children: [paragraph(fact ? [run(fact.label, { color: MUTED })] : [])],
           }),
           new TableCell({
             width: { size: widths[slot * 2 + 1]!, type: WidthType.DXA },
-            borders: { bottom: { style: BorderStyle.SINGLE, size: 2, color: '9A9A9A' } },
-            children: [paragraph(fact ? [run(fact.value || '—')] : [])],
+            borders: { bottom: { style: BorderStyle.SINGLE, size: 2, color: HAIR } },
+            shading: { type: ShadingType.CLEAR, color: 'auto', fill: CARD },
+            children: [paragraph(fact ? [run(fact.value || '—', { bold: true })] : [])],
           }),
         );
       }
@@ -264,7 +298,7 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
     body.push(paragraph([], { spacingAfter: 160 }));
   }
   if (model.filters.length > 0) {
-    body.push(paragraph([run(head.labels.filters, { bold: true })], { spacingAfter: 60 }));
+    body.push(paragraph([run(head.labels.filters, { bold: true, color: NAVY })], { spacingAfter: 60 }));
     body.push(factsTable(model.filters));
     body.push(paragraph([], { spacingAfter: 160 }));
   }
@@ -280,22 +314,66 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
         layout: TableLayoutType.FIXED,
         visuallyRightToLeft: rtl,
         alignment: AlignmentType.END,
-        rows: model.summary.map(
-          (fact) =>
-            new TableRow({
-              cantSplit: true,
-              children: [
-                new TableCell({
-                  shading: { type: ShadingType.CLEAR, color: 'auto', fill: 'F1F1F1' },
-                  children: [paragraph([run(fact.label, { bold: true })])],
-                }),
-                new TableCell({
-                  shading: { type: ShadingType.CLEAR, color: 'auto', fill: 'F1F1F1' },
-                  children: [paragraph([run(fact.value, { bold: true, size: BODY + 2 })], { end: true })],
-                }),
-              ],
-            }),
-        ),
+        borders: {
+          ...noBorders,
+          insideHorizontal: { style: BorderStyle.SINGLE, size: 2, color: HAIR },
+        },
+        // The last figure is the result, on the brand as the PDF draws it.
+        rows: model.summary.map((fact, index) => {
+          const last = index === model.summary.length - 1;
+          const fill = { type: ShadingType.CLEAR, color: 'auto', fill: last ? NAVY : 'FFFFFF' };
+          return new TableRow({
+            cantSplit: true,
+            children: [
+              new TableCell({
+                shading: fill,
+                children: [paragraph([run(fact.label, { bold: last, color: last ? 'FFFFFF' : MUTED })])],
+              }),
+              new TableCell({
+                shading: fill,
+                children: [
+                  paragraph([run(fact.value, { bold: true, size: last ? BODY + 4 : BODY + 1, ...(last ? { color: 'FFFFFF' } : {}) })], {
+                    end: true,
+                  }),
+                ],
+              }),
+            ],
+          });
+        }),
+      }),
+    );
+  }
+
+  // The amount in words, under the figures.
+  const spelled = spelledAmountOf(model);
+  const words = spelled ? amountInWords(spelled.amount, spelled.currency, head.locale) : null;
+  if (words) {
+    body.push(paragraph([], { spacingAfter: 120 }));
+    body.push(
+      new Table({
+        width: { size: contentWidth, type: WidthType.DXA },
+        columnWidths: [contentWidth],
+        layout: TableLayoutType.FIXED,
+        visuallyRightToLeft: rtl,
+        borders: { ...noBorders, left: { style: BorderStyle.SINGLE, size: 18, color: BRAND } },
+        rows: [
+          new TableRow({
+            cantSplit: true,
+            children: [
+              new TableCell({
+                width: { size: contentWidth, type: WidthType.DXA },
+                shading: { type: ShadingType.CLEAR, color: 'auto', fill: CARD },
+                borders: rtl
+                  ? { ...noBorders, right: { style: BorderStyle.SINGLE, size: 18, color: BRAND } }
+                  : { ...noBorders, left: { style: BorderStyle.SINGLE, size: 18, color: BRAND } },
+                children: [
+                  paragraph([run(head.labels.amountInWords, { size: SMALL, color: MUTED })]),
+                  paragraph([run(head.labels.amountWordsOnly.replace('{amount}', words), { bold: true, color: NAVY })]),
+                ],
+              }),
+            ],
+          }),
+        ],
       }),
     );
   }
@@ -305,16 +383,13 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
     const labels = [head.labels.preparedBy, head.labels.approvedBy, head.labels.receivedBy];
     const gap = 280;
     const width = Math.floor((contentWidth - 2 * gap) / 3);
-    const box = (label: string) =>
+    const box = () =>
       new TableCell({
         width: { size: width, type: WidthType.DXA },
-        borders: {
-          top: { style: BorderStyle.SINGLE, size: 6, color: '444444' },
-          bottom: { style: BorderStyle.SINGLE, size: 6, color: '444444' },
-          left: { style: BorderStyle.SINGLE, size: 6, color: '444444' },
-          right: { style: BorderStyle.SINGLE, size: 6, color: '444444' },
-        },
-        children: [paragraph([run(label, { bold: true })]), paragraph([]), paragraph([]), paragraph([])],
+        verticalAlign: VerticalAlignTable.BOTTOM,
+        borders: { ...noBorders, bottom: { style: BorderStyle.SINGLE, size: 8, color: NAVY } },
+        // A line to sign on; the role is written under it.
+        children: [paragraph([])],
       });
     const spacer = () =>
       new TableCell({ width: { size: gap, type: WidthType.DXA }, borders: noBorders, children: [paragraph([])] });
@@ -328,8 +403,19 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
         rows: [
           new TableRow({
             cantSplit: true,
-            height: { value: 1250, rule: HeightRule.ATLEAST },
-            children: [box(labels[0]!), spacer(), box(labels[1]!), spacer(), box(labels[2]!)],
+            height: { value: 900, rule: HeightRule.ATLEAST },
+            children: [box(), spacer(), box(), spacer(), box()],
+          }),
+          new TableRow({
+            cantSplit: true,
+            children: labels.flatMap((label, index) => {
+              const cell = new TableCell({
+                width: { size: width, type: WidthType.DXA },
+                borders: noBorders,
+                children: [paragraph([run(label, { bold: true, color: NAVY })])],
+              });
+              return index < labels.length - 1 ? [cell, spacer()] : [cell];
+            }),
           }),
         ],
       }),
@@ -337,11 +423,11 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
   }
 
   const document = new Document({
-    creator: 'QS ERP',
+    creator: head.locale === 'ar' ? head.companyAr : head.companyEn,
     title: [model.title, model.number].filter(Boolean).join(' '),
     description: model.fileName,
     fonts: [
-      { name: FONT, data: asset('IBMPlexSansArabic-Regular.ttf'), characterSet: CharacterSet.ARABIC },
+      { name: FONT, data: asset('Vazirmatn-Regular.ttf'), characterSet: CharacterSet.ARABIC },
     ],
     styles: {
       default: {
@@ -375,7 +461,7 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
   // ---------------------------------------------------------------- tables
   function linesTable(table: PrintTable): (Paragraph | Table)[] {
     const out: (Paragraph | Table)[] = [];
-    if (table.title) out.push(paragraph([run(table.title, { bold: true, size: BODY + 3 })], { spacingAfter: 80 }));
+    if (table.title) out.push(paragraph([run(table.title, { bold: true, size: BODY + 3, color: NAVY })], { spacingAfter: 80 }));
     const size = table.columns.length > 7 ? 15 : BODY;
     // Word measures for itself; this is an estimate of the widest code, date
     // or figure in each column (a character is about 0.56 of the font size),
@@ -398,9 +484,9 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
         (column, i) =>
           new TableCell({
             width: { size: widths[i]!, type: WidthType.DXA },
-            shading: shade('E6E6E6'),
+            shading: shade(NAVY),
             verticalAlign: VerticalAlignTable.CENTER,
-            children: [paragraph([run(heading(column, model), { bold: true, size: size - 1 })], { end: isNumeric(column) })],
+            children: [paragraph([run(heading(column, model), { bold: true, size: size - 1, color: 'FFFFFF' })], { end: isNumeric(column) })],
           }),
       ),
     });
@@ -419,9 +505,9 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
         }),
       );
     }
-    for (const row of table.rows) {
+    for (const [index, row] of table.rows.entries()) {
       const bold = row.tone === 'header' || row.tone === 'subtotal' || row.tone === 'opening' || row.tone === 'closing';
-      const shaded = row.tone === 'subtotal' || row.tone === 'opening' || row.tone === 'closing';
+      const fill = bold ? TINT : index % 2 === 1 ? ROW_TINT : null;
       rows.push(
         new TableRow({
           cantSplit: true,
@@ -429,7 +515,7 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
             (column, i) =>
               new TableCell({
                 width: { size: widths[i]!, type: WidthType.DXA },
-                ...(shaded ? { shading: shade('F1F1F1') } : {}),
+                ...(fill ? { shading: shade(fill) } : {}),
                 children: [
                   paragraph([run(display(column, row.cells[column.key] ?? null, model, head.locale), { bold, size })], {
                     end: isNumeric(column),
@@ -451,16 +537,16 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
           children: [
             new TableCell({
               columnSpan: span,
-              shading: shade('F1F1F1'),
-              borders: { top: { style: BorderStyle.SINGLE, size: 14, color: '111111' } },
-              children: [paragraph([run(totals.label, { bold: true, size })])],
+              shading: shade(TINT),
+              borders: { top: { style: BorderStyle.SINGLE, size: 12, color: BRAND } },
+              children: [paragraph([run(totals.label, { bold: true, size, color: NAVY })])],
             }),
             ...table.columns.slice(span).map(
               (column, index) =>
                 new TableCell({
                   width: { size: widths[span + index]!, type: WidthType.DXA },
-                  shading: shade('F1F1F1'),
-                  borders: { top: { style: BorderStyle.SINGLE, size: 14, color: '111111' } },
+                  shading: shade(TINT),
+                  borders: { top: { style: BorderStyle.SINGLE, size: 12, color: BRAND } },
                   children: [
                     paragraph([run(display(column, totals.cells[column.key] ?? null, model, head.locale), { bold: true, size })], {
                       end: isNumeric(column),
@@ -478,6 +564,11 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
         columnWidths: widths,
         layout: TableLayoutType.FIXED,
         visuallyRightToLeft: rtl,
+        borders: {
+          ...noBorders,
+          bottom: { style: BorderStyle.SINGLE, size: 4, color: HAIR },
+          insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: HAIR },
+        },
         rows,
       }),
     );

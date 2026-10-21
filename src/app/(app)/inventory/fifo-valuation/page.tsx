@@ -17,7 +17,7 @@ import { GoodsOnTheWay } from '@/components/admin/goods-on-the-way';
 import { IntegrityBanner } from '@/components/admin/integrity-banner';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { ProfileLink } from '@/components/admin/profile-link';
-import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
+import { formatBusinessDate, formatMoney, formatQuantity, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { formatQuantity as formatUnits, parseQuantity } from '@domain/uom';
 import { sumMoney } from '@/server/print/decimal';
@@ -113,7 +113,7 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
           text: [
             tracked.containers ? t('reports.on_the_way_containers', { count: tracked.containers }) : null,
             tracked.imports ? t('reports.on_the_way_imports', { count: tracked.imports }) : null,
-            tracked.units > 0n ? t('reports.on_the_way_units', { units: formatUnits(tracked.units) }) : null,
+            tracked.units > 0n ? t('reports.on_the_way_units', { units: grouped(tracked.units) }) : null,
           ]
             .filter(Boolean)
             .join(' · '),
@@ -123,9 +123,26 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
   // The layers carry quantities at six decimal places. A warehouse list reads
-  // in whole units where the stock is whole, so trailing zeros are dropped
-  // rather than printed — exactly, as a scaled integer, never through a float.
-  const units = (quantity: string) => formatUnits(parseQuantity(quantity));
+  // in whole units where the stock is whole, so trailing zeros are dropped —
+  // added up exactly, as scaled integers; the number only for the grouping
+  // (522,070, not 522070) at the very end.
+  const grouped = (scaled: bigint) => formatQuantity(formatUnits(scaled), locale as Locale);
+  const units = (quantity: string) => grouped(parseQuantity(quantity));
+
+  // The imports' goods in each stage warehouse, as lines among its items
+  // (2026-10-21, by direction: "the items shouldn't be empty … if their
+  // import is in their transit … searchable"). Not stock: no cost, no value.
+  const inWarehouses = onTheWay ? payables.goodsByWarehouse(onTheWay.rows, pickers.houses) : [];
+  const goodsLines = warehouseCode ? inWarehouses.filter((line) => line.warehouseCode === warehouseCode) : inWarehouses;
+  // An item that is both in stock and on the way is one item: the summary's
+  // count adds only what the warehouse does not already hold (the stock rows
+  // are every warehouse's when the summary is drawn — no filter is set then).
+  const stocked = new Set(rows.map((row) => `${row.warehouseCode}|${row.itemCode}`));
+  const onTheWayIn = (code: string) => {
+    const totals = payables.goodsInWarehouseTotals(inWarehouses, code);
+    const added = inWarehouses.filter((line) => line.warehouseCode === code && !(line.itemCode && stocked.has(`${code}|${line.itemCode}`)));
+    return { items: added.length, units: totals.units };
+  };
 
   // The footers are the printed copy's own sums (`print/decimal.sumMoney`):
   // scaled integers, each row rounded half up to four places as it is shown,
@@ -260,12 +277,12 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
                 <td>
                   <bdi dir="ltr">{row.branchCode}</bdi>
                 </td>
-                <td className={s.sapNum}>
-                  <bdi dir="ltr">{row.items}</bdi>
-                </td>
-                <td className={s.sapNum}>
-                  <bdi dir="ltr">{units(row.units)}</bdi>
-                </td>
+                <SummaryFigures
+                  incl={(count) => t('reports.incl_on_the_way', { count })}
+                  onTheWay={onTheWayIn(row.warehouseCode)}
+                  stock={{ items: row.items, units: parseQuantity(row.units) }}
+                  units={grouped}
+                />
                 <td className={s.sapNum}>
                   <bdi dir="ltr">{money(row.valueIqd)}</bdi>
                 </td>
@@ -327,7 +344,7 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
           </tr>
         </thead>
         <tbody>
-          {rows.length === 0 ? (
+          {rows.length === 0 && goodsLines.length === 0 ? (
             <tr>
               <td className={s.sapEmptyRow} colSpan={9}>
                 {itemSearch ? t('reports.nothing_found_anywhere') : t('reports.nothing_in_stock')}
@@ -373,6 +390,50 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
               </tr>
             ))
           )}
+          {goodsLines.map((line) => (
+            <tr data-goods-line={line.warehouseCode} key={`on-the-way:${line.warehouseCode}:${line.itemCode ?? line.name}:${line.uomCode ?? ''}`}>
+              <td>
+                {line.itemCode ? (
+                  <ProfileLink code={line.itemCode} dir="auto" kind="item">
+                    {line.name}
+                  </ProfileLink>
+                ) : (
+                  <bdi dir="auto">{line.name}</bdi>
+                )}
+                <span className="block text-xs text-muted-fg">{t('reports.on_the_way')}</span>
+              </td>
+              <td>
+                <bdi dir="ltr">{line.itemCode ?? '—'}</bdi>
+              </td>
+              <td>
+                <ProfileLink code={line.warehouseCode} dir="auto" kind="warehouse">
+                  {line.warehouseName}
+                </ProfileLink>
+              </td>
+              <td>
+                <bdi dir="ltr">{line.warehouseCode}</bdi>
+              </td>
+              <td className={s.sapNum}>
+                <bdi dir="ltr">{line.quantity > 0n ? grouped(line.quantity) : '—'}</bdi>
+              </td>
+              <td>
+                <bdi dir="ltr">{line.uomCode ?? '—'}</bdi>
+              </td>
+              <td className={s.sapNum}>—</td>
+              <td className={s.sapNum}>—</td>
+              <td>
+                {/* Where they are: the containers and imports behind the line. */}
+                <Link className={s.sapLink} href={`/inventory/fifo-valuation?warehouse=${encodeURIComponent(line.warehouseCode)}${itemSearch ? `&item=${encodeURIComponent(itemSearch)}` : ''}#on-the-way`}>
+                  {[
+                    line.containers ? t('reports.on_the_way_containers', { count: line.containers }) : null,
+                    t('reports.on_the_way_import_count', { count: line.imports }),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Link>
+              </td>
+            </tr>
+          ))}
         </tbody>
         {rows.length > 0 && (
           <tfoot>
@@ -390,6 +451,36 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
 
       {onTheWay && !chosenPlace ? <GoodsOnTheWay place={null} rows={onTheWay.rows} truncated={onTheWay.truncated} /> : null}
     </AdminPage>
+  );
+}
+
+/**
+ * Items and units of a summary row: the stock, plus — in a stage warehouse —
+ * the imports' goods on the way there, said under the figure so the stock
+ * count is still read.
+ */
+function SummaryFigures({
+  stock,
+  onTheWay,
+  units,
+  incl,
+}: {
+  stock: { items: number; units: bigint };
+  onTheWay: { items: number; units: bigint };
+  units: (scaled: bigint) => string;
+  incl: (count: string) => string;
+}) {
+  return (
+    <>
+      <td className={s.sapNum}>
+        <bdi dir="ltr">{stock.items + onTheWay.items}</bdi>
+        {onTheWay.items > 0 ? <span className="block text-xs text-muted-fg">{incl(String(onTheWay.items))}</span> : null}
+      </td>
+      <td className={s.sapNum}>
+        <bdi dir="ltr">{units(stock.units + onTheWay.units)}</bdi>
+        {onTheWay.units > 0n ? <span className="block text-xs text-muted-fg">{incl(units(onTheWay.units))}</span> : null}
+      </td>
+    </>
   );
 }
 

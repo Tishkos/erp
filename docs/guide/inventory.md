@@ -699,8 +699,8 @@ What it is for: The stock held now, valued at what it cost: a summary per wareho
 ### Fields — Warehouses Report
 By warehouse (summary):
 - **Warehouse Code** (رمز المخزن), **Warehouse Name** (اسم المخزن) — a transit warehouse carries the word **transit** (ترانزيت) after its name; **Branch** (الفرع).
-- **Items** (الأصناف) — how many items have a quantity other than zero there.
-- **Units** (الوحدات) — the quantities added together, each in its own base unit.
+- **Items** (الأصناف) — how many items have a quantity other than zero there. On the four import-stage warehouses it also counts the imports' goods on the way at that place that the warehouse does not already hold, said under the figure: **incl. 3 on the way** (منها 3 في الطريق).
+- **Units** (الوحدات) — the quantities added together, each in its own base unit (522,070 — with thousands separators). On the four import-stage warehouses it adds the units on the way there, said under the figure the same way.
 - **Value (IQD)** (القيمة (د.ع)) — the FIFO cost of what the warehouse holds.
 - **Low stock** (مخزون منخفض) — how many items are at or below their minimum stock level. Nothing counts where no minimum is set on the item, and no screen sets it, so this is normally 0.
 - **Negative** (سالب) — how many items stand below zero (should always be 0).
@@ -714,6 +714,7 @@ Items table:
 - **Total Price (IQD)** (القيمة الإجمالية (د.ع)) — the FIFO cost of that quantity: what is left in each cost layer × its unit cost.
 - **Movements** (الحركات) — link to the Stock Ledger.
 An item with no stock left in a warehouse is not listed.
+The imports' goods on the way are listed among the items of the import-stage warehouse that stands for where they are (On Process (Without SWIFT), In Process, On Board, At Port), marked **On the way (not in stock)** (في الطريق (ليست في المخزون)) under the name: one line per item — or per description the container carries, such as "panel" — and unit, with the quantity added up over every container and import. They have no cost yet, so Avg. Unit Cost and Total Price show a dash and the Totals do not count them; the last column says how many containers and imports they are in and opens them. The item search finds them like any other item. Goods already cleared by customs are not in any of the four warehouses; they are in the Goods on the way table.
 Goods on the way — not in stock yet (one line per container line, or per import with no container):
 - **Where** (أين) — On Process (Without SWIFT), In Process, On board, At port or Customs cleared — worked out from the container's status and dates exactly as the Import Applications' Goods filter and the import's "where the goods are now" do. A container not loaded yet is In Process, or On Process (Without SWIFT) while the import waits for its first SWIFT. A received container is no longer listed: its goods are in the warehouse it was received into.
 - **Import** (الاستيراد), **Supplier** (المورد), **Container** (الحاوية) — each opens its page; **No container yet** (لا توجد حاوية بعد) for an import that has none.

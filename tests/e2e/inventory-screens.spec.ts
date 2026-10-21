@@ -235,7 +235,7 @@ test.describe('IMPROVEMENT-002 · the inventory screens', () => {
     await expect(summary).toBeVisible();
     const hq = summary.locator('tbody tr', { hasText: 'WH-HQ' }).first();
     await expect(hq).toContainText('1'); // one item
-    await expect(hq).toContainText(held());
+    await expect(hq).toContainText(onHand.toLocaleString('en-US'));
     await hq.locator('a[href="/inventory/fifo-valuation?warehouse=WH-HQ"]').click();
     await page.waitForURL(/warehouse=WH-HQ/);
     // Narrowed to the warehouse: the items, each opening its movements.
@@ -265,6 +265,10 @@ test.describe('IMPROVEMENT-002 · the inventory screens', () => {
     await page.goto('/master-data/warehouses/WH-INPROC');
     await expect(page.locator('[data-goods-on-the-way]')).toBeVisible();
     await expect(page.locator('li[data-on-the-way="WH-INPROC"]')).toBeVisible();
+    // On the report the stage warehouse's items are not empty: the imports' goods are lines among them, not stock.
+    await page.goto('/inventory/fifo-valuation?warehouse=WH-INPROC');
+    await expect(page.locator('tr[data-goods-line="WH-INPROC"]').first()).toBeVisible();
+    await expect(page.locator('tr[data-goods-line="WH-INPROC"]').first()).toContainText('On the way (not in stock)');
 
     // The Warehouses list finds an item across every warehouse, on the report.
     await page.goto('/master-data/warehouses');

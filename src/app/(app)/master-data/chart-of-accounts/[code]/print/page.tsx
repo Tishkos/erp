@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { eq } from 'drizzle-orm';
-import mainLogo from '../../../../../../../mainLogo.png';
+import mainLogoMark from '../../../../../../../mainLogoMark.png';
+import logoBackdrop from '../../../../../../server/print/assets/logo-backdrop.png';
 import { formatBusinessDate, formatMoney, formatTimestamp, type Locale } from '@/i18n/config';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '@domain/money';
 import { can } from '@domain/permissions';
@@ -17,6 +18,7 @@ import * as statementLines from '@/server/services/statement-lines';
 import * as trialBalance from '@/server/services/trial-balance';
 import styles from '@/components/print/print.module.css';
 import { PrintButton } from '@/components/print/print-button';
+import { printFont } from '@/components/print/print-font';
 
 /**
  * The account statement, on paper — the same shape as the journal voucher.
@@ -117,7 +119,7 @@ export default async function AccountPrintPage({
   const address = `/master-data/chart-of-accounts/${encodeURIComponent(code)}`;
 
   return (
-    <div dir={dir}>
+    <div className={printFont.className} dir={dir}>
       <div className={styles.toolbar}>
         <PrintButton label={chart('print')} />
         <Link className={styles.quiet} href={`${address}/print?lang=en`}>
@@ -132,17 +134,23 @@ export default async function AccountPrintPage({
       </div>
 
       <div className={styles.sheet}>
+        <Image alt="" aria-hidden className={styles.backdrop} src={logoBackdrop} />
         <header className={styles.head}>
-          <Image alt="" src={mainLogo} />
-          <div className={styles.company}>
-            <strong>{company?.legalName ?? 'Qimah Al-Safinah'}</strong>
-            {company?.address ? <span>{company.address}</span> : null}
+          <div className={styles.brand}>
+            <Image alt="" className={styles.mark} src={mainLogoMark} />
+            <div className={styles.company}>
+              <strong>{company?.legalName ?? 'Qimah Al-Safinah'}</strong>
+              {company?.address ? <span>{company.address}</span> : null}
+            </div>
           </div>
           <div className={styles.docname}>
-            <strong>{chart('print_title')}</strong>
-            <span>
-              {node.code} · {status(node.approvalStatus)}
-            </span>
+            <h1 className={styles.title}>{chart('print_title')}</h1>
+            <div className={styles.pills}>
+              <span className={styles.status}>{status(node.approvalStatus)}</span>
+              <bdi className={styles.number} dir="ltr">
+                {node.code}
+              </bdi>
+            </div>
           </div>
         </header>
 

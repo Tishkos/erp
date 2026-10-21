@@ -2033,6 +2033,8 @@
       "on_the_way_containers": "{count, plural, one {حاوية واحدة} two {حاويتان} few {# حاويات} other {# حاوية}}",
       "on_the_way_imports": "{count, plural, one {استيراد واحد بلا حاوية} other {# استيرادات بلا حاوية}}",
       "on_the_way_units": "{units} وحدة",
+      "incl_on_the_way": "منها {count} في الطريق",
+      "on_the_way_import_count": "{count, plural, one {استيراد واحد} other {# استيرادات}}",
       "on_the_way_truncated": "تُعرض أول {count} صفاً فقط؛ ابحث عن مادة أو اختر مخزناً لتضييقها.",
       "movements": "الحركات"
     },
@@ -9168,6 +9170,8 @@
     "prepared_by": "أعدّه",
     "approved_by": "اعتمده (المدير التنفيذي)",
     "received_by": "استلمه",
+    "amount_in_words": "المبلغ كتابةً",
+    "amount_words_only": "فقط {amount} لا غير",
     "totals": "الإجماليات",
     "all": "الكل",
     "search": "بحث",

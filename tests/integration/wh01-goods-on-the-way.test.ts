@@ -105,6 +105,51 @@ describe('WH1 · goods on the way, by where they are', () => {
     expect(payables.goodsOnTheWayAt(rows, 'at_port')).toEqual({ containers: 0, imports: 0, units: 0n });
   });
 
+  it('lays the goods out as items of the stage warehouse that stands for their place', () => {
+    const at = (place: payables.GoodsOnTheWayPlace, over: Partial<payables.GoodsOnTheWayRow>): payables.GoodsOnTheWayRow => ({
+      place,
+      payableNo: 'IMP-1',
+      branchCode: 'HQ',
+      supplierCode: 'SUP-1',
+      supplierName: 'Supplier',
+      blNo: null,
+      containerId: 'box-1',
+      containerNo: 'MSCU0000001',
+      itemCode: null,
+      itemName: null,
+      description: 'panel',
+      quantity: '100',
+      uomCode: 'PCS',
+      eta: null,
+      late: false,
+      ...over,
+    });
+    const houses = [
+      { code: 'WH-BOARD', name: 'On Board', branchCode: 'HQ', shipmentStage: 'on_board' },
+      { code: 'WH-BOARD-ERB', name: 'On Board Erbil', branchCode: 'ERB', shipmentStage: 'on_board' },
+      { code: 'WH-HQ', name: 'Main', branchCode: 'HQ', shipmentStage: null },
+    ];
+    const lines = payables.goodsByWarehouse(
+      [
+        at('on_board', {}),
+        // The same goods in another container of another import: one line, both counted.
+        at('on_board', { payableNo: 'IMP-2', containerId: 'box-2', description: ' Panel ', quantity: '50' }),
+        at('on_board', { branchCode: 'ERB', containerId: 'box-3' }),
+        at('on_board', { itemCode: 'ITM-1', itemName: 'Inverter', quantity: '2.5', uomCode: 'EA' }),
+        // Customs cleared has no stage warehouse: left to the goods table.
+        at('cleared', {}),
+      ],
+      houses,
+    );
+    expect(lines.map((line) => [line.warehouseCode, line.name, line.quantity, line.imports, line.containers])).toEqual([
+      ['WH-BOARD', 'Inverter', 2_500000n, 1, 1],
+      ['WH-BOARD', 'panel', 150_000000n, 2, 2],
+      ['WH-BOARD-ERB', 'panel', 100_000000n, 1, 1],
+    ]);
+    expect(payables.goodsInWarehouseTotals(lines, 'WH-BOARD')).toEqual({ items: 2, units: 152_500000n });
+    expect(payables.goodsInWarehouseTotals(lines, 'WH-HQ')).toEqual({ items: 0, units: 0n });
+  });
+
   it('maps each stage warehouse to its place', () => {
     expect(['without_swift', 'in_process', 'on_board', 'on_port', null].map(payables.goodsPlaceOfStage)).toEqual([
       'on_process',

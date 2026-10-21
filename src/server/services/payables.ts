@@ -1685,6 +1685,83 @@ export function goodsOnTheWayAt(rows: readonly GoodsOnTheWayRow[], place: GoodsO
   };
 }
 
+/** The goods on the way at one stage warehouse, one item (or description) and unit — a line among that warehouse's items. */
+export interface GoodsInWarehouse {
+  readonly warehouseCode: string;
+  readonly warehouseName: string;
+  readonly branchCode: string;
+  readonly place: GoodsOnTheWayPlace;
+  readonly itemCode: string | null;
+  /** The item's name, or the container line's description ("panel") where it names no item. */
+  readonly name: string;
+  readonly uomCode: string | null;
+  /** Scaled, as `parseQuantity` gives it. */
+  readonly quantity: bigint;
+  readonly imports: number;
+  readonly containers: number;
+}
+
+/**
+ * The goods on the way laid out by the stage warehouse that stands for their
+ * place (2026-10-21, by direction: "the items shouldn't be empty … if their
+ * import is in their transit, it means in that warehouse"). The warehouse of
+ * the import's own branch first, else the first one at that stage; a place no
+ * warehouse stands for (Customs cleared) is left to the goods table. Nothing
+ * here is stock: the Warehouses Report shows these lines beside the stock with
+ * no cost and no value.
+ */
+export function goodsByWarehouse(
+  rows: readonly GoodsOnTheWayRow[],
+  houses: readonly { code: string; name: string; branchCode: string; shipmentStage: string | null }[],
+): GoodsInWarehouse[] {
+  const lines = new Map<string, { line: Omit<GoodsInWarehouse, 'imports' | 'containers'>; imports: Set<string>; containers: Set<string> }>();
+  for (const row of rows) {
+    const atPlace = houses.filter((house) => goodsPlaceOfStage(house.shipmentStage) === row.place);
+    const house = atPlace.find((candidate) => candidate.branchCode === row.branchCode) ?? atPlace[0];
+    if (!house) continue;
+    const what = row.itemCode ?? `~${row.description.trim().toLowerCase()}`;
+    const key = `${house.code}|${what}|${row.uomCode ?? ''}`;
+    const quantity = row.quantity ? parseQuantity(row.quantity) : 0n;
+    const found = lines.get(key);
+    if (found) {
+      found.line = { ...found.line, quantity: found.line.quantity + quantity };
+    } else {
+      lines.set(key, {
+        line: {
+          warehouseCode: house.code,
+          warehouseName: house.name,
+          branchCode: house.branchCode,
+          place: row.place,
+          itemCode: row.itemCode,
+          name: row.itemName ?? row.description,
+          uomCode: row.uomCode,
+          quantity,
+        },
+        imports: new Set(),
+        containers: new Set(),
+      });
+    }
+    const entry = lines.get(key)!;
+    entry.imports.add(row.payableNo);
+    if (row.containerId) entry.containers.add(row.containerId);
+  }
+  const order = new Map(houses.map((house, index) => [house.code, index]));
+  return [...lines.values()]
+    .map(({ line, imports, containers }) => ({ ...line, imports: imports.size, containers: containers.size }))
+    .sort(
+      (a, b) =>
+        (order.get(a.warehouseCode) ?? 0) - (order.get(b.warehouseCode) ?? 0) ||
+        a.name.localeCompare(b.name) ||
+        (a.uomCode ?? '').localeCompare(b.uomCode ?? ''),
+    );
+}
+
+/** What one stage warehouse holds on the way, counted as its items are: lines and units. */
+export function goodsInWarehouseTotals(lines: readonly GoodsInWarehouse[], warehouseCode: string) {
+  const here = lines.filter((line) => line.warehouseCode === warehouseCode);
+  return { items: here.length, units: here.reduce((sum, line) => sum + line.quantity, 0n) };
+}
+
 /** A booked goods invoice: its lines are stock already, in On Process or In Process. */
 const GOODS_INVOICE_SQL = sql`exists (select 1 from ap_invoice ai where ai.payable_id = payable.id
    and ai.status in ('posted', 'partially_executed', 'settled') and not ai.is_import_opening)`;

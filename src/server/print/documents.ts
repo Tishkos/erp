@@ -84,7 +84,7 @@ async function partner(tx: Tx, id: string | null) {
 
 const base = (
   input: Pick<PrintModel, 'title' | 'fields' | 'tables'> &
-    Partial<Pick<PrintModel, 'number' | 'status' | 'posted' | 'summary' | 'signatures' | 'orientation'>> & {
+    Partial<Pick<PrintModel, 'number' | 'status' | 'posted' | 'summary' | 'signatures' | 'orientation' | 'amountInWords'>> & {
       readonly fileName: string;
     },
 ): PrintModel => ({
@@ -845,6 +845,8 @@ export async function payrollRun(ctx: BuildContext, runNo: string): Promise<Buil
         { label: t('deductions'), value: money(run.deductionsIqd, locale), ltr: true },
         { label: t('net'), value: money(run.netIqd, locale), ltr: true },
       ],
+      // What is paid out, not the gross.
+      amountInWords: { amount: run.netIqd, currency: 'IQD' },
       signatures: true,
       fileName: run.runNo,
     }),
@@ -909,6 +911,7 @@ export async function payslip(ctx: BuildContext, payslipNo: string): Promise<Bui
         { label: t('deductions'), value: money(line.deductionsIqd, locale), ltr: true },
         { label: t('net'), value: money(line.netIqd, locale), ltr: true },
       ],
+      amountInWords: { amount: line.netIqd, currency: 'IQD' },
       fileName: payslipNo,
     }),
     branchCode: run.branchCode,

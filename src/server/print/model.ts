@@ -135,6 +135,12 @@ export interface PrintModel {
   readonly summary: readonly Fact[];
   /** Prepared by / Approved by (CEO) / Received by. */
   readonly signatures: boolean;
+  /**
+   * The amount written out in words under the figures (words.ts). Left out,
+   * a document spells its first summary amount or its table's total; null
+   * spells nothing; set, it names the figure — a payslip's net, not its gross.
+   */
+  readonly amountInWords?: { readonly amount: string; readonly currency?: 'IQD' | 'USD' } | null;
   /** The currency every money column is in. */
   readonly currency: 'IQD' | 'USD';
   /** The file name without its extension — the document number for a document. */
@@ -168,6 +174,10 @@ export interface PrintLabels {
   readonly preparedBy: string;
   readonly approvedBy: string;
   readonly receivedBy: string;
+  /** "Amount in words". */
+  readonly amountInWords: string;
+  /** "{amount} only" — the words go where {amount} is. */
+  readonly amountWordsOnly: string;
 }
 
 export const FORMATS = ['pdf', 'xlsx', 'docx'] as const;

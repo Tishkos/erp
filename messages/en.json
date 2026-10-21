@@ -2033,6 +2033,8 @@
       "on_the_way_containers": "{count, plural, one {# container} other {# containers}}",
       "on_the_way_imports": "{count, plural, one {# import without a container} other {# imports without a container}}",
       "on_the_way_units": "{units} units",
+      "incl_on_the_way": "incl. {count} on the way",
+      "on_the_way_import_count": "{count, plural, one {# import} other {# imports}}",
       "on_the_way_truncated": "Only the first {count} rows are shown; search for an item or choose a warehouse to narrow them.",
       "movements": "Movements"
     },
@@ -9168,6 +9170,8 @@
     "prepared_by": "Prepared by",
     "approved_by": "Approved by (CEO)",
     "received_by": "Received by",
+    "amount_in_words": "Amount in words",
+    "amount_words_only": "{amount} only",
     "totals": "Totals",
     "all": "All",
     "search": "Search",
