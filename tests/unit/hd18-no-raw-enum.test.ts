@@ -38,6 +38,8 @@ const ALLOWED: ReadonlyArray<{ file: string; expr: string; why: string }> = [
   // A label object passed in by the caller, already translated.
   { file: 'src/components/admin/statement-line-dialog.tsx', expr: 'labels.kind', why: 'translated by the caller' },
   { file: 'src/components/admin/new-account-dialog.tsx', expr: 'labels.kind', why: 'translated by the caller' },
+  // PrintModel.status is "the status, in words" — each print builder writes it through `m.status(…)`.
+  { file: 'src/components/print/print-sheet.tsx', expr: 'model.status', why: 'translated by the print builder' },
 ];
 
 describe('HD18 · no raw enum reaches the DOM', () => {
