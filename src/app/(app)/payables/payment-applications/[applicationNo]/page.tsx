@@ -18,6 +18,7 @@ import { Upload } from 'lucide-react';
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { ProfileLink } from '@/components/admin/profile-link';
+import { RateConfirm } from '@/components/admin/rate-confirm';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -373,6 +374,23 @@ export default async function PaymentApplicationPage({
               <Field defaultValue={today} label={t(`confirmed_on_${kind === 'paid' ? method.kind : 'swift'}`)} name="paper_date" required type="date" />
               <Field label={t(`reference_${method.kind}`)} name="paper_reference" required />
             </Grid>
+            {/* In another currency the payment is converted at the paid date's rate: said and confirmed first (2026-10-21). */}
+            {row.currency !== 'IQD' ? (
+              <RateConfirm
+                currency={row.currency}
+                endpoint={`/payables/payment-applications/${encodeURIComponent(row.applicationNo)}/rate`}
+                initialDate={today}
+                labels={{
+                  title: t('rate_confirm_title', { date: '{date}' }),
+                  rate: t('rate_confirm_rate', { currency: '{currency}', rate: '{rate}', from: '{from}' }),
+                  converts: t('rate_confirm_converts', { currency: '{currency}', amount: '{amount}', iqd: '{iqd}' }),
+                  confirm: t('rate_confirm_check'),
+                  checking: t('rate_confirm_checking'),
+                  none: t('rate_confirm_none', { currency: '{currency}' }),
+                }}
+                locale={locale}
+              />
+            ) : null}
           </>
         ) : null}
         {kind === 'rejected_cancelled' ? (

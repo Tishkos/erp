@@ -36,6 +36,7 @@ import {
   supplierPaymentAllocation,
 } from '../db/schema';
 import { parseDecimal, toDecimalString } from '../domain/money';
+import { bankLineFor } from './bank-line-currency';
 import * as treasury from './treasury';
 import { bucketFor, horizonFor } from '../domain/ageing';
 import { oldestFirst, proposeAllocation } from '../domain/receipt-allocation';
@@ -539,6 +540,15 @@ export async function post(
     .where(eq(bankCashAccount.id, payment.bankCashAccountId))
     .limit(1);
 
+  // The bank line in the bank's own currency — the dollars that left a USD account (2026-10-21).
+  const bankLine = await bankLineFor(tx, payment.bankCashAccountId, {
+    label: payment.paymentNo,
+    currency: payment.currency,
+    amountTxn: payment.amountTxn,
+    amountIqd: payment.amountIqd,
+    postingDate: payment.paymentDate,
+  });
+
   const result = await posting.post(tx, ctx, {
     eventType: 'purchasing.supplier_payment',
     documentTypeCode: DOCUMENT_TYPE,
@@ -552,7 +562,8 @@ export async function post(
       {
         role: 'bank',
         accountId: account!.glAccountId,
-        credit: payment.amountIqd,
+        ...(bankLine.currency ? { currency: bankLine.currency } : {}),
+        credit: bankLine.amount,
         criteria,
         dimensions,
         bankAccountCode: account!.code,

@@ -224,7 +224,15 @@ export interface PostingLineRequest {
    */
   readonly accountId?: string;
   readonly itemAccountId?: string | null;
-  /** Decimal string. Exactly one of the two. */
+  /**
+   * The currency this line's amount is in, when it is not the journal's
+   * (2026-10-21: a supplier paid from a USD bank — the bank's ledger account
+   * takes dollars only, the supplier's dinars only). Each line is converted to
+   * dinars at the posting date's rate and the journal balances in dinars, as
+   * every journal does. Absent: the journal's currency.
+   */
+  readonly currency?: string;
+  /** Decimal string, in the line's currency. Exactly one of the two. */
   readonly debit?: string | null;
   readonly credit?: string | null;
   readonly criteria?: PostingCriteria;

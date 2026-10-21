@@ -7,6 +7,21 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 
 ## Unreleased
 
+## 1.1.2 — 2026-10-21
+
+### Fixed — a SWIFT paid from a USD bank account could not be recorded
+- Pressing **Paid** on a payment application paid from a USD bank account was refused: "Cannot post to A000031: it accepts USD only, and this entry is in IQD". The payment is now posted in dollars on the bank's side (the exact SWIFT amount) and in dinars on the supplier's side, at the accounting rate of the paid date — automatically. The supplier advance (a deposit before the invoice) is posted the same way.
+- **The rate is confirmed first.** The Paid window shows the exchange rate of the paid date and what the payment comes to in dinars, and asks "This exchange rate is correct"; nothing is created until it is ticked, and a rate changed in the meantime is refused.
+
+### Migrations
+- None.
+
+### Rollback
+- The previous build (`.next-prev`). Payments posted under 1.1.2 keep their dollar lines; the old build reads them as any journal.
+
+### Test evidence
+- `tests/integration/iob01-import-opening-balances.test.ts` (IOB5: USD-only bank, IQD-only supplier, rate refused unconfirmed and confirmed against another rate, then posted); the payment and posting suites; the unit suite.
+
 ## 1.1.1 — 2026-10-21
 
 What went live today (57e78c8, deployed 2026-10-21 03:32 Baghdad) and the

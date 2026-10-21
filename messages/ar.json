@@ -3707,7 +3707,13 @@
       "paper_file_optional": "أرفق الورقة (اختياري)",
       "overdraft_title": "لا يحتوي {account} على مال كافٍ لهذه الدفعة.",
       "overdraft_body": "يمكن مع ذلك تقديمها والموافقة عليها وإرسالها ودفعها — دفعها يجعل رصيد الحساب تحت الصفر.",
-      "overdraft_figures": "المتاح {available} · هذه الدفعة {amount} · بعدها {after}."
+      "overdraft_figures": "المتاح {available} · هذه الدفعة {amount} · بعدها {after}.",
+      "rate_confirm_title": "سعر الصرف في {date}",
+      "rate_confirm_rate": "1 {currency} = {rate} دينار (ساري من {from})",
+      "rate_confirm_converts": "{currency} {amount} يساوي {iqd} دينار — تُسجَّل الدفعة بهذا السعر.",
+      "rate_confirm_check": "سعر الصرف هذا صحيح — سجّل الدفعة به.",
+      "rate_confirm_checking": "جارٍ التحقق من السعر…",
+      "rate_confirm_none": "لا يوجد سعر {currency} لهذا التاريخ. أدخله في العملات وأسعار الصرف أولاً."
     },
     "supplier_advances": {
       "subtitle": "المبالغ المدفوعة للمورد قبل الفاتورة — عربون الاستيراد والسلف مقابل أوامر الشراء.",

@@ -199,6 +199,7 @@ export async function addApplicationPaper(formData: FormData): Promise<void> {
       reference: text(formData, 'paper_reference').trim() || null,
       reason: text(formData, 'paper_reason').trim() || null,
       overrideReason: text(formData, 'override_reason').trim() || null,
+      rateConfirmed: text(formData, 'rate_confirmed').trim() || null,
     });
   }, record(applicationNo));
 }

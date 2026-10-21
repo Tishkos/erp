@@ -3707,7 +3707,13 @@
       "paper_file_optional": "Attach the paper (optional)",
       "overdraft_title": "{account} does not hold enough money for this payment.",
       "overdraft_body": "It can still be submitted, approved, sent and paid — paying it takes the account below zero.",
-      "overdraft_figures": "Available {available} · this payment {amount} · after it {after}."
+      "overdraft_figures": "Available {available} · this payment {amount} · after it {after}.",
+      "rate_confirm_title": "Exchange rate on {date}",
+      "rate_confirm_rate": "1 {currency} = {rate} IQD (in force from {from})",
+      "rate_confirm_converts": "{currency} {amount} comes to IQD {iqd} — the payment is posted at this rate.",
+      "rate_confirm_check": "This exchange rate is correct — post the payment at it.",
+      "rate_confirm_checking": "Checking the rate…",
+      "rate_confirm_none": "There is no {currency} rate for that date. Enter it under Currencies and Rates first."
     },
     "supplier_advances": {
       "subtitle": "Money paid to a supplier before the invoice — the deposits on imports, and advances against orders.",

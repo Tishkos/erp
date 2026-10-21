@@ -164,7 +164,8 @@ export async function plan(
     // The engine posts on behalf of an approved source document, so a control
     // account is legitimate here — §14.3 restricts *manual* posting to them.
     assertPostable(account, { source: 'system' });
-    assertCurrencyAllowed(account, currency);
+    const lineCurrency = line.currency ?? currency;
+    assertCurrencyAllowed(account, lineCurrency);
     assertMappedAccount(request.eventType, line.role, account);
 
     const dimensions: SuppliedDimensions = {
@@ -183,7 +184,7 @@ export async function plan(
     const converted = await rateService.convertOn(
       tx,
       debit > 0n ? debit : credit,
-      currency,
+      lineCurrency,
       request.postingDate,
     );
 
@@ -199,7 +200,7 @@ export async function plan(
       accountSource: selection.source,
       debit: toDecimalString(debit),
       credit: toDecimalString(credit),
-      currency,
+      currency: lineCurrency,
       debitIqd: toDecimalString(debit > 0n ? converted.amountIqd : 0n),
       creditIqd: toDecimalString(credit > 0n ? converted.amountIqd : 0n),
       debitUsd: toDecimalString(debit > 0n ? converted.amountUsd : 0n),

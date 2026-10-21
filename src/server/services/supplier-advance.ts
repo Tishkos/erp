@@ -42,6 +42,7 @@ import * as payables from './payables';
 import * as posting from './posting';
 import * as statuses from './statuses';
 import { allocateDocumentNumber } from './numbering';
+import { bankLineFor } from './bank-line-currency';
 
 export const DOCUMENT_TYPE = 'supplier_advance';
 export const PERMISSION_OBJECT = 'supplier_advance';
@@ -319,6 +320,17 @@ export async function pay(
     bankGlAccountId = account.glAccountId;
   }
 
+  // The bank line in the bank's own currency — the dollars that left a USD account (2026-10-21).
+  const bankLine = bankCashAccountId
+    ? await bankLineFor(tx, bankCashAccountId, {
+        label: advance.advanceNo,
+        currency: advance.currency,
+        amountTxn: advance.amountTxn,
+        amountIqd: advance.amountIqd,
+        postingDate: paidDate,
+      })
+    : { amount: advance.amountIqd };
+
   const result = await posting.post(tx, ctx, {
     eventType: 'purchasing.supplier_advance_payment',
     documentTypeCode: DOCUMENT_TYPE,
@@ -333,7 +345,8 @@ export async function pay(
         ? {
             role: 'bank',
             accountId: bankGlAccountId,
-            credit: advance.amountIqd,
+            ...(bankLine.currency ? { currency: bankLine.currency } : {}),
+            credit: bankLine.amount,
             criteria,
             dimensions,
           }

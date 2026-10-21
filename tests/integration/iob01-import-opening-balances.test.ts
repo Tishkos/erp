@@ -28,6 +28,7 @@ import writeXlsxFile from 'write-excel-file/node';
 import { ownerPool, rejection } from './setup';
 import { linkItemToSupplier } from './item-supplier';
 import { withScope } from '@/server/db/client';
+import { registerAllRecords } from '@/server/records';
 import * as ap from '@/server/services/ap-invoice';
 import * as coa from '@/server/services/chart-of-accounts';
 import * as applications from '@/server/services/payment-applications';
@@ -388,5 +389,46 @@ describe('IOB4 · the supplier’s own invoice is absorbed by the opening', () =
       [aik2],
     );
     expect(log.map((row) => row.event_code)).toEqual(['OPENING_BALANCE', 'OPENING_ABSORBED', 'OPENING_ABSORPTION_UNDONE']);
+  });
+});
+
+describe('IOB5 · paid from a USD-only bank account to an IQD-only supplier account (2026-10-21)', () => {
+  it('the Paid paper asks the rate first; the bank line goes in dollars, the supplier line in dinars', async () => {
+    registerAllRecords();
+    // As on live: the bank's ledger account takes dollars only, the supplier's control account dinars only.
+    await ownerPool.query(`update chart_of_account set currency_restriction = 'USD' where id = $1`, [mansourGl]);
+    await apply();
+    const sent = await sentApplication();
+    const paper = (input: Partial<applications.PaperInput>) =>
+      withScope(scope(world.manager), (tx) =>
+        applications.addPaper(tx, world.manager, sent.id, { kind: 'paid', date: '2026-10-15', reference: 'MT103-AIK2', fileName: 'swift.pdf', content: Buffer.from('%PDF-1.4'), ...input }),
+      );
+
+    // What the Paid window shows before anything is created: the day's rate and the dinars at it.
+    const rate = await withScope(scope(world.manager), async (tx) =>
+      applications.paidRateFor(tx, await applications.loadByNo(tx, sent.application_no), '2026-10-15'),
+    );
+    expect(rate).toMatchObject({ currency: 'USD', iqdPerUnit: '1520.00000000', amountTxn: '30000.0000', amountIqd: '45600000.0000' });
+
+    // Not confirmed, or confirmed against another rate: refused, nothing created.
+    expect(await rejection(paper({}))).toMatch(/Confirm the exchange rate on the Paid window/);
+    expect(await rejection(paper({ rateConfirmed: randomUUID() }))).toMatch(/rate of 2026-10-15 is 1 USD = 1520\.00000000 IQD, not the rate you confirmed/);
+    expect((await ownerPool.query(`select count(*)::int as n from supplier_payment`)).rows[0].n).toBe(0);
+
+    // Confirmed: posted — the dollars that left the USD account, the dinars off the supplier.
+    await paper({ rateConfirmed: rate!.rateId });
+    const { rows: lines } = await ownerPool.query(
+      `select c.code, l.currency::text as currency, l.debit_txn::text as debit_txn, l.credit_txn::text as credit_txn,
+              l.debit_iqd::text as debit_iqd, l.credit_iqd::text as credit_iqd
+         from supplier_payment p
+         join journal_line l on l.journal_entry_id = p.journal_entry_id
+         join chart_of_account c on c.id = l.account_id
+        order by l.line_no`,
+    );
+    expect(lines).toEqual([
+      { code: expect.any(String), currency: 'IQD', debit_txn: '45600000.0000', credit_txn: '0.0000', debit_iqd: '45600000.0000', credit_iqd: '0.0000' },
+      { code: 'A980001', currency: 'USD', debit_txn: '0.0000', credit_txn: '30000.0000', debit_iqd: '0.0000', credit_iqd: '45600000.0000' },
+    ]);
+    expect((await ownerPool.query(`select status from payment_application where id = $1`, [sent.id])).rows[0].status).toBe('confirmed');
   });
 });

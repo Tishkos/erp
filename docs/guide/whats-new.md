@@ -2,8 +2,15 @@
 
 What changed in each version of the system, newest first: what is new, what was fixed, and what a person has to do. Answer "what is new", "the newest update", "the latest version", "the changelog", "release notes", «ما الجديد», «آخر تحديث», «التحديث الجديد», «شنو الجديد» from here. The version that is running is shown in the footer of every screen.
 
+## What is new in version 1.1.2 (ما الجديد في الإصدار 1.1.2)
+Version 1.1.2 is the newest version of the system (الإصدار الأحدث). It went live on 21 October 2026. What to do: reload the page once (حدّثوا الصفحة مرة واحدة).
+
+### Fixed: SWIFTs paid from a USD bank account — What is new in version 1.1.2
+- **Paid** on a payment application paid from a USD account (Mansour Bank USD and the others) was refused with "it accepts USD only, and this entry is in IQD". It now posts: the dollars on the bank's side, the dinars on the supplier's side, converted automatically.
+- Before anything is created, the Paid window shows the exchange rate of the paid date — "1 USD = … IQD" — and what the payment comes to in dinars, and asks you to tick **This exchange rate is correct**. If the rate is wrong, correct it under Currencies and Rates first.
+
 ## What is new in version 1.1.1 (ما الجديد في الإصدار 1.1.1)
-Version 1.1.1 is the newest version of the system (الإصدار الأحدث). It went live on 21 October 2026. What to do: reload the page once (حدّثوا الصفحة مرة واحدة).
+Version 1.1.1 went live on 21 October 2026, before version 1.1.2 above. What to do: reload the page once (حدّثوا الصفحة مرة واحدة).
 Also asked as: the newest update, the latest update, what changed today — آخر تحديث، التحديث الجديد، شنو الجديد.
 
 ### New: Leads → Opportunities → Projects — What is new in version 1.1.1

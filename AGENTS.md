@@ -377,6 +377,16 @@ By direction: "no one should see the values if he doesn't have the rights"; "we 
 * **Who sees a balance:** `can(principal, 'view', BALANCE_OBJECT)` (`bank_cash_account`, the treasury's balances). The application page's warning banner (`data-overdraft-warning`), its Available-now total and the check's figures, and the new sheet's account picker draw figures only for them. Errors are read by whoever pressed the button, so no refusal prints a balance: `treasury.InsufficientFundsError`, `CashLimitExceededError`, `supplier-payment.InsufficientFundsError` (figures kept as properties), the C-20 exception; the import's `FUNDS_RESERVED` line says "does not hold enough" without the balance. A new message that would name what an account holds does not.
 * Tests: `tests/unit/payment-applications.test.ts` (§15.3), `tests/integration/ap03-payments.test.ts` › A11, `treasury.test.ts`, `treasury-cash-advance.test.ts`. Guide: `docs/guide/payables.md` › Payment Applications › Not enough money.
 
+## Paid from a USD bank: a line per currency, and the rate confirmed first (1.1.2, 2026-10-21)
+
+By direction ("we still can't upload the SWIFTs … Cannot post to A000031: it accepts USD only, and this entry is in IQD … convert automatically, but it should say before creating it: is the current exchange rate correct").
+
+* **Per-line currency in the posting engine.** `PostingLineRequest.currency` (absent: the journal's) — each line is checked against its account's `currency_restriction` and converted to dinars at the posting date's rate in its own currency; the journal balances in dinars. Live has USD bank accounts on USD-only ledger accounts (A000031–A000033) and the supplier control account L000003 on IQD only, so a one-currency journal could never pay a supplier from them.
+* `services/bank-line-currency.ts` › `bankLineFor` is the one rule for a document's bank line: an IQD bank account or an IQD-only ledger account → dinars, as before; otherwise the bank's currency for the document's own `amount_txn`, which must come to exactly its dinars at the posting date's rate (refused with both figures). Used by `supplier-payment.post` and `supplier-advance.pay`; `payment-applications.confirm` writes the payment's `amount_txn` **before** posting it. A new document that pays out of a bank uses it too.
+* **The rate is said and confirmed before Paid creates anything.** `payment-applications.paidRateFor(row, date)` (the accounting rate of the paid date, its row id, the dinars at it); the Paid window draws `components/admin/rate-confirm.tsx`, which follows the date field, asks `GET /payables/payment-applications/<no>/rate?date=` and posts the rate row's id as `rate_confirmed` once ticked; `addPaper(paid)` refuses without it and when the date's rate is not that row. Dinar applications are unchanged.
+* Tests: `tests/integration/iob01-import-opening-balances.test.ts` › IOB5. Guide: `docs/guide/payables.md` › How to confirm the payment.
+* Found on live, not changed (Finance's to fix on Bank/Cash Accounts and the chart): BANK-000002 is a USD account on the IQD-only A000003; CASH-000001 an IQD till on the USD-only A000004.
+
 ## Live container tracking (2026-10-21, no migration)
 
 By direction: "each container have tracking based on realtime … like MSC, we can track them online … implement it in the website … without adding anything to the database".

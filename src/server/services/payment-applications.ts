@@ -81,7 +81,7 @@ import {
   type SendCheck,
 } from '../domain/payment-applications';
 import { can } from '../domain/permissions';
-import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
+import { MONEY_SCALE, RATE_SCALE, parseDecimal, toDecimalString } from '../domain/money';
 import type { ActorContext } from './chart-of-accounts';
 import * as audit from './audit';
 import * as authz from './authorization';
@@ -1040,8 +1040,9 @@ export async function confirm(tx: Tx, ctx: ActorContext, id: string, input: Conf
     }
     // The application's own reservation is the money that pays it (§15.1).
     const reserved = isReserved(row.status) ? parseDecimal(row.amountIqd, MONEY_SCALE) : 0n;
-    await payments.post(tx, ctx, created.id, { drawsReservedIqd: reserved, allowOverdraft: true });
+    // The amount in its own currency first: from a USD account the bank line is posted in dollars (2026-10-21).
     await tx.update(supplierPayment).set({ amountTxn: money(amountTxn) }).where(eq(supplierPayment.id, created.id));
+    await payments.post(tx, ctx, created.id, { drawsReservedIqd: reserved, allowOverdraft: true });
     supplierPaymentId = created.id;
     documentNo = created.paymentNo;
   } else {
@@ -1444,6 +1445,31 @@ export interface PaperInput {
   readonly reason?: string | null;
   /** Sent although a check fails: a manager's reason (§15.3). */
   readonly overrideReason?: string | null;
+  /**
+   * Paid, in a currency other than dinars: the exchange-rate row the person
+   * was shown for the paid date and confirmed (2026-10-21, by direction: "it
+   * should say before creating it: is the current exchange rate correct").
+   */
+  readonly rateConfirmed?: string | null;
+}
+
+/**
+ * The rate a Paid paper posts at — the accounting rate of the paid date — and
+ * what the application comes to in dinars at it; null for an application in
+ * dinars. What the Paid window shows before anything is created.
+ */
+export async function paidRateFor(tx: Tx, row: typeof paymentApplication.$inferSelect, onDate: string) {
+  if (row.currency === 'IQD') return null;
+  const rate = await rateService.rateOn(tx, row.currency, onDate);
+  const converted = await rateService.convertOn(tx, parseDecimal(row.amountTxn, MONEY_SCALE), row.currency, onDate);
+  return {
+    currency: row.currency,
+    rateId: rate.id,
+    iqdPerUnit: toDecimalString(rate.iqdPerUnit, RATE_SCALE),
+    effectiveFrom: rate.effectiveFrom,
+    amountTxn: row.amountTxn,
+    amountIqd: toDecimalString(converted.amountIqd, MONEY_SCALE),
+  };
 }
 
 /**
@@ -1484,6 +1510,21 @@ export async function addPaper(tx: Tx, ctx: ActorContext, id: string, input: Pap
   } else if (kind === 'paid') {
     if (!date) throw new PaymentApplicationError('Give the date the money went — the SWIFT, transfer or voucher date on the paper.');
     if (!input.reference?.trim()) throw new PaymentApplicationError('Give the reference on the paper — the MT103, transfer or voucher number.');
+    // In another currency the payment is converted at the paid date's rate — confirmed by the person first.
+    const rate = await paidRateFor(tx, row, date);
+    if (rate) {
+      if (!input.rateConfirmed?.trim()) {
+        throw new PaymentApplicationError(
+          `Confirm the exchange rate on the Paid window: ${row.applicationNo} is in ${rate.currency} and is posted at the ${rate.currency} rate of ${date}.`,
+        );
+      }
+      if (input.rateConfirmed.trim() !== rate.rateId) {
+        throw new PaymentApplicationError(
+          `The ${rate.currency} rate of ${date} is 1 ${rate.currency} = ${rate.iqdPerUnit} IQD, not the rate you confirmed — it was changed, or the date was. ` +
+            'Check it, correct it under Currencies and Rates if it is wrong, and confirm again.',
+        );
+      }
+    }
     await confirm(tx, ctx, id, { confirmedOn: date, reference: input.reference.trim() });
   } else if (kind === 'rejected_cancelled') {
     const reason = input.reason?.trim() ?? '';
