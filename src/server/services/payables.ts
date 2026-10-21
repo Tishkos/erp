@@ -1619,6 +1619,140 @@ function goodsPlaceSql(place: WorkbenchGoodsPlace) {
 }
 
 /**
+ * Where the imports' goods are that are not in a warehouse yet — the Warehouses
+ * Report's "Goods on the way" (2026-10-21, by direction: "In Process and On
+ * Process only show the items that arrived … On Board doesn't have anything").
+ *
+ * Nothing here is stock. An import's goods enter the ledger only through its
+ * invoice (into On Process (Without SWIFT) or In Process) and a container's
+ * receipt; the sheet's 58 imports have neither, and no import moves stock
+ * through On Board or At Port. So the stage warehouses' stock is only what an
+ * invoice booked, and this list is the other half: every live container not
+ * received, at the place the import workbench's Goods filter puts it (the same
+ * SQL — `CONTAINER_PLACE_SQL`, `HELD_SQL`), with its lines; and an import
+ * with no container whose goods no invoice has booked, as the import itself
+ * describes them. Read under the viewer's row policies.
+ */
+export const GOODS_ON_THE_WAY_PLACES = ['on_process', 'in_process', 'on_board', 'at_port', 'cleared'] as const;
+export type GoodsOnTheWayPlace = (typeof GOODS_ON_THE_WAY_PLACES)[number];
+
+/** The place a stage warehouse stands for (`warehouse.shipment_stage`); customs cleared has no warehouse. */
+export function goodsPlaceOfStage(stage: string | null | undefined): GoodsOnTheWayPlace | null {
+  switch (stage) {
+    case 'without_swift':
+      return 'on_process';
+    case 'in_process':
+      return 'in_process';
+    case 'on_board':
+      return 'on_board';
+    case 'on_port':
+      return 'at_port';
+    default:
+      return null;
+  }
+}
+
+export interface GoodsOnTheWayRow {
+  readonly place: GoodsOnTheWayPlace;
+  readonly payableNo: string;
+  readonly branchCode: string;
+  readonly supplierCode: string;
+  readonly supplierName: string;
+  readonly blNo: string | null;
+  readonly containerId: string | null;
+  readonly containerNo: string | null;
+  readonly itemCode: string | null;
+  readonly itemName: string | null;
+  /** The container line's description, or the import's own where it has no container. */
+  readonly description: string;
+  /** Planned on the container line (or the import's quantity); null when the import names none. */
+  readonly quantity: string | null;
+  readonly uomCode: string | null;
+  readonly eta: string | null;
+  readonly late: boolean;
+}
+
+/** At most this many rows; more is said, never dropped silently. */
+export const GOODS_ON_THE_WAY_CAP = 2000;
+
+/** What a place holds on the way: containers, imports with no container yet, and the units planned (scaled ×10^6). */
+export function goodsOnTheWayAt(rows: readonly GoodsOnTheWayRow[], place: GoodsOnTheWayPlace | null) {
+  const here = place ? rows.filter((row) => row.place === place) : rows;
+  return {
+    containers: new Set(here.filter((row) => row.containerId).map((row) => row.containerId)).size,
+    imports: new Set(here.filter((row) => !row.containerId).map((row) => row.payableNo)).size,
+    units: here.reduce((sum, row) => sum + (row.quantity ? parseQuantity(row.quantity) : 0n), 0n),
+  };
+}
+
+/** A booked goods invoice: its lines are stock already, in On Process or In Process. */
+const GOODS_INVOICE_SQL = sql`exists (select 1 from ap_invoice ai where ai.payable_id = payable.id
+   and ai.status in ('posted', 'partially_executed', 'settled') and not ai.is_import_opening)`;
+
+export async function goodsOnTheWay(
+  tx: Tx,
+  filter: { place?: GoodsOnTheWayPlace | null; search?: string | null } = {},
+): Promise<{ rows: GoodsOnTheWayRow[]; truncated: boolean }> {
+  const conditions = [sql`g.place is not null`];
+  if (filter.place) conditions.push(sql`g.place = ${filter.place}`);
+  const term = filter.search?.trim();
+  if (term) {
+    const like = `%${term.toLowerCase().replace(/([%_\\])/g, '\\$1')}%`;
+    conditions.push(sql`(lower(g.description) like ${like} escape '\\'
+      or lower(coalesce(g."itemCode", '')) like ${like} escape '\\'
+      or lower(coalesce(g."itemName", '')) like ${like} escape '\\'
+      or lower(coalesce(g."containerNo", '')) like ${like} escape '\\'
+      or lower(g."payableNo") like ${like} escape '\\')`);
+  }
+
+  const result = await tx.execute(sql`
+    with boxes as (
+      select payable.id as payable_id, bl.bl_no, sc.id as container_id, sc.container_no, sc.eta,
+             sc.status_code = 'late' as late,
+             case when (${CONTAINER_PLACE_SQL}) = 'not_loaded'
+                  then case when ${HELD_SQL} then 'on_process' else 'in_process' end
+                  else (${CONTAINER_PLACE_SQL}) end as place
+        from payable
+        join bill_of_lading bl on bl.payable_id = payable.id and bl.cancelled_at is null
+        join shipment_container sc on sc.bl_id = bl.id and sc.cancelled_at is null
+       where payable.cancelled_at is null
+    ),
+    goods as (
+      select b.place, payable.payable_no as "payableNo", payable.branch_code as "branchCode",
+             bp.code as "supplierCode", bp.legal_name as "supplierName",
+             b.bl_no as "blNo", b.container_id::text as "containerId", b.container_no as "containerNo",
+             l.item_code as "itemCode", i.name as "itemName", l.description,
+             l.planned_qty::text as quantity, coalesce(l.uom_code, i.base_uom_code) as "uomCode",
+             b.eta::text as eta, b.late
+        from boxes b
+        join payable on payable.id = b.payable_id
+        join business_partner bp on bp.id = payable.supplier_id
+        join shipment_container_line l on l.container_id = b.container_id and l.superseded_at is null
+        left join item i on i.code = l.item_code
+       where b.place in ('on_process', 'in_process', 'on_board', 'at_port', 'cleared')
+      union all
+      select case when ${HELD_SQL} then 'on_process' when ${UNDER_WAY_SQL} then 'in_process' end,
+             payable.payable_no, payable.branch_code, bp.code, bp.legal_name,
+             null, null, null, null, null, payable.description,
+             payable.quantity::text, null, null, false
+        from payable
+        join business_partner bp on bp.id = payable.supplier_id
+       where payable.payable_type_code = 'import'
+         and payable.cancelled_at is null and payable.closed_at is null
+         and not exists (select 1 from ${LIVE_CONTAINERS})
+         and not ${GOODS_INVOICE_SQL}
+    )
+    select g.* from goods g
+     where ${sql.join(conditions, sql` and `)}
+     order by array_position(array['on_process', 'in_process', 'on_board', 'at_port', 'cleared']::text[], g.place),
+              g."payableNo", g."containerNo" nulls first, g.description
+     limit ${GOODS_ON_THE_WAY_CAP + 1}`);
+
+  const rows = (result as unknown as { rows: GoodsOnTheWayRow[] }).rows;
+  return { rows: rows.slice(0, GOODS_ON_THE_WAY_CAP), truncated: rows.length > GOODS_ON_THE_WAY_CAP };
+}
+
+/**
  * Every number a person may hold for an import, gathered for the search box:
  * its applications, PDs (and the platform's invoice number), B/Ls, containers
  * and purchase invoices (ours and the supplier's). Read under the viewer's

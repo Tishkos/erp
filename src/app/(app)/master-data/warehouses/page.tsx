@@ -5,6 +5,7 @@ import { Panel } from '@/components/ui';
 import {
   AdminPage,
   Field,
+  FilterRow,
   Flash,
   Form,
   Grid,
@@ -55,6 +56,8 @@ export default async function WarehousesPage({ searchParams }: { searchParams: S
     return <Denied object={page('warehouses')} />;
   }
   const mayCreate = can(principal, 'create', warehouses.PERMISSION_OBJECT);
+  // Where an item is, in every warehouse and every import stage: the Warehouses Report, filtered (2026-10-21).
+  const mayFindItems = visibleRoute('/inventory/fifo-valuation') && can(principal, 'view', 'inventory_movement');
 
   const rows = await withCurrentUser((tx) => warehouses.list(tx));
   const shown = rows.filter((row) => matches(row, outcome.q));
@@ -100,6 +103,17 @@ export default async function WarehousesPage({ searchParams }: { searchParams: S
         saved={outcome.saved}
         savedLabel={t('saved')}
       />
+
+      {mayFindItems ? (
+        <form action="/inventory/fifo-valuation" data-find-item method="get">
+          <FilterRow>
+            <Field label={t('warehouses.find_item')} name="item" placeholder={t('reports.search_item_hint')} />
+            <SubmitRow>
+              <Submit label={t('search')} />
+            </SubmitRow>
+          </FilterRow>
+        </form>
+      ) : null}
 
       <Panel flush>
         <ListToolbar

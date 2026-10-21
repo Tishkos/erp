@@ -13,6 +13,7 @@ import {
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { ExportMenu } from '@/components/print/export-menu';
+import { GoodsOnTheWay } from '@/components/admin/goods-on-the-way';
 import { IntegrityBanner } from '@/components/admin/integrity-banner';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { ProfileLink } from '@/components/admin/profile-link';
@@ -24,6 +25,8 @@ import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as items from '@/server/services/items';
 import * as reports from '@/server/services/inventory-reports';
+import * as payables from '@/server/services/payables';
+import * as shipments from '@/server/services/shipments';
 import * as warehouses from '@/server/services/warehouses';
 
 /**
@@ -67,14 +70,25 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
   const itemSearch = typeof params.item === 'string' ? params.item.trim() : '';
   const warehouseCode = typeof params.warehouse === 'string' ? params.warehouse.trim() : '';
 
-  const { rows, summary, pickers } = await withCurrentUser(async (tx) => ({
-    rows: await reports.valuation(tx, context.principal, {
-      allPermittedBranches: true,
-      ...(itemSearch ? { itemSearch } : {}),
-      ...(warehouseCode ? { warehouseCode } : {}),
-    }),
-    summary: warehouseCode || itemSearch ? [] : await reports.warehouseSummary(tx, context.principal),
-    pickers: {
+  // The imports' goods that are not stock yet (2026-10-21): shown to whoever may read the containers.
+  const mayTrack = can(context.principal, 'view', shipments.CONTAINER_OBJECT);
+
+  const { rows, summary, pickers, onTheWay, chosenPlace } = await withCurrentUser(async (tx) => {
+    const houses = await warehouses.listForReports(tx);
+    const chosen = warehouseCode ? houses.find((row) => row.code === warehouseCode) : undefined;
+    // A stage warehouse shows the goods at its place; any other warehouse none; all warehouses every place.
+    const place = chosen ? payables.goodsPlaceOfStage(chosen.shipmentStage) : null;
+    const tracked = mayTrack && (!warehouseCode || place !== null);
+    return {
+      chosenPlace: place,
+      onTheWay: tracked ? await payables.goodsOnTheWay(tx, { place, search: itemSearch || null }) : null,
+      rows: await reports.valuation(tx, context.principal, {
+        allPermittedBranches: true,
+        ...(itemSearch ? { itemSearch } : {}),
+        ...(warehouseCode ? { warehouseCode } : {}),
+      }),
+      summary: warehouseCode || itemSearch ? [] : await reports.warehouseSummary(tx, context.principal),
+      pickers: {
       // The warehouses stay a picker: a short, known list a person chooses from.
       //
       // The items are searched, not chosen — but a box with no suggestions
@@ -82,10 +96,30 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
       // `datalist`. It suggests rather than constrains: a partial term is still
       // a valid search, and the matching is done in SQL by the trigram indexes
       // either way. Names only, so the list is the text a person is typing.
-      stockItems: (await items.listAll(tx)).filter((row) => row.isStock),
-      houses: await warehouses.listForReports(tx),
-    },
-  }));
+        stockItems: (await items.listAll(tx)).filter((row) => row.isStock),
+        houses,
+      },
+    };
+  });
+
+  // What a stage warehouse's place holds on the way: containers, imports with none yet, units.
+  const onTheWayText = (stage: string | null) => {
+    const place = payables.goodsPlaceOfStage(stage);
+    if (!place || !onTheWay) return null;
+    const tracked = payables.goodsOnTheWayAt(onTheWay.rows, place);
+    return tracked.containers === 0 && tracked.imports === 0
+      ? { text: t('reports.on_the_way_nothing'), linked: false }
+      : {
+          text: [
+            tracked.containers ? t('reports.on_the_way_containers', { count: tracked.containers }) : null,
+            tracked.imports ? t('reports.on_the_way_imports', { count: tracked.imports }) : null,
+            tracked.units > 0n ? t('reports.on_the_way_units', { units: formatUnits(tracked.units) }) : null,
+          ]
+            .filter(Boolean)
+            .join(' · '),
+          linked: true,
+        };
+  };
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
   // The layers carry quantities at six decimal places. A warehouse list reads
@@ -157,6 +191,11 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
             {pickers.stockItems.map((row) => (
               <option key={row.code} value={row.name} />
             ))}
+            {[...new Set((onTheWay?.rows ?? []).map((row) => row.description))]
+              .filter((text) => !pickers.stockItems.some((item) => item.name === text))
+              .map((text) => (
+                <option key={`on-the-way:${text}`} value={text} />
+              ))}
           </datalist>
           <Select
             defaultValue={warehouseCode}
@@ -201,6 +240,7 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
                 {t('reports.negative_stock')}
               </th>
               <th scope="col">{t('reports.last_movement')}</th>
+              {onTheWay ? <th scope="col">{t('reports.on_the_way')}</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -238,6 +278,7 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
                 <td>
                   <bdi dir="ltr">{row.lastMovementOn ? formatBusinessDate(row.lastMovementOn, locale as Locale) : '—'}</bdi>
                 </td>
+                {onTheWay ? <OnTheWayCell code={row.warehouseCode} shown={onTheWayText(row.shipmentStage)} /> : null}
               </tr>
             ))}
           </tbody>
@@ -247,12 +288,15 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
               <td className={s.sapNum}>
                 <bdi dir="ltr">{money(summaryTotal)}</bdi>
               </td>
-              <td colSpan={3} />
+              <td colSpan={onTheWay ? 4 : 3} />
             </tr>
           </tfoot>
         </table>
         </div>
       ) : null}
+
+      {/* A stage warehouse holds the imports' goods mostly as tracking, not stock: they come first (2026-10-21). */}
+      {onTheWay && chosenPlace ? <GoodsOnTheWay place={chosenPlace} rows={onTheWay.rows} truncated={onTheWay.truncated} /> : null}
 
       {/* Framed like the summary above: nine columns scroll within the
           frame on a phone rather than widening the page (2026-10-04). */}
@@ -286,7 +330,7 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
           {rows.length === 0 ? (
             <tr>
               <td className={s.sapEmptyRow} colSpan={9}>
-                {t('reports.nothing_in_stock')}
+                {itemSearch ? t('reports.nothing_found_anywhere') : t('reports.nothing_in_stock')}
               </td>
             </tr>
           ) : (
@@ -343,6 +387,24 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
         )}
       </table>
       </div>
+
+      {onTheWay && !chosenPlace ? <GoodsOnTheWay place={null} rows={onTheWay.rows} truncated={onTheWay.truncated} /> : null}
     </AdminPage>
+  );
+}
+
+/** A stage warehouse's goods on the way in the summary: a link to them; a dash for any other warehouse. */
+function OnTheWayCell({ code, shown }: { code: string; shown: { text: string; linked: boolean } | null }) {
+  if (!shown) return <td>—</td>;
+  return (
+    <td data-on-the-way={code}>
+      {shown.linked ? (
+        <Link className={s.sapLink} href={`/inventory/fifo-valuation?warehouse=${encodeURIComponent(code)}#on-the-way`}>
+          {shown.text}
+        </Link>
+      ) : (
+        shown.text
+      )}
+    </td>
   );
 }

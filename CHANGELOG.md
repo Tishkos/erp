@@ -7,6 +7,19 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 
 ## Unreleased
 
+## 1.1.4 — 2026-10-21
+
+### New — where the imports' goods are, on the warehouse screens
+- The Warehouses Report has **Goods on the way — not in stock yet**: every container not received, at its stage (On Process (Without SWIFT), In Process, On board, At port, Customs cleared), with its import, supplier, goods, quantity and ETA, and each import with no container yet. The imports taken over from the sheet have no stock (their containers carry descriptions only) and nothing moves stock through On Board or At Port, so those warehouses read 0 in stock; this shows what is really there. The placing is the Import Applications' own Goods filter.
+- The summary's **On the way (not in stock)** column gives each stage warehouse its containers, imports and units; choosing a stage warehouse shows its goods first; a stage warehouse's own page shows them too.
+- **Item search**: the report's search reaches the goods on the way (item, the container's description such as "panel", container or import number); every warehouse's page searches its own stock; the Warehouses list has **Find an item in the warehouses**.
+
+### Migrations
+- None. Read-only; nothing is stored. Rollback: the previous build.
+
+### Test evidence
+- `tests/integration/wh01-goods-on-the-way.test.ts`, `tests/e2e/inventory-screens.spec.ts` (Warehouses Report, Warehouses).
+
 ## 1.1.3 — 2026-10-21
 
 ### Fixed — a cash or bank account linked to a ledger account of another currency

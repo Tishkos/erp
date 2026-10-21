@@ -6,6 +6,7 @@ import {
   ActionButton,
   AdminPage,
   Field,
+  FilterRow,
   Flash,
   Form,
   Grid,
@@ -28,6 +29,9 @@ import { sumMoney } from '@/server/print/decimal';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as reports from '@/server/services/inventory-reports';
+import * as payables from '@/server/services/payables';
+import * as shipments from '@/server/services/shipments';
+import { GoodsOnTheWay } from '@/components/admin/goods-on-the-way';
 import * as warehouses from '@/server/services/warehouses';
 import { renameWarehouse, setWarehouseActive } from '../actions';
 
@@ -56,15 +60,19 @@ export default async function WarehouseRecordPage({
 }) {
   if (!visibleRoute('/master-data/warehouses')) notFound();
 
-  const [t, page, column, locale, context, outcome, { code: rawCode }] = await Promise.all([
+  const [t, page, column, list, locale, context, outcome, query, { code: rawCode }] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
     getTranslations('column'),
+    getTranslations('list'),
     getLocale(),
     requireContext(),
     outcomeOf(searchParams),
+    searchParams,
     params,
   ]);
+  // The item typed into the stock panel's search (2026-10-21), matched as the Warehouses Report matches it.
+  const itemSearch = typeof query.item === 'string' ? query.item.trim() : '';
 
   const code = decodeURIComponent(rawCode);
   const { principal } = context;
@@ -72,28 +80,40 @@ export default async function WarehouseRecordPage({
     return <Denied object={page('warehouses')} />;
   }
   const mayEdit = can(principal, 'configure', warehouses.PERMISSION_OBJECT);
+  // A stage warehouse (On Process, In Process, On Board, At Port) also shows the imports'
+  // goods at its stage that are not stock yet (2026-10-21), to whoever may read containers.
+  const mayTrack = can(principal, 'view', shipments.CONTAINER_OBJECT);
 
   const data = await withCurrentUser(async (tx) => {
     const row = await warehouses.get(tx, code);
     if (!row) return null;
+    const place = payables.goodsPlaceOfStage(row.shipmentStage);
     return {
       row,
+      place,
+      onTheWay: place && mayTrack ? await payables.goodsOnTheWay(tx, { place, search: itemSearch || null }) : null,
+      // The stage's figure in Details stays the whole stage's while a search narrows the list.
+      allOnTheWay: place && mayTrack && itemSearch ? await payables.goodsOnTheWay(tx, { place }) : null,
       stock: await reports.valuation(tx, principal, {
         warehouseCode: code,
         allPermittedBranches: true,
+        ...(itemSearch ? { itemSearch } : {}),
       }),
+      // The warehouse's total stays the whole warehouse's while a search narrows the list.
+      totalStock: itemSearch ? await reports.valuation(tx, principal, { warehouseCode: code, allPermittedBranches: true }) : null,
       notes: await recordNotes.listNotes(tx, { object: warehouses.PERMISSION_OBJECT, recordId: code }),
     };
   });
 
   if (!data) notFound();
-  const { row, stock, notes } = data;
+  const { row, stock, totalStock, notes, place, onTheWay, allOnTheWay } = data;
+  const tracked = onTheWay ? payables.goodsOnTheWayAt((allOnTheWay ?? onTheWay).rows, place) : null;
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
   // Exact, as the Warehouses Report is: a scaled integer for the quantity, and
   // the printed copy's own `sumMoney` for the total.
   const units = (quantity: string) => formatUnits(parseQuantity(quantity));
-  const total = sumMoney(stock.map((line) => line.valueIqd));
+  const total = sumMoney((totalStock ?? stock).map((line) => line.valueIqd));
 
   return (
     <AdminPage
@@ -146,6 +166,22 @@ export default async function WarehouseRecordPage({
                 <span>{t('reports.totals')}</span>
                 <span>{money(total)}</span>
               </li>
+              {tracked ? (
+                <li data-on-the-way={row.code}>
+                  <span>{t('reports.on_the_way')}</span>
+                  <span>
+                    {tracked.containers === 0 && tracked.imports === 0
+                      ? t('reports.on_the_way_nothing')
+                      : [
+                          tracked.containers ? t('reports.on_the_way_containers', { count: tracked.containers }) : null,
+                          tracked.imports ? t('reports.on_the_way_imports', { count: tracked.imports }) : null,
+                          tracked.units > 0n ? t('reports.on_the_way_units', { units: formatUnits(tracked.units) }) : null,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                  </span>
+                </li>
+              ) : null}
               <li>
                 <span>{t('created_at')}</span>
                 <span>{formatTimestamp(row.createdAt.toISOString(), locale as Locale)}</span>
@@ -199,6 +235,15 @@ export default async function WarehouseRecordPage({
           ) : null}
 
           <Panel title={t('reports.warehouses_report')}>
+            {/* Find an item in this warehouse by its name or code (2026-10-21). */}
+            <form method="get">
+              <FilterRow>
+                <Field defaultValue={itemSearch} label={column('item_name')} name="item" placeholder={t('reports.search_item_hint')} />
+                <SubmitRow>
+                  <Submit label={list('search')} />
+                </SubmitRow>
+              </FilterRow>
+            </form>
             <div className="table-wrap">
               <table className="list">
                 <thead>
@@ -212,7 +257,7 @@ export default async function WarehouseRecordPage({
                 <tbody>
                   {stock.length === 0 ? (
                     <tr>
-                      <td colSpan={4}>{t('reports.nothing_in_stock')}</td>
+                      <td colSpan={4}>{itemSearch ? t('reports.nothing_found_for_item') : t('reports.nothing_in_stock')}</td>
                     </tr>
                   ) : null}
                   {stock.map((line) => (
@@ -230,6 +275,9 @@ export default async function WarehouseRecordPage({
 
         </div>
       </div>
+
+      {/* The goods at this stage on their way, searched with the panel's item box too. */}
+      {onTheWay ? <GoodsOnTheWay place={place} rows={onTheWay.rows} truncated={onTheWay.truncated} /> : null}
     </AdminPage>
   );
 }

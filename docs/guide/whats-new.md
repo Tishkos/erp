@@ -2,8 +2,18 @@
 
 What changed in each version of the system, newest first: what is new, what was fixed, and what a person has to do. Answer "what is new", "the newest update", "the latest version", "the changelog", "release notes", «ما الجديد», «آخر تحديث», «التحديث الجديد», «شنو الجديد» from here. The version that is running is shown in the footer of every screen.
 
+## What is new in version 1.1.4 (ما الجديد في الإصدار 1.1.4)
+Version 1.1.4 is the newest version of the system (الإصدار الأحدث). It went live on 21 October 2026. What to do: reload the page once (حدّثوا الصفحة مرة واحدة).
+
+### New: goods on the way in the warehouses — What is new in version 1.1.4
+- Inventory → Warehouses Report now shows **Goods on the way — not in stock yet** (بضائع في الطريق — لم تدخل المخزون بعد): every container not yet received, at On Process (Without SWIFT), In Process, On board, At port or Customs cleared, with its import, supplier, goods, quantity and expected arrival. Choose On Board (or another stage) under Warehouse Name to see only that stage. These goods are not stock yet — they enter a warehouse when the container is received.
+- The **On the way (not in stock)** column of the summary says how many containers and units each stage warehouse has on the way, and each stage warehouse's own page lists them.
+
+### New: item search in the warehouses — What is new in version 1.1.4
+- Search an item on the Warehouses Report (it also finds goods on the way, e.g. "panel"), on any warehouse's own page, or from the Warehouses list with **Find an item in the warehouses** (ابحث عن مادة في المخازن).
+
 ## What is new in version 1.1.3 (ما الجديد في الإصدار 1.1.3)
-Version 1.1.3 is the newest version of the system (الإصدار الأحدث). It went live on 21 October 2026. What to do: reload the page once (حدّثوا الصفحة مرة واحدة).
+Version 1.1.3 went live on 21 October 2026, before version 1.1.4 above. What to do: reload the page once (حدّثوا الصفحة مرة واحدة).
 
 ### Fixed: a cash account on a ledger account of another currency — What is new in version 1.1.3
 - A cash or bank account in dinars could be linked to a ledger account that takes dollars only (or the other way round), and then its receipts and payments were refused. Bank/Cash Accounts now refuses that choice and says which currency the ledger account takes.

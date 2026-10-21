@@ -189,6 +189,8 @@ export interface WarehouseSummaryRow {
   readonly warehouseName: string;
   readonly branchCode: string;
   readonly isTransit: boolean;
+  /** The import stage the warehouse stands for (without_swift, in_process, on_board, on_port), or null. */
+  readonly shipmentStage: string | null;
   /** Items with a non-zero ledger quantity in the warehouse. */
   readonly items: number;
   /** Σ the ledger's quantity over those items, in their base units. */
@@ -222,6 +224,7 @@ export async function warehouseSummary(tx: Tx, principal: Principal): Promise<Wa
        group by l.warehouse_code
     )
     select w.code as "warehouseCode", w.name as "warehouseName", w.branch_code as "branchCode", w.is_transit as "isTransit",
+           w.shipment_stage as "shipmentStage",
            count(g.item_code) filter (where g.quantity <> 0)::int as items,
            coalesce(sum(g.quantity), 0)::text as units,
            coalesce(round(v.value_iqd, 4), 0)::text as "valueIqd",
@@ -233,7 +236,7 @@ export async function warehouseSummary(tx: Tx, principal: Principal): Promise<Wa
       left join item i on i.code = g.item_code
       left join layers v on v.warehouse_code = w.code
      where w.active ${principal.isSuperUser ? sql`` : sql`and app_branch_allowed(w.branch_code)`}
-     group by w.code, w.name, w.branch_code, w.is_transit, v.value_iqd
+     group by w.code, w.name, w.branch_code, w.is_transit, w.shipment_stage, v.value_iqd
      order by w.branch_code, ${journeyRank(sql`w.shipment_stage`)}, w.code`);
   return (result as unknown as { rows: WarehouseSummaryRow[] }).rows;
 }

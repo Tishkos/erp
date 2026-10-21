@@ -72,6 +72,7 @@ export async function listForReports(tx: Tx) {
       name: warehouse.name,
       branchCode: warehouse.branchCode,
       warehouseType: warehouse.warehouseType,
+      shipmentStage: warehouse.shipmentStage,
     })
     .from(warehouse)
     .where(eq(warehouse.active, true))

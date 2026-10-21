@@ -241,7 +241,38 @@ test.describe('IMPROVEMENT-002 · the inventory screens', () => {
     // Narrowed to the warehouse: the items, each opening its movements.
     await expect(page.locator('table[aria-label="By warehouse"]')).toHaveCount(0);
     await expect(page.locator('a[href^="/inventory/stock-ledger?item=ITM-SEED&warehouse=WH-HQ"]').first()).toBeVisible();
+    // A store is not a stage of the import: no goods on the way are listed under it (2026-10-21).
+    await expect(page.locator('[data-goods-on-the-way]')).toHaveCount(0);
     await photograph(page, '/inventory/fifo-valuation', 'warehouses-report');
+  });
+
+  test('Warehouses: items searched on the report, the list and a profile; goods on the way at each stage', async ({ page }) => {
+    // All warehouses: the summary says what each stage warehouse's place holds on the way, and the list is there.
+    await page.goto('/inventory/fifo-valuation');
+    await expect(page.locator('table[aria-label="By warehouse"] th', { hasText: 'On the way (not in stock)' })).toBeVisible();
+    await expect(page.locator('[data-goods-on-the-way]')).toBeVisible();
+    // An item searched for that no warehouse holds says so, not that no warehouse holds anything.
+    await page.goto('/inventory/fifo-valuation?item=no-such-item-xyz');
+    await expect(page.getByText('No stock of that item in any warehouse.')).toBeVisible();
+
+    // One warehouse's own page finds an item in it.
+    await page.goto('/master-data/warehouses/WH-HQ?item=ITM-SEED');
+    await expect(page.locator('td', { hasText: 'ITM-SEED' }).first()).toBeVisible();
+    await page.goto('/master-data/warehouses/WH-HQ?item=no-such-item-xyz');
+    await expect(page.getByText('No stock of that item in this warehouse.')).toBeVisible();
+    // A store's page lists no goods on the way; a stage warehouse's page does, and says how many in Details.
+    await expect(page.locator('[data-goods-on-the-way]')).toHaveCount(0);
+    await page.goto('/master-data/warehouses/WH-INPROC');
+    await expect(page.locator('[data-goods-on-the-way]')).toBeVisible();
+    await expect(page.locator('li[data-on-the-way="WH-INPROC"]')).toBeVisible();
+
+    // The Warehouses list finds an item across every warehouse, on the report.
+    await page.goto('/master-data/warehouses');
+    const find = page.locator('form[data-find-item]');
+    await find.getByLabel('Find an item in the warehouses').fill('ITM-SEED');
+    await find.getByRole('button', { name: 'Search' }).click();
+    await page.waitForURL(/\/inventory\/fifo-valuation\?item=ITM-SEED/);
+    await expect(page.locator('a[href^="/inventory/stock-ledger?item=ITM-SEED&warehouse=WH-HQ"]').first()).toBeVisible();
   });
 
   test('Inventory Checks: every check named with a state and a source, nothing repaired, and it prints', async ({ page }) => {

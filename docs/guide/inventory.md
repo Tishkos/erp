@@ -694,6 +694,7 @@ What it is for: The stock held now, valued at what it cost: a summary per wareho
 4. To find an item, type part of its name or code in **Item Name** (اسم الصنف) (**Name or code** — الاسم أو الرمز); to keep one warehouse choose **Warehouse Name** (اسم المخزن) (default **All warehouses** — كل المخازن); then press **Search** (بحث). When a filter is set the By warehouse summary is hidden.
 5. **Print / Export** (طباعة / تصدير) at the top downloads the report with your filters.
 6. Beside it, **Add items manually** (إضافة أصناف يدويًا) opens the Manual Stock Additions sheet (with the warehouse chosen when the report is filtered to one), and **Manually added items** (الأصناف المضافة يدويًا) opens their list. They show to whoever may raise or read manual stock additions.
+7. To see where an import's goods are before they arrive, read **Goods on the way — not in stock yet** (بضائع في الطريق — لم تدخل المخزون بعد) at the foot of the page. With **All warehouses** it lists every place; choose **On Process (Without SWIFT)**, **In Process**, **On Board** or **At Port** under Warehouse Name to see only the goods at that place (another warehouse shows no such list). In the By warehouse summary, the column **On the way (not in stock)** (في الطريق (ليست في المخزون)) says, for those four warehouses, how many containers (and imports with no container yet) are at that place and how many units they carry; click it to open them. With one of the four chosen, its goods on the way are shown first, above its stock. The item search finds these goods too — by the item, the description the container carries (for example "panel"), the container number or the import number.
 
 ### Fields — Warehouses Report
 By warehouse (summary):
@@ -704,6 +705,7 @@ By warehouse (summary):
 - **Low stock** (مخزون منخفض) — how many items are at or below their minimum stock level. Nothing counts where no minimum is set on the item, and no screen sets it, so this is normally 0.
 - **Negative** (سالب) — how many items stand below zero (should always be 0).
 - **Last movement** (آخر حركة) — the date of the latest movement in the warehouse.
+- **On the way (not in stock)** (في الطريق (ليست في المخزون)) — only on the four import-stage warehouses: the containers, and the imports with no container yet, whose goods are at that place now, and the units they carry; **Nothing** (لا شيء) when there are none; a dash on every other warehouse. Shown to whoever may read containers.
 - **Totals** (الإجماليات) — the value of all warehouses.
 Items table:
 - **Item Name** (اسم الصنف), **Item Code** (رمز الصنف), **Warehouse Name** (اسم المخزن), **Warehouse Code** (رمز المخزن).
@@ -712,6 +714,13 @@ Items table:
 - **Total Price (IQD)** (القيمة الإجمالية (د.ع)) — the FIFO cost of that quantity: what is left in each cost layer × its unit cost.
 - **Movements** (الحركات) — link to the Stock Ledger.
 An item with no stock left in a warehouse is not listed.
+Goods on the way — not in stock yet (one line per container line, or per import with no container):
+- **Where** (أين) — On Process (Without SWIFT), In Process, On board, At port or Customs cleared — worked out from the container's status and dates exactly as the Import Applications' Goods filter and the import's "where the goods are now" do. A container not loaded yet is In Process, or On Process (Without SWIFT) while the import waits for its first SWIFT. A received container is no longer listed: its goods are in the warehouse it was received into.
+- **Import** (الاستيراد), **Supplier** (المورد), **Container** (الحاوية) — each opens its page; **No container yet** (لا توجد حاوية بعد) for an import that has none.
+- **Item / goods** (المادة / البضاعة) — the item when the container line names one, else the description written on the container (the imports taken over from the old sheet carry descriptions only, such as "panel"), or the import's own description.
+- **Quantity** (الكمية), **Unit** (الوحدة) — what the container is planned to carry (or the import's quantity).
+- **ETA** (الوصول المتوقع) — the container's expected arrival; **late** (متأخرة) when it is overdue.
+These goods are NOT stock and have no value on this report. An import's goods enter stock only through its purchase invoice (into On Process (Without SWIFT) or In Process) and the container's receipt; nothing moves them through On Board or At Port, and the imports taken over from the old sheet have no stock at all. That is why the On Board and At Port warehouses hold no stock while this list shows what is on board. An import whose invoice has booked its goods and that has no container yet is not listed here — its goods are in the items table under its stage warehouse.
 
 ### After you save — Warehouses Report
 Nothing is saved on this screen; it is read-only. A warning line at the top — "The stock ledger disagrees with its documents in … place(s)." — appears only when the checks find a problem; tell the accounting manager and open Inventory Checks.
@@ -719,6 +728,8 @@ Nothing is saved on this screen; it is read-only. A warning line at the top — 
 ### Refusals — Warehouses Report
 - **Not available to you** (غير متاح لك) — you do not hold the permission to view inventory movements; ask an administrator.
 - **No stock is held in any warehouse.** (لا يوجد مخزون في أي مخزن.) — nothing matches; clear the filters.
+- **No stock of that item in any warehouse.** (لا يوجد مخزون من هذه المادة في أي مخزن.) — the item searched for is not held anywhere; it may still be on the way — read Goods on the way below.
+- **No goods on the way here.** (لا توجد بضائع في الطريق هنا.) — no container or import is at that place (or none matches the search).
 - The screen is missing from the menu although the address opens — the menu entry needs its own permission (see Needs); ask an administrator to grant it.
 
 ## Items (الأصناف)
@@ -882,8 +893,8 @@ What it is for: The places where stock is held. Every stock movement names a war
 4. Press **Create** (إنشاء). The system gives the warehouse its code. It is a normal warehouse, **Active** (نشط), and is offered at once on Opening Stock, Transfer, Item Reconciliation and Stock Count for that branch.
 
 ### How to open, rename, close or reopen a warehouse — Warehouses
-1. In the list click the **Warehouse Code** (رمز المخزن). Search with **Search this list** (ابحث في هذه القائمة) by code, name or branch.
-2. The profile shows the name, code and Active / Inactive; **Details** (التفاصيل): **Branch** (الفرع), **Totals** (الإجماليات) — the FIFO cost in IQD of everything it holds — and **Created** (تاريخ الإنشاء); and the panel **Warehouses Report** (تقرير المخازن): every item it holds with Item Code, Item Name, Quantity and Total Price (IQD).
+1. In the list click the **Warehouse Code** (رمز المخزن). Search with **Search this list** (ابحث في هذه القائمة) by code, name or branch. To find where an item is, type its name or code in **Find an item in the warehouses** (ابحث عن مادة في المخازن) above the list and press **Search** (بحث): the Warehouses Report opens with that item in every warehouse, and the goods of it on their way.
+2. The profile shows the name, code and Active / Inactive; **Details** (التفاصيل): **Branch** (الفرع), **Totals** (الإجماليات) — the FIFO cost in IQD of everything it holds — and **Created** (تاريخ الإنشاء); and the panel **Warehouses Report** (تقرير المخازن): every item it holds with Item Code, Item Name, Quantity and Total Price (IQD). To find one item there, type part of its name or code in **Item Name** (اسم الصنف) above the table and press **Search** (بحث); **No stock of that item in this warehouse.** (لا يوجد مخزون من هذه المادة في هذا المخزن.) when it holds none. Totals stays the whole warehouse's while the list is searched. On the page of On Process (Without SWIFT), In Process, On Board or At Port, Details also shows **On the way (not in stock)** (في الطريق (ليست في المخزون)) — containers, imports with no container yet and units at that stage — and the table **Goods on the way — not in stock yet** under the page lists them (see the Warehouses Report); the item search narrows it too.
 3. To rename: in **Update** (تحديث) change **Warehouse Name** (اسم المخزن) and press **Save** (حفظ).
 4. To close: in the **Close** (إغلاق) panel type the **Reason** (السبب) and press **Close** (إغلاق). The warehouse becomes **Inactive** (غير نشط): it disappears from the pickers and no stock can be moved through it, but what it holds and its history are untouched. Move the stock out with a Transfer before closing.
 5. To reopen press **Reopen** (إعادة فتح).
