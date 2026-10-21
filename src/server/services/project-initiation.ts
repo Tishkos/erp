@@ -38,14 +38,19 @@ import { businessToday } from '../domain/business-date';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
 import {
   AWARD_STATUSES,
+  BANK_APPROVAL_STATUSES,
   BOQ_CATEGORIES,
   COMPLIANCE_RESPONSES,
   GUARANTEE_STATUSES,
   INITIATION_ACTIVITY_KINDS,
   INITIATION_FILE_SECTIONS,
+  INSTALLATION_STATUSES,
   InitiationGateError,
   InitiationRuleError,
+  LEAD_STAGES,
+  LOAN_STATUSES,
   PROPOSAL_STATUSES,
+  QUOTATION_STATUSES,
   QUANTITY_SCALE,
   SITE_KINDS,
   SYSTEM_TYPES,
@@ -56,12 +61,14 @@ import {
   boqStage,
   boqTotals,
   coordinate,
+  financingOutcome,
   firstStage,
   isInitiationKind,
   isInitiationSection,
   isLastStage,
   missingFor,
   nextStage,
+  phaseOf,
   sectionWritable,
   stageStates,
   type InitiationFacts,
@@ -70,6 +77,7 @@ import {
   type InitiationSection,
   type InitiationStage,
   type InitiationStatus,
+  type PipelinePhase,
 } from '../domain/project-initiation';
 import type { ActorContext } from './chart-of-accounts';
 import * as attachments from './attachments';
@@ -85,8 +93,8 @@ export const PERMISSION_OBJECT = 'project';
 export const DOCUMENT_TYPE = 'project_initiation';
 const SERIES = 'PROJECT_INITIATION';
 
-/** The project type each workflow's contract becomes (0421's two seeded types). */
-export const PROJECT_TYPE_OF: Readonly<Record<InitiationKind, string>> = { direct_sales: 'DIRECT_SALES', tender: 'TENDER' };
+/** The project type each workflow's contract becomes (0421's two seeded types, 0424's third). */
+export const PROJECT_TYPE_OF: Readonly<Record<InitiationKind, string>> = { direct_sales: 'DIRECT_SALES', tender: 'TENDER', financing: 'FINANCING' };
 
 export class InitiationNotFoundError extends Error {
   readonly code = 'PROJECT_INITIATION_NOT_FOUND';
@@ -270,6 +278,7 @@ async function factsOf(tx: Tx, row: Row): Promise<InitiationFacts> {
     title: row.title,
     customerName: row.customerName,
     customerPhone: row.customerPhone,
+    customerCity: row.customerCity,
     leadSourceCode: row.leadSourceCode,
     initialContactOn: row.initialContactOn,
     partnerId: row.partnerId,
@@ -310,6 +319,16 @@ async function factsOf(tx: Tx, row: Row): Promise<InitiationFacts> {
     contractSignedOn: row.contractSignedOn,
     contractValueIqd: row.contractValueIqd,
     paymentTerms: row.paymentTerms,
+    financingBank: row.financingBank,
+    bankApprovalStatus: row.bankApprovalStatus,
+    bankDecidedOn: row.bankDecidedOn,
+    loanAmountIqd: row.loanAmountIqd,
+    loanStatus: row.loanStatus,
+    loanReceivedIqd: row.loanReceivedIqd,
+    loanFirstReceivedOn: row.loanFirstReceivedOn,
+    loanFullyGrantedOn: row.loanFullyGrantedOn,
+    installationStatus: row.installationStatus,
+    installationCompletedOn: row.installationCompletedOn,
     boqLines: boq.length,
     boqTotalIqd: boqTotals(boq).total,
     complianceLines: compliance.length,
@@ -327,6 +346,9 @@ export interface CreateInput {
   readonly title: string;
   /** The customer as first heard of; a tender's issuing entity. */
   readonly customerName: string;
+  /** Optional on every road; the financing road's first stage asks both. */
+  readonly customerPhone?: string | null;
+  readonly customerCity?: string | null;
   readonly branchCode?: string | null;
   readonly ownerUserId?: string | null;
 }
@@ -337,8 +359,10 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateInput): Pro
   await may(ctx, 'create', { branchCode });
   const kind = clean(input.kind);
   if (!isInitiationKind(kind)) {
-    throw new InitiationRuleError('Choose the project type first: a Direct Sales project or a Tender project.');
+    throw new InitiationRuleError('Choose the project type first: a Direct Sales project, a Tender project or a Financed customer.');
   }
+  const customerPhone = words(input.customerPhone, 'customer phone', 40);
+  const customerCity = words(input.customerCity, 'city', 80);
   const title = words(input.title, 'project name');
   if (!title) throw new InitiationRuleError('The project name is required.');
   const customerName = words(input.customerName, kind === 'tender' ? 'issuing entity' : 'customer name');
@@ -360,13 +384,15 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateInput): Pro
       branchCode,
       ownerUserId,
       customerName,
+      customerPhone,
+      customerCity,
       // The day the record is opened is the first contact until somebody says otherwise.
-      initialContactOn: kind === 'direct_sales' ? today : null,
+      initialContactOn: kind === 'tender' ? null : today,
       createdBy: ctx.principal.userId,
     })
     .returning({ id: projectInitiation.id });
   await record(tx, ctx, { initiationNo: allocated.documentNo, branchCode }, 'created', {
-    after: { initiationNo: allocated.documentNo, kind, stage, title, customerName },
+    after: { initiationNo: allocated.documentNo, kind, stage, title, customerName, customerPhone, customerCity },
   });
   return { id: created!.id, initiationNo: allocated.documentNo };
 }
@@ -429,12 +455,27 @@ export interface SectionInput {
   readonly contractSignedOn?: string | null;
   readonly contractValueIqd?: string | null;
   readonly paymentTerms?: string | null;
+
+  readonly customerCity?: string | null;
+  readonly financingBank?: string | null;
+  readonly financingBankRef?: string | null;
+  readonly bankApprovalStatus?: string | null;
+  readonly bankDecidedOn?: string | null;
+  readonly loanAmountIqd?: string | null;
+  readonly loanStatus?: string | null;
+  readonly loanReceivedIqd?: string | null;
+  readonly loanFirstReceivedOn?: string | null;
+  readonly loanFullyGrantedOn?: string | null;
+  readonly installationStatus?: string | null;
+  readonly installationStartedOn?: string | null;
+  readonly installationCompletedOn?: string | null;
+  readonly installationNote?: string | null;
 }
 
 type Patch = Partial<typeof projectInitiation.$inferInsert>;
 
 /** One section's fields, read and checked. A field the form did not send is not in the patch. */
-async function patchFor(tx: Tx, section: InitiationSection, input: SectionInput): Promise<Patch> {
+async function patchFor(tx: Tx, kind: InitiationKind, section: InitiationSection, input: SectionInput): Promise<Patch> {
   const patch: Patch = {};
   const has = <K extends keyof SectionInput>(key: K) => input[key] !== undefined;
   const partner = async () => {
@@ -456,6 +497,7 @@ async function patchFor(tx: Tx, section: InitiationSection, input: SectionInput)
         patch.customerName = name;
       }
       if (has('customerPhone')) patch.customerPhone = words(input.customerPhone, 'customer phone', 40);
+      if (has('customerCity')) patch.customerCity = words(input.customerCity, 'city', 80);
       if (has('initialContactOn')) patch.initialContactOn = day(input.initialContactOn, 'initial contact date');
       if (has('leadSourceCode')) {
         const code = clean(input.leadSourceCode);
@@ -489,7 +531,34 @@ async function patchFor(tx: Tx, section: InitiationSection, input: SectionInput)
       if (has('proposalRef')) patch.proposalRef = words(input.proposalRef, 'proposal reference', 80);
       if (has('proposalOn')) patch.proposalOn = day(input.proposalOn, 'proposal date');
       if (has('proposalValueIqd')) patch.proposalValueIqd = amount(input.proposalValueIqd, 'proposal value');
-      if (has('proposalStatus')) patch.proposalStatus = choice(input.proposalStatus, PROPOSAL_STATUSES, 'proposal status');
+      if (has('proposalStatus')) {
+        patch.proposalStatus =
+          kind === 'financing'
+            ? choice(input.proposalStatus, QUOTATION_STATUSES, 'quotation status (sent, agreed or refused)')
+            : choice(input.proposalStatus, PROPOSAL_STATUSES, 'proposal status');
+      }
+      break;
+
+    case 'bank_approval':
+      if (has('financingBank')) patch.financingBank = words(input.financingBank, 'bank', 120);
+      if (has('financingBankRef')) patch.financingBankRef = words(input.financingBankRef, 'bank reference', 80);
+      if (has('bankApprovalStatus')) patch.bankApprovalStatus = choice(input.bankApprovalStatus, BANK_APPROVAL_STATUSES, 'bank answer (pending, approved or rejected)');
+      if (has('bankDecidedOn')) patch.bankDecidedOn = day(input.bankDecidedOn, 'bank decision date');
+      if (has('loanAmountIqd')) patch.loanAmountIqd = amount(input.loanAmountIqd, 'loan amount');
+      break;
+
+    case 'loan':
+      if (has('loanStatus')) patch.loanStatus = choice(input.loanStatus, LOAN_STATUSES, 'loan status (pending, partially paid or fully granted)');
+      if (has('loanReceivedIqd')) patch.loanReceivedIqd = amount(input.loanReceivedIqd, 'loan received');
+      if (has('loanFirstReceivedOn')) patch.loanFirstReceivedOn = day(input.loanFirstReceivedOn, 'first payment date');
+      if (has('loanFullyGrantedOn')) patch.loanFullyGrantedOn = day(input.loanFullyGrantedOn, 'fully granted date');
+      break;
+
+    case 'installation':
+      if (has('installationStatus')) patch.installationStatus = choice(input.installationStatus, INSTALLATION_STATUSES, 'installation status');
+      if (has('installationStartedOn')) patch.installationStartedOn = day(input.installationStartedOn, 'installation start date');
+      if (has('installationCompletedOn')) patch.installationCompletedOn = day(input.installationCompletedOn, 'installation completion date');
+      if (has('installationNote')) patch.installationNote = words(input.installationNote, 'installation note', 2000);
       break;
 
     case 'tender_lead':
@@ -558,9 +627,23 @@ export async function saveSection(tx: Tx, ctx: ActorContext, initiationNo: strin
   if (!sectionWritable(kind, row.stage as InitiationStage, row.status as InitiationStatus, section)) {
     throw new InitiationRuleError(`${row.initiationNo} has not reached that stage yet. Stages are completed in order, one at a time.`);
   }
-  const patch = await patchFor(tx, section, input);
+  const patch = await patchFor(tx, kind, section, input);
   if (patch.awardedOn && patch.submittedOn && patch.awardedOn < patch.submittedOn) {
     throw new InitiationRuleError('The award cannot be dated before the submission.');
+  }
+  // What the bank has paid out never exceeds what it agreed to lend (0424 holds it too).
+  const lent = patch.loanAmountIqd !== undefined ? patch.loanAmountIqd : row.loanAmountIqd;
+  const received = patch.loanReceivedIqd !== undefined ? patch.loanReceivedIqd : row.loanReceivedIqd;
+  if (lent && received && parseDecimal(received, MONEY_SCALE) > parseDecimal(lent, MONEY_SCALE)) {
+    throw new InitiationRuleError('The loan received is more than the loan the bank approved.');
+  }
+  if (patch.loanStatus === 'fully_granted' && lent && parseDecimal(received ?? '0', MONEY_SCALE) < parseDecimal(lent, MONEY_SCALE)) {
+    throw new InitiationRuleError('The loan is fully granted only once all of it is received: raise Loan received to the approved amount.');
+  }
+  const startedOn = patch.installationStartedOn !== undefined ? patch.installationStartedOn : row.installationStartedOn;
+  const completedOn = patch.installationCompletedOn !== undefined ? patch.installationCompletedOn : row.installationCompletedOn;
+  if (startedOn && completedOn && completedOn < startedOn) {
+    throw new InitiationRuleError('The installation cannot be completed before it started.');
   }
   const keys = Object.keys(patch) as (keyof Patch)[];
   const changed = keys.filter((key) => (row as Record<string, unknown>)[key] !== patch[key]);
@@ -767,6 +850,8 @@ export async function logActivity(
     nextActionOn,
     createdBy: ctx.principal.userId,
   });
+  // The record was updated: the live pages and the board follow `updated_at`.
+  await tx.update(projectInitiation).set({ updatedAt: new Date() }).where(eq(projectInitiation.id, row.id));
   await record(tx, ctx, row, 'activity_logged', { after: { kind, stage: row.stage, happenedOn, summary, nextAction, nextActionOn } });
 }
 
@@ -951,17 +1036,39 @@ export interface ListFilter extends RegisterPaging {
   readonly stage?: string | null;
   readonly status?: string | null;
   readonly search?: string | null;
+  /** Leads, Opportunities or Projects — the three screens over the same records. */
+  readonly phase?: PipelinePhase | null;
+}
+
+/** The SQL of `domain › phaseOf`: change the two together. */
+function phaseWhere(phase: PipelinePhase | null | undefined) {
+  if (!phase) return undefined;
+  if (phase === 'project') return eq(projectInitiation.status, 'converted');
+  const leadStages = sql.join(LEAD_STAGES.map((stage) => sql`${stage}`), sql`, `);
+  return phase === 'lead'
+    ? sql`${projectInitiation.status} <> 'converted' and ${projectInitiation.stage} in (${leadStages})`
+    : sql`${projectInitiation.status} <> 'converted' and ${projectInitiation.stage} not in (${leadStages})`;
 }
 
 export async function list(tx: Tx, filter: ListFilter = {}) {
   const term = searchOf(
-    [projectInitiation.initiationNo, projectInitiation.title, projectInitiation.customerName, projectInitiation.tenderRef, projectInitiation.projectCode, businessPartner.legalName],
+    [
+      projectInitiation.initiationNo,
+      projectInitiation.title,
+      projectInitiation.customerName,
+      projectInitiation.customerPhone,
+      projectInitiation.customerCity,
+      projectInitiation.tenderRef,
+      projectInitiation.projectCode,
+      businessPartner.legalName,
+    ],
     filter.search,
   );
   const where = and(
     filter.kind ? eq(projectInitiation.kind, filter.kind) : undefined,
     filter.stage ? eq(projectInitiation.stage, filter.stage) : undefined,
     filter.status ? eq(projectInitiation.status, filter.status) : undefined,
+    phaseWhere(filter.phase),
     term ?? undefined,
   );
   return registerPage({
@@ -992,16 +1099,173 @@ export async function list(tx: Tx, filter: ListFilter = {}) {
           proposalValueIqd: projectInitiation.proposalValueIqd,
           bidPriceIqd: projectInitiation.bidPriceIqd,
           projectCode: projectInitiation.projectCode,
+          customerCity: projectInitiation.customerCity,
+          loanAmountIqd: projectInitiation.loanAmountIqd,
           createdAt: projectInitiation.createdAt,
+          updatedAt: projectInitiation.updatedAt,
         })
         .from(projectInitiation)
         .leftJoin(businessPartner, eq(businessPartner.id, projectInitiation.partnerId))
         .leftJoin(appUser, eq(appUser.id, projectInitiation.ownerUserId))
         .where(where)
-        .orderBy(desc(projectInitiation.createdAt), desc(projectInitiation.initiationNo))
+        // What moved last comes first: the pipeline is watched, not filed.
+        .orderBy(desc(projectInitiation.updatedAt), desc(projectInitiation.initiationNo))
         .limit(limit)
         .offset(offset),
   });
+}
+
+// ---------------------------------------------------------------------------
+// The live board and the updates — "live updates tracking, each with its own code"
+// ---------------------------------------------------------------------------
+
+/** Cards on the board: the open records and what was decided in the last month. */
+const BOARD_LIMIT = 400;
+
+export interface BoardCard {
+  readonly initiationNo: string;
+  readonly kind: InitiationKind;
+  readonly stage: InitiationStage;
+  readonly status: InitiationStatus;
+  readonly phase: PipelinePhase;
+  readonly title: string;
+  readonly customerName: string;
+  readonly customerCity: string | null;
+  readonly ownerName: string | null;
+  readonly valueIqd: string | null;
+  readonly projectCode: string | null;
+  readonly updatedAt: Date;
+}
+
+/**
+ * Every open record, and those converted or lost in the last thirty days, as
+ * cards. With a road chosen the screen lays them out by its stages; without,
+ * by phase (Leads, Opportunities, Projects, Lost).
+ */
+export async function board(tx: Tx, filter: { readonly kind?: InitiationKind | null; readonly ownerUserId?: string | null } = {}): Promise<{ cards: BoardCard[]; truncated: boolean }> {
+  const rows = await tx
+    .select({
+      initiationNo: projectInitiation.initiationNo,
+      kind: projectInitiation.kind,
+      stage: projectInitiation.stage,
+      status: projectInitiation.status,
+      title: projectInitiation.title,
+      customerName: projectInitiation.customerName,
+      customerCity: projectInitiation.customerCity,
+      ownerName: appUser.displayName,
+      contractValueIqd: projectInitiation.contractValueIqd,
+      proposalValueIqd: projectInitiation.proposalValueIqd,
+      bidPriceIqd: projectInitiation.bidPriceIqd,
+      projectCode: projectInitiation.projectCode,
+      updatedAt: projectInitiation.updatedAt,
+    })
+    .from(projectInitiation)
+    .leftJoin(appUser, eq(appUser.id, projectInitiation.ownerUserId))
+    .where(
+      and(
+        filter.kind ? eq(projectInitiation.kind, filter.kind) : undefined,
+        filter.ownerUserId ? eq(projectInitiation.ownerUserId, filter.ownerUserId) : undefined,
+        sql`(${projectInitiation.status} = 'open' or ${projectInitiation.updatedAt} > now() - interval '30 days')`,
+      ),
+    )
+    .orderBy(desc(projectInitiation.updatedAt))
+    .limit(BOARD_LIMIT + 1);
+  return {
+    truncated: rows.length > BOARD_LIMIT,
+    cards: rows.slice(0, BOARD_LIMIT).map((r) => ({
+      initiationNo: r.initiationNo,
+      kind: r.kind as InitiationKind,
+      stage: r.stage as InitiationStage,
+      status: r.status as InitiationStatus,
+      phase: phaseOf(r.stage as InitiationStage, r.status as InitiationStatus),
+      title: r.title,
+      customerName: r.customerName,
+      customerCity: r.customerCity,
+      ownerName: r.ownerName,
+      valueIqd: r.contractValueIqd ?? r.proposalValueIqd ?? r.bidPriceIqd,
+      projectCode: r.projectCode,
+      updatedAt: r.updatedAt,
+    })),
+  };
+}
+
+/**
+ * A number that moves whenever anything the reader can see moves — the record
+ * (`updated_at`, which every write of this service stamps) and its own audit
+ * rows (a note is one). The live pages ask it every few seconds and redraw only when
+ * it changed. Row security scopes it to the reader's branches.
+ */
+export async function liveVersion(tx: Tx, initiationNo?: string | null): Promise<string> {
+  if (initiationNo) {
+    const result = await tx.execute(sql`
+      select greatest(
+               (select max(updated_at) from project_initiation where initiation_no = ${initiationNo}),
+               (select max(occurred_at) from audit_event where object_type = ${DOCUMENT_TYPE} and object_id = ${initiationNo})
+             ) as at
+    `);
+    const at = (result.rows[0] as { at: Date | string | null } | undefined)?.at;
+    return at ? new Date(at).toISOString() : '0';
+  }
+  const [row] = await tx
+    .select({ at: sql<string | null>`max(${projectInitiation.updatedAt})::text`, count: sql<number>`count(*)::int` })
+    .from(projectInitiation);
+  return `${row?.at ?? '0'}|${row?.count ?? 0}`;
+}
+
+/** One line of a record's updates, newest first: what moved, who moved it, when. */
+export interface TimelineEntry {
+  readonly at: Date;
+  readonly actor: string | null;
+  /** The audit action without its `project_initiation.` prefix: `stage_advanced`, `bank_approval_saved`, … */
+  readonly action: string;
+  readonly stage: string | null;
+  /** The codes of the fields a section's save changed, and the new value of each closed-list one. */
+  readonly changed: readonly { readonly field: string; readonly value: string | null }[];
+  readonly reason: string | null;
+}
+
+/** The fields whose new value the updates say in words (each a closed list on the screen). */
+const SAID_FIELDS: ReadonlySet<string> = new Set([
+  'stage',
+  'status',
+  'proposalStatus',
+  'bankApprovalStatus',
+  'loanStatus',
+  'installationStatus',
+  'awardStatus',
+  'guaranteeStatus',
+  'goDecision',
+  'systemType',
+]);
+
+/** The record's updates: every audited change of it, read back as lines. */
+export async function timeline(tx: Tx, initiationNo: string, limit = 100): Promise<TimelineEntry[]> {
+  const rows = await audit.timelineWithAttachments(tx, DOCUMENT_TYPE, initiationNo, limit);
+  const actorIds = [...new Set(rows.map((r) => r.actor_user_id as string | null).filter((id): id is string => Boolean(id)))];
+  const people = actorIds.length
+    ? await tx
+        .select({ id: appUser.id, name: appUser.displayName })
+        .from(appUser)
+        .where(sql`${appUser.id} in (${sql.join(actorIds.map((id) => sql`${id}`), sql`, `)})`)
+    : [];
+  return rows
+    .filter((r) => r.outcome === 'success')
+    .map((r) => {
+      const after = (r.after_value ?? {}) as Record<string, unknown>;
+      const objectType = r.object_type as string | undefined;
+      const action = objectType === 'attachment' ? 'file' : String(r.action).replace(/^project_initiation\./, '');
+      const changed = Object.entries(after)
+        .filter(([field]) => action.endsWith('_saved') || SAID_FIELDS.has(field))
+        .map(([field, value]) => ({ field, value: SAID_FIELDS.has(field) && typeof value === 'string' ? value : null }));
+      return {
+        at: new Date(r.occurred_at as string | Date),
+        actor: people.find((p) => p.id === r.actor_user_id)?.name ?? null,
+        action,
+        stage: typeof after.stage === 'string' ? after.stage : null,
+        changed: action === 'stage_advanced' || action === 'created' ? [] : changed,
+        reason: (r.reason as string | null) ?? (typeof after.note === 'string' ? after.note : null),
+      };
+    });
 }
 
 async function viewOf(tx: Tx, row: Row) {
@@ -1049,7 +1313,12 @@ async function viewOf(tx: Tx, row: Row) {
     kind,
     stage,
     status,
-    steps: stageStates(kind, stage, status),
+    steps: stageStates(kind, stage, status).map((step) => ({
+      ...step,
+      // The financing sheet's own outcome under each stage reached (agreed, approved, partially paid …).
+      outcome: kind === 'financing' && step.state !== 'pending' ? financingOutcome(step.stage, facts) : null,
+    })),
+    phase: phaseOf(stage, status),
     next: status === 'open' ? nextStage(kind, stage) : null,
     atContract: status === 'open' && isLastStage(kind, stage),
     /** What the current stage still lacks; empty when its gate is open. */

@@ -94,6 +94,22 @@ export const projectInitiation = pgTable(
     contractValueIqd: numeric('contract_value_iqd', { precision: 19, scale: 4 }),
     paymentTerms: text('payment_terms'),
 
+    // The financing road (0424): the customer's city, the bank, the loan, the installation.
+    customerCity: text('customer_city'),
+    financingBank: text('financing_bank'),
+    financingBankRef: text('financing_bank_ref'),
+    bankApprovalStatus: text('bank_approval_status'),
+    bankDecidedOn: date('bank_decided_on'),
+    loanAmountIqd: numeric('loan_amount_iqd', { precision: 19, scale: 4 }),
+    loanStatus: text('loan_status'),
+    loanReceivedIqd: numeric('loan_received_iqd', { precision: 19, scale: 4 }),
+    loanFirstReceivedOn: date('loan_first_received_on'),
+    loanFullyGrantedOn: date('loan_fully_granted_on'),
+    installationStatus: text('installation_status'),
+    installationStartedOn: date('installation_started_on'),
+    installationCompletedOn: date('installation_completed_on'),
+    installationNote: text('installation_note'),
+
     /** The project it became. */
     projectCode: text('project_code').references(() => project.code),
     convertedBy: uuid('converted_by').references(() => appUser.id),
@@ -113,6 +129,7 @@ export const projectInitiation = pgTable(
     index('project_initiation_status_idx').on(t.status, t.kind, t.stage, t.branchCode),
     index('project_initiation_partner_idx').on(t.partnerId),
     index('project_initiation_tender_ref_idx').on(t.tenderRef),
+    index('project_initiation_updated_idx').on(t.updatedAt),
   ],
 );
 

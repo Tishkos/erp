@@ -261,7 +261,7 @@ describe('07.5 · an advance is a receivable, not an expense (§17)', () => {
 
     expect(
       await rejection(withScope(scope(manager), (tx) => advances.issue(tx, manager, advance.id))),
-    ).toMatch(/holds .* and this needs/);
+    ).toMatch(/does not hold enough money for this/);
   });
 
   it('refuses an advance out of a bank account — that would be a payment', async () => {

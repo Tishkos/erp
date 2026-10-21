@@ -1,17 +1,21 @@
 import { getTranslations } from 'next-intl/server';
 import {
   Award,
+  Banknote,
   Calculator,
+  CircleDollarSign,
   Check,
   ClipboardList,
   DraftingCompass,
   FileSignature,
   FileText,
+  HardHat,
   Landmark,
   ListChecks,
   MapPinned,
   Scale,
   UserPlus,
+  UserRound,
   Users,
   type LucideIcon,
 } from 'lucide-react';
@@ -38,13 +42,20 @@ const ICON: Readonly<Record<InitiationStage, LucideIcon>> = {
   tender_design: DraftingCompass,
   bidding: ListChecks,
   award: Award,
+  fin_customer: UserRound,
+  fin_quotation: FileText,
+  fin_bank_approval: Landmark,
+  fin_loan_first: CircleDollarSign,
+  fin_installation: HardHat,
+  fin_contract: FileSignature,
+  fin_loan_full: Banknote,
 };
 
 export async function InitiationPipeline({
   steps,
   lost = false,
 }: {
-  readonly steps: readonly { readonly stage: InitiationStage; readonly state: StageState }[];
+  readonly steps: readonly { readonly stage: InitiationStage; readonly state: StageState; readonly outcome?: string | null }[];
   /** A lost record stopped where it stands: its stage is drawn muted, not as the place work goes on. */
   readonly lost?: boolean;
 }) {
@@ -69,7 +80,9 @@ export async function InitiationPipeline({
                 : current
                   ? 'border-primary bg-primary text-primary-fg shadow-sm'
                   : 'border-border bg-muted text-muted-fg';
-            const label = step.state === 'done' ? t('step_done') : step.state === 'current' ? (lost ? t('step_stopped') : t('step_current')) : t('step_pending');
+            const stateLabel = step.state === 'done' ? t('step_done') : step.state === 'current' ? (lost ? t('step_stopped') : t('step_current')) : t('step_pending');
+            // The financing sheet says each stage's outcome (agreed, approved, partially paid …) rather than done / current.
+            const label = step.outcome && t.has(`outcome.${step.outcome}`) ? t(`outcome.${step.outcome}`) : stateLabel;
             return (
               <li
                 aria-current={current ? 'step' : undefined}
@@ -103,6 +116,7 @@ export async function InitiationPipeline({
                     className={`w-fit rounded-md px-1.5 py-0.5 text-xs font-medium ${
                       step.state === 'done' ? 'bg-success-subtle text-success-subtle-fg' : current ? 'bg-primary-subtle text-primary-subtle-fg' : 'bg-muted text-muted-fg'
                     }`}
+                    data-outcome={step.outcome ?? undefined}
                     data-pipeline-state=""
                   >
                     {label}

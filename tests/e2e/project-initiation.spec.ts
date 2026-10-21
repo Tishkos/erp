@@ -73,10 +73,11 @@ test.describe('The Project Guide · Project Initiation', () => {
 
     // The register, and the guide's Main Project Initiation Selector behind New.
     await page.goto('/projects/initiation');
-    await expect(page.getByRole('heading', { name: 'Project Initiation', level: 1 })).toBeVisible();
+    // Since 2026-10-21 the register is Leads — the first of Leads → Opportunities → Projects.
+    await expect(page.getByRole('heading', { name: 'Leads', level: 1 })).toBeVisible();
     await page.getByRole('button', { name: 'New initiation' }).click();
     const fresh = page.getByRole('dialog');
-    await expect(fresh.locator('select[name="kind"] option')).toHaveText(['Direct Sales Project', 'Tender Project']);
+    await expect(fresh.locator('select[name="kind"] option')).toHaveText(['Direct Sales Project', 'Tender Project', 'Financed Customer (Renewable Energy Financing)']);
     await expect(fresh.getByText(/Pre-Sales Form, the system type/)).toBeVisible();
     await expect(fresh.getByText(/bid bonds and a compliance matrix/)).toBeVisible();
     await fresh.locator('select[name="kind"]').selectOption('direct_sales');
@@ -219,8 +220,11 @@ test.describe('The Project Guide · Project Initiation', () => {
     await expect(page.locator('#initiation-document')).toContainText(code);
     await expect(page.locator('#stage-contract').getByRole('button', { name: 'Edit', exact: true })).toHaveCount(0);
     await expect(page.locator('[data-pipeline-steps] > li[data-state="done"]')).toHaveCount(6);
-    await page.goto(`/projects/initiation?q=${encodeURIComponent(RUN)}&status=converted`);
-    await expect(page.getByRole('link', { name: no })).toBeVisible();
+    // A converted record has left Leads and Opportunities: it is a project, in the board's Projects column.
+    await page.goto(`/projects/initiation?q=${encodeURIComponent(RUN)}`);
+    await expect(page.getByRole('link', { name: no })).toHaveCount(0);
+    await page.goto('/projects/pipeline?kind=direct_sales');
+    await expect(page.locator(`[data-board-column="project"] [data-board-card="${no}"]`)).toBeVisible();
 
     // The New project form does not offer the guide's two types.
     await page.goto('/projects');
@@ -233,7 +237,7 @@ test.describe('The Project Guide · Project Initiation', () => {
     // Arabic, at a phone's width, right to left.
     await page.context().addCookies([{ name: 'erp-locale', value: 'ar', domain: 'localhost', path: '/' }]);
     await page.setViewportSize({ width: 390, height: 844 });
-    for (const route of ['/projects/initiation', `/projects/initiation/${encodeURIComponent(no)}`]) {
+    for (const route of ['/projects/initiation', '/projects/opportunities', '/projects/pipeline', `/projects/initiation/${encodeURIComponent(no)}`]) {
       await page.goto(route);
       await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
       const width = await page.evaluate(() => document.documentElement.scrollWidth);
@@ -290,5 +294,71 @@ test.describe('The Project Guide · Project Initiation', () => {
     await expect(page.getByText('Lost', { exact: true }).filter({ visible: true }).first()).toBeVisible();
     await expect(page.locator('#initiation-document')).toContainText('Owner cancelled the tender.');
     await expect(page.getByRole('button', { name: /^Next stage:/ })).toHaveCount(0);
+  });
+});
+
+test.describe('Leads → Opportunities → Projects · the financing road and the live board (2026-10-21)', () => {
+  test('a financed customer opens as a lead, becomes an opportunity, and the board follows it live', async ({ page, browser }) => {
+    test.setTimeout(600_000);
+    await signIn(page, MANAGER);
+    await page.goto('/projects/initiation');
+    await page.getByRole('button', { name: 'New initiation' }).click();
+    const fresh = page.getByRole('dialog');
+    await fresh.locator('select[name="kind"]').selectOption('financing');
+    await fresh.locator('input[name="title"]').fill(`Home 10 kW ${RUN}`);
+    await fresh.locator('input[name="customer_name"]').fill('Ahmed Karim');
+    await fresh.locator('input[name="customer_phone"]').fill('0750 111 2233');
+    await fresh.getByRole('button', { name: 'Create', exact: true }).click();
+    await page.waitForURL(/\/projects\/initiation\/PIN-/);
+    const no = decodeURIComponent(page.url().split('/projects/initiation/')[1]!.split(/[?#]/)[0]!);
+
+    // The sheet's seven stages, numbered 1–7; the record says it is a lead and keeps itself live.
+    const steps = page.locator('[data-pipeline-steps] > li');
+    await expect(steps).toHaveCount(7);
+    await expect(page.locator('#initiation-document')).toContainText('Lead');
+    await expect(page.locator('[data-live-refresh]')).toBeVisible();
+    await expect(page.locator('[data-initiation-missing]')).toContainText(/city/i);
+
+    // The board, open in a second window, has the card in Leads.
+    const other = await browser.newContext();
+    const board = await other.newPage();
+    await signIn(board, MANAGER);
+    await board.goto(`/projects/pipeline?kind=financing`);
+    await expect(board.locator(`[data-board-column="fin_customer"] [data-board-card="${no}"]`)).toBeVisible();
+
+    // 1 — the customer's city; then on to the quotation.
+    await editStage(page, 'lead', async (dialog) => {
+      await dialog.locator('input[name="customer_city"]').fill('Erbil');
+    });
+    await nextStage(page);
+    await expect(steps.nth(1)).toHaveAttribute('data-state', 'current');
+
+    // The board moves the card by itself — nobody reloads it.
+    await expect(board.locator(`[data-board-column="fin_quotation"] [data-board-card="${no}"]`)).toBeVisible();
+    await other.close();
+
+    // 2 — refused is said under the stage, and holds the record.
+    await editStage(page, 'proposal', async (dialog) => {
+      await dialog.locator('input[name="proposal_value_iqd"]').fill('10500000');
+      await dialog.locator('select[name="proposal_status"]').selectOption('rejected');
+    });
+    await expect(steps.nth(1).locator('[data-pipeline-state]')).toHaveText('Refused');
+    await expect(page.getByRole('button', { name: /^Next stage:/ })).toHaveCount(0);
+    await editStage(page, 'proposal', async (dialog) => {
+      await dialog.locator('select[name="proposal_status"]').selectOption('accepted');
+    });
+    await expect(steps.nth(1).locator('[data-pipeline-state]')).toHaveText('Agreed');
+    await nextStage(page);
+
+    // 3 — the bank's form is there; the updates list every move.
+    await expect(page.locator('#stage-bank_approval')).toBeVisible();
+    await expect(page.locator('#updates [data-update="stage_advanced"]')).toHaveCount(2);
+
+    // It is an opportunity now: on that screen, no longer among the leads.
+    await page.goto(`/projects/opportunities?q=${encodeURIComponent(RUN)}`);
+    await expect(page.getByRole('heading', { name: 'Opportunities', level: 1 })).toBeVisible();
+    await expect(page.getByRole('link', { name: no })).toBeVisible();
+    await page.goto(`/projects/initiation?q=${encodeURIComponent(RUN)}`);
+    await expect(page.getByRole('link', { name: no })).toHaveCount(0);
   });
 });

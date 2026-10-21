@@ -12,6 +12,13 @@
  *                  Qualification (Go / No-Go) → 9 Site Visit & Pre-Bid Meeting →
  *                  10 Tender Design BOQ → 11 Compliance Matrix & Bidding →
  *                  12 Submission & Award
+ *   Financing      the Renewable Energy Financing Initiative (2026-10-21, by
+ *                  direction, from its own sheet, numbered 1–7 on its own):
+ *                  1 Customer → 2 Quotation sent (agreed / refused) → 3 Bank
+ *                  approval (approved / rejected) → 4 Loan (partially paid /
+ *                  pending) → 5 Installation (in progress / completed) →
+ *                  6 Contract (signed / pending) → 7 Loan (fully granted /
+ *                  pending)
  *
  * and at contract signing "the record is automatically converted into an
  * Active Project", carrying its Pre-Sales Form, drawings and approved BOQ to
@@ -39,7 +46,7 @@ export class InitiationRuleError extends Error {
 // §1 — the Main Project Initiation Selector
 // ---------------------------------------------------------------------------
 
-export const INITIATION_KINDS = ['direct_sales', 'tender'] as const;
+export const INITIATION_KINDS = ['direct_sales', 'tender', 'financing'] as const;
 export type InitiationKind = (typeof INITIATION_KINDS)[number];
 
 export function isInitiationKind(value: string): value is InitiationKind {
@@ -52,7 +59,17 @@ export function isInitiationKind(value: string): value is InitiationKind {
 
 export const DIRECT_SALES_STAGES = ['lead', 'pre_sales', 'site_survey', 'boq_costing', 'proposal', 'contract'] as const;
 export const TENDER_STAGES = ['tender_lead', 'go_no_go', 'pre_bid', 'tender_design', 'bidding', 'award'] as const;
-export const INITIATION_STAGES = [...DIRECT_SALES_STAGES, ...TENDER_STAGES] as const;
+/** The Renewable Energy Financing Initiative: a customer whose system a bank loan pays for. */
+export const FINANCING_STAGES = [
+  'fin_customer',
+  'fin_quotation',
+  'fin_bank_approval',
+  'fin_loan_first',
+  'fin_installation',
+  'fin_contract',
+  'fin_loan_full',
+] as const;
+export const INITIATION_STAGES = [...DIRECT_SALES_STAGES, ...TENDER_STAGES, ...FINANCING_STAGES] as const;
 export type InitiationStage = (typeof INITIATION_STAGES)[number];
 
 export function isInitiationStage(value: string): value is InitiationStage {
@@ -61,11 +78,16 @@ export function isInitiationStage(value: string): value is InitiationStage {
 
 /** The stages of one workflow, first to last. */
 export function stagesOf(kind: InitiationKind): readonly InitiationStage[] {
-  return kind === 'direct_sales' ? DIRECT_SALES_STAGES : TENDER_STAGES;
+  return kind === 'direct_sales' ? DIRECT_SALES_STAGES : kind === 'tender' ? TENDER_STAGES : FINANCING_STAGES;
 }
 
-/** The number the guide gives a stage: 1–6 for Direct Sales, 7–12 for the tender pipeline. */
+/**
+ * The number the guide gives a stage: 1–6 for Direct Sales, 7–12 for the
+ * tender pipeline; the financing sheet numbers its own seven 1–7.
+ */
 export function guideNumber(stage: InitiationStage): number {
+  const financing = (FINANCING_STAGES as readonly string[]).indexOf(stage);
+  if (financing >= 0) return financing + 1;
   return INITIATION_STAGES.indexOf(stage) + 1;
 }
 
@@ -115,6 +137,31 @@ export function initiationChip(status: InitiationStatus): string {
 }
 
 // ---------------------------------------------------------------------------
+// Leads → Opportunities → Projects (2026-10-21, by direction)
+// ---------------------------------------------------------------------------
+
+/**
+ * Where a record stands in the company's pipeline: a **lead** while it is at
+ * the first stage of its road, an **opportunity** from the second stage until
+ * it is decided, a **project** once its contract converted it. A lost record
+ * stays in the phase it was lost in. One record and one number throughout.
+ */
+export const PIPELINE_PHASES = ['lead', 'opportunity', 'project'] as const;
+export type PipelinePhase = (typeof PIPELINE_PHASES)[number];
+
+export function isPipelinePhase(value: string): value is PipelinePhase {
+  return (PIPELINE_PHASES as readonly string[]).includes(value);
+}
+
+/** The first stage of every road — the stages a lead stands at. */
+export const LEAD_STAGES: readonly InitiationStage[] = INITIATION_KINDS.map((kind) => firstStage(kind));
+
+export function phaseOf(stage: InitiationStage, status: InitiationStatus): PipelinePhase {
+  if (status === 'converted') return 'project';
+  return LEAD_STAGES.includes(stage) ? 'lead' : 'opportunity';
+}
+
+// ---------------------------------------------------------------------------
 // The Pre-Sales Form's closed lists (§2)
 // ---------------------------------------------------------------------------
 
@@ -147,6 +194,28 @@ export const COMPLIANCE_RESPONSES = ['compliant', 'partial', 'non_compliant', 'n
 export type ComplianceResponse = (typeof COMPLIANCE_RESPONSES)[number];
 
 // ---------------------------------------------------------------------------
+// The financing road's closed lists — each stage's outcome on the sheet
+// ---------------------------------------------------------------------------
+
+/**
+ * The quotation is kept in the proposal's columns: sent, then agreed
+ * (`accepted`) or refused (`rejected`) by the customer.
+ */
+export const QUOTATION_STATUSES = ['sent', 'accepted', 'rejected'] as const satisfies readonly ProposalStatus[];
+
+/** "Bank Approval — Approved / Rejected", pending until the bank answers. */
+export const BANK_APPROVAL_STATUSES = ['pending', 'approved', 'rejected'] as const;
+export type BankApprovalStatus = (typeof BANK_APPROVAL_STATUSES)[number];
+
+/** "Loan — Partially paid / Pending" at stage 4, "Fully granted / pending" at stage 7. */
+export const LOAN_STATUSES = ['pending', 'partially_paid', 'fully_granted'] as const;
+export type LoanStatus = (typeof LOAN_STATUSES)[number];
+
+/** "Installation — In Progress / Completed". */
+export const INSTALLATION_STATUSES = ['not_started', 'in_progress', 'completed'] as const;
+export type InstallationStatus = (typeof INSTALLATION_STATUSES)[number];
+
+// ---------------------------------------------------------------------------
 // What is filed where — each stage that names documents keeps its own
 // ---------------------------------------------------------------------------
 
@@ -164,6 +233,9 @@ export const INITIATION_FILE_SECTIONS = [
   'initiation_tender_docs',
   'initiation_bid',
   'initiation_contract',
+  // The financing road (0424): the bank's approval and loan papers, the installation's.
+  'initiation_bank',
+  'initiation_installation',
 ] as const;
 export type InitiationFileSection = (typeof INITIATION_FILE_SECTIONS)[number];
 
@@ -260,6 +332,7 @@ export interface InitiationFacts {
   readonly title: string | null;
   readonly customerName: string | null;
   readonly customerPhone: string | null;
+  readonly customerCity: string | null;
   readonly leadSourceCode: string | null;
   readonly initialContactOn: string | null;
   readonly partnerId: string | null;
@@ -305,6 +378,17 @@ export interface InitiationFacts {
   readonly contractSignedOn: string | null;
   readonly contractValueIqd: string | null;
   readonly paymentTerms: string | null;
+
+  readonly financingBank: string | null;
+  readonly bankApprovalStatus: string | null;
+  readonly bankDecidedOn: string | null;
+  readonly loanAmountIqd: string | null;
+  readonly loanStatus: string | null;
+  readonly loanReceivedIqd: string | null;
+  readonly loanFirstReceivedOn: string | null;
+  readonly loanFullyGrantedOn: string | null;
+  readonly installationStatus: string | null;
+  readonly installationCompletedOn: string | null;
 
   readonly boqLines: number;
   readonly boqTotalIqd: string;
@@ -361,7 +445,19 @@ export type MissingCode =
   | 'contract_value'
   | 'payment_terms'
   | 'contract_files'
-  | 'customer_partner';
+  | 'customer_partner'
+  | 'customer_city'
+  | 'quotation_on'
+  | 'quotation_value'
+  | 'quotation_agreed'
+  | 'financing_bank'
+  | 'bank_approved'
+  | 'bank_decided_on'
+  | 'loan_amount'
+  | 'loan_partially_paid'
+  | 'loan_received'
+  | 'installation_completed'
+  | 'loan_fully_granted';
 
 const blank = (value: string | null | undefined) => !value || !value.trim();
 const positive = (value: string | null | undefined) => !blank(value) && parseDecimal(value as string, MONEY_SCALE) > 0n;
@@ -480,8 +576,73 @@ export function missingFor(facts: InitiationFacts): MissingCode[] {
       }
       missing.push(...contractMissing(facts));
       break;
+
+    // Financing 1 — "Customer Fields: Name, City, Phone number."
+    case 'fin_customer':
+      need(blank(facts.title), 'title');
+      need(blank(facts.customerName), 'customer_name');
+      need(blank(facts.customerCity), 'customer_city');
+      need(blank(facts.customerPhone), 'customer_phone');
+      break;
+    // 2 — "Quotation sent: agreed / refused." It moves on agreed.
+    case 'fin_quotation':
+      need(blank(facts.proposalOn), 'quotation_on');
+      need(!positive(facts.proposalValueIqd), 'quotation_value');
+      need(facts.proposalStatus !== 'accepted', 'quotation_agreed');
+      break;
+    // 3 — "Bank Approval: approved / rejected." It moves on approved, with the loan the bank agreed.
+    case 'fin_bank_approval':
+      need(blank(facts.financingBank), 'financing_bank');
+      need(facts.bankApprovalStatus !== 'approved', 'bank_approved');
+      need(blank(facts.bankDecidedOn), 'bank_decided_on');
+      need(!positive(facts.loanAmountIqd), 'loan_amount');
+      break;
+    // 4 — "Loan: partially paid / pending." It moves on once the first part is in.
+    case 'fin_loan_first':
+      need(facts.loanStatus !== 'partially_paid' && facts.loanStatus !== 'fully_granted', 'loan_partially_paid');
+      need(!positive(facts.loanReceivedIqd) || blank(facts.loanFirstReceivedOn), 'loan_received');
+      break;
+    // 5 — "Installation: in progress / completed."
+    case 'fin_installation':
+      need(facts.installationStatus !== 'completed' || blank(facts.installationCompletedOn), 'installation_completed');
+      break;
+    // 6 — "Contract: signed / pending."
+    case 'fin_contract':
+      missing.push(...contractMissing(facts));
+      break;
+    // 7 — "Loan: fully granted / pending." Then the record becomes a project.
+    case 'fin_loan_full':
+      need(facts.loanStatus !== 'fully_granted' || blank(facts.loanFullyGrantedOn), 'loan_fully_granted');
+      missing.push(...contractMissing(facts));
+      break;
   }
   return missing;
+}
+
+/**
+ * The sheet's outcome of a financing stage, as a code of
+ * `admin.project_initiation.outcome.<code>` — what the stepper and the board
+ * print under the stage.
+ */
+export function financingOutcome(stage: InitiationStage, facts: InitiationFacts): string | null {
+  switch (stage) {
+    case 'fin_customer':
+      return blank(facts.customerCity) || blank(facts.customerPhone) ? 'pending' : 'recorded';
+    case 'fin_quotation':
+      return facts.proposalStatus === 'accepted' ? 'agreed' : facts.proposalStatus === 'rejected' ? 'refused' : facts.proposalOn ? 'sent' : 'pending';
+    case 'fin_bank_approval':
+      return facts.bankApprovalStatus === 'approved' ? 'approved' : facts.bankApprovalStatus === 'rejected' ? 'rejected' : 'pending';
+    case 'fin_loan_first':
+      return facts.loanStatus === 'partially_paid' || facts.loanStatus === 'fully_granted' ? 'partially_paid' : 'pending';
+    case 'fin_installation':
+      return facts.installationStatus === 'completed' ? 'completed' : facts.installationStatus === 'in_progress' ? 'in_progress' : 'pending';
+    case 'fin_contract':
+      return facts.contractSignedOn ? 'signed' : 'pending';
+    case 'fin_loan_full':
+      return facts.loanStatus === 'fully_granted' ? 'fully_granted' : 'pending';
+    default:
+      return null;
+  }
 }
 
 /** Whether the record may be moved on, and to where. */
@@ -556,6 +717,9 @@ export const INITIATION_SECTIONS = [
   'bidding',
   'award',
   'contract',
+  'bank_approval',
+  'loan',
+  'installation',
 ] as const;
 export type InitiationSection = (typeof INITIATION_SECTIONS)[number];
 
@@ -565,13 +729,32 @@ export function isInitiationSection(value: string): value is InitiationSection {
 
 /** The stage a section belongs to in a workflow, or null where that workflow has no such section. */
 export function sectionStage(kind: InitiationKind, section: InitiationSection): InitiationStage | null {
+  if (kind === 'financing') return FINANCING_SECTION_STAGE[section] ?? null;
   if (section === 'contract') return kind === 'direct_sales' ? 'contract' : 'award';
   return (stagesOf(kind) as readonly string[]).includes(section) ? (section as InitiationStage) : null;
 }
 
-/** The stage at which the bill of quantities is written — and after which it is the approved BOQ. */
+/**
+ * The financing road reuses the forms whose fields it shares — the lead's
+ * customer, the proposal's columns as the quotation, the contract — and has
+ * three of its own: the bank's approval, the loan (stages 4 and 7) and the
+ * installation.
+ */
+const FINANCING_SECTION_STAGE: Partial<Record<InitiationSection, InitiationStage>> = {
+  lead: 'fin_customer',
+  proposal: 'fin_quotation',
+  bank_approval: 'fin_bank_approval',
+  loan: 'fin_loan_first',
+  installation: 'fin_installation',
+  contract: 'fin_contract',
+};
+
+/**
+ * The stage at which the bill of quantities is written — and after which it is
+ * the approved BOQ. A financed system is priced at its quotation.
+ */
 export function boqStage(kind: InitiationKind): InitiationStage {
-  return kind === 'direct_sales' ? 'boq_costing' : 'tender_design';
+  return kind === 'direct_sales' ? 'boq_costing' : kind === 'tender' ? 'tender_design' : 'fin_quotation';
 }
 
 /** Whether the record has reached a stage (it is the current one or behind it). */

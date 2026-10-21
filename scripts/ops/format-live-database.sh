@@ -364,6 +364,11 @@ begin
 end
 $fmt$;
 
+-- 0423: a category default never deleted, only let go of an E2E account.
+update item_category_account set inventory_account_id = null
+ where inventory_account_id in (select id from chart_of_account where name like 'E2E %' and not is_system);
+update item_category_account set cogs_account_id = null
+ where cogs_account_id in (select id from chart_of_account where name like 'E2E %' and not is_system);
 delete from chart_of_account where name like 'E2E %' and not is_system;
 SQL
 

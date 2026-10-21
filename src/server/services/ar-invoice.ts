@@ -340,13 +340,13 @@ async function stockAccountsFor(
   if (!row?.inventory) {
     throw new DirectSalesLineError(
       line.lineNo,
-      `sells ${line.itemCode}, which names no inventory account. Set one on the item.`,
+      `sells ${line.itemCode}, which names no inventory account. Set one on the item, or set the default for its category under Items › Category accounts.`,
     );
   }
   if (!row.cogs) {
     throw new DirectSalesLineError(
       line.lineNo,
-      `sells ${line.itemCode}, which names no COGS account, so its cost has nowhere to go. Set one on the item.`,
+      `sells ${line.itemCode}, which names no COGS account, so its cost has nowhere to go. Set one on the item, or set the default for its category under Items › Category accounts.`,
     );
   }
   return { inventory: row.inventory, cogs: row.cogs };

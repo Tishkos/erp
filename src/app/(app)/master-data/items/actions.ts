@@ -165,3 +165,20 @@ export async function deactivateItemUnit(formData: FormData): Promise<void> {
   const code = text(formData, 'code');
   await runAdminAndReturn((tx, ctx) => units.deactivate(tx, ctx, code, text(formData, 'uomCode'), text(formData, 'reason')), record(code));
 }
+
+/**
+ * 0423 — the stock accounts an item takes when it names none, per category or
+ * for the company; saving fills the items it answers for. Returns to the list
+ * with the window open again.
+ */
+export async function setItemCategoryAccounts(formData: FormData): Promise<void> {
+  await runAdminAndReturn(
+    (tx, ctx) =>
+      items.setCategoryAccounts(tx, ctx, {
+        category: text(formData, 'categoryScope') || null,
+        inventoryAccountId: text(formData, 'defaultInventoryAccountId') || null,
+        cogsAccountId: text(formData, 'defaultCogsAccountId') || null,
+      }),
+    `${LIST}?accounts=1`,
+  );
+}

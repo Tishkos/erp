@@ -15,6 +15,7 @@ import {
   Select,
   Submit,
   SubmitRow,
+  admin as s,
   matches,
 } from '@/components/admin';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -27,7 +28,7 @@ import { formatQuantity, parseQuantity } from '@domain/uom';
 import * as items from '@/server/services/items';
 import * as uomService from '@/server/services/units-of-measure';
 import * as coa from '@/server/services/chart-of-accounts';
-import { createItem } from './actions';
+import { createItem, setItemCategoryAccounts } from './actions';
 
 /**
  * Item master — Phase 2 requirement 4.
@@ -54,10 +55,14 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
     return <Denied object={page('items')} />;
   }
   const mayCreate = can(principal, 'create', items.PERMISSION_OBJECT);
+  // 0423 — the default stock accounts are Finance's, set under `configure`.
+  const mayConfigure = can(principal, 'configure', items.PERMISSION_OBJECT);
+  const accountsWindow = (await searchParams).accounts === '1';
 
-  const { rows, accounts, uoms, suppliers } = await withCurrentUser(async (tx) => ({
+  const { rows, accounts, uoms, suppliers, defaults } = await withCurrentUser(async (tx) => ({
     rows: await items.listAll(tx),
-    accounts: mayCreate ? await coa.postableAccounts(tx) : [],
+    accounts: mayCreate || mayConfigure ? await coa.postableAccounts(tx) : [],
+    defaults: mayCreate || mayConfigure ? await items.categoryAccounts(tx) : null,
     // REQ-FIX-001 FIX-4 — the unit its stock is counted in is chosen, not assumed.
     uoms: mayCreate ? await uomService.listActive(tx) : [],
     // 0408 — who it is bought from, chosen as it is made (2026-10-06, by direction).
@@ -68,15 +73,97 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
       .filter((a) => a.accountType === type)
       .map((a) => ({ value: a.id, label: `${a.code} · ${a.name}` }));
   const shown = rows.filter((row) => matches(row, outcome.q));
+  const companyDefault = defaults?.rows.find((row) => row.category === null) ?? null;
 
   return (
     <AdminPage
       actions={
-        mayCreate ? (
+        <>
+        {mayConfigure && defaults ? (
+          <NewRecordDialog
+            buttonLabel={t('items.category_accounts')}
+            closeLabel={t('close')}
+            openOnLoad={accountsWindow}
+            quiet
+            title={t('items.category_accounts')}
+            wide
+          >
+            <p className="muted">{t('items.category_accounts_intro')}</p>
+            {accountsWindow ? (
+              <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
+            ) : null}
+            <p>{t('items.category_accounts_lacking_total', { count: defaults.lackingTotal })}</p>
+            <div className={`${s.sapTableWrap} ${s.sapRegisterTableWrap}`}>
+              <table className={`${s.sapTable} ${s.sapRegisterTable}`}>
+                <thead>
+                  <tr>
+                    <th scope="col">{t('items.category_accounts_scope')}</th>
+                    <th scope="col">{t('items.inventory_account')}</th>
+                    <th scope="col">{t('items.cogs_account')}</th>
+                    <th className={s.sapNum} scope="col">{t('items.category_accounts_lacking')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {defaults.rows.length === 0 ? (
+                    <tr>
+                      <td className={s.sapEmptyRow} colSpan={4}>
+                        {t('items.category_accounts_none')}
+                      </td>
+                    </tr>
+                  ) : null}
+                  {defaults.rows.map((row) => (
+                    <tr key={row.category ?? '*'}>
+                      <td>{row.category === null ? t('items.category_accounts_company') : <bdi dir="auto">{row.category}</bdi>}</td>
+                      <td>{row.inventoryAccount ? <bdi dir="ltr">{row.inventoryAccount}</bdi> : '—'}</td>
+                      <td>{row.cogsAccount ? <bdi dir="ltr">{row.cogsAccount}</bdi> : '—'}</td>
+                      <td className={s.sapNum}>
+                        {row.category === null ? defaults.lackingTotal : (defaults.lacking[row.category] ?? 0)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {defaults.unset.length > 0 ? (
+              <p className="muted">{t('items.category_accounts_unset', { list: defaults.unset.join(', ') })}</p>
+            ) : null}
+            <Form action={setItemCategoryAccounts}>
+              <Grid>
+                <Select
+                  label={t('items.category_accounts_scope')}
+                  name="categoryScope"
+                  options={[
+                    { value: '', label: t('items.category_accounts_company') },
+                    ...[...new Set([...defaults.rows.map((row) => row.category), ...defaults.unset])]
+                      .filter((category): category is string => Boolean(category))
+                      .sort()
+                      .map((category) => ({ value: category, label: category })),
+                  ]}
+                />
+                <Select
+                  emptyLabel=""
+                  label={t('items.inventory_account')}
+                  name="defaultInventoryAccountId"
+                  options={accountOptions('asset')}
+                />
+                <Select
+                  emptyLabel=""
+                  label={t('items.cogs_account')}
+                  name="defaultCogsAccountId"
+                  options={accountOptions('expense')}
+                />
+              </Grid>
+              <SubmitRow>
+                <Submit label={t('items.category_accounts_save')} />
+              </SubmitRow>
+            </Form>
+          </NewRecordDialog>
+        ) : null}
+        {mayCreate ? (
           <NewRecordDialog
             buttonLabel={t('items.new')}
             closeLabel={t('close')}
-            openOnLoad={Boolean(outcome.error)}
+            openOnLoad={Boolean(outcome.error) && !accountsWindow}
             title={t('items.new')}
           >
             <p className="muted">{t('items.created_note')}</p>
@@ -108,6 +195,7 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
                   required
                 />
                 <Select
+                  defaultValue={companyDefault?.inventoryAccountId ?? undefined}
                   emptyLabel=""
                   label={t('items.inventory_account')}
                   name="inventoryAccountId"
@@ -125,6 +213,7 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
                   options={accountOptions('revenue')}
                 />
                 <Select
+                  defaultValue={companyDefault?.cogsAccountId ?? undefined}
                   emptyLabel=""
                   label={t('items.cogs_account')}
                   name="cogsAccountId"
@@ -151,7 +240,8 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
               </SubmitRow>
             </Form>
           </NewRecordDialog>
-        ) : null
+        ) : null}
+        </>
       }
       back={{ href: '/', label: t('dashboard_label') }}
       tabs={<SectionTabs route="/inventory/items" />}
@@ -160,7 +250,7 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
       variant="sap"
     >
       <Flash
-        error={outcome.error}
+        error={accountsWindow ? null : outcome.error}
         errorTitle={t('error_title')}
         saved={outcome.saved}
         savedLabel={t('saved')}

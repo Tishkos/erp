@@ -16,6 +16,8 @@
  *     stored, so it cannot drift.
  */
 
+import { toDecimalString } from './money';
+
 export class PaymentApplicationError extends Error {
   readonly code = 'PAYMENT_APPLICATION_INVALID';
   constructor(detail: string) {
@@ -221,9 +223,22 @@ export type CheckOutcome = 'pass' | 'fail' | 'warning' | 'not_applicable';
 export interface SendCheck {
   readonly code: SendCheckCode;
   readonly outcome: CheckOutcome;
-  /** The cause in words — what a person needs to fix it. */
+  /** The cause in words — what a person needs to fix it. Never an account's balance. */
   readonly detail: string;
+  /**
+   * The funds check's figures (decimal strings, IQD), kept apart from the
+   * words: a screen draws them only for a reader who may see balances
+   * (`BALANCE_OBJECT`) — 2026-10-21, by direction.
+   */
+  readonly figures?: { readonly availableIqd: string; readonly amountIqd: string; readonly afterIqd: string };
 }
+
+/**
+ * Who may see what a bank or cash account holds: whoever reads the treasury's
+ * balances (Bank and Cash Reporting). Everybody else is told only that an
+ * account has, or has not, enough money.
+ */
+export const BALANCE_OBJECT = 'bank_cash_account';
 
 /** The checks a Send would be refused on. Warnings and n/a never refuse. */
 export function failing(checks: readonly SendCheck[]): SendCheck[] {
@@ -244,7 +259,15 @@ export class SendRefusedError extends Error {
   }
 }
 
-/** §15.3 check 2 — Available (less this application's own reservation) ≥ amount. */
+/**
+ * §15.3 check 2 — Available (less this application's own reservation) ≥ amount.
+ *
+ * A warning, never a stop (2026-10-21, by direction: "we can always add that
+ * even if we don't have money, but we should know in its page that the money
+ * is going to be minus"): the application goes on, and its page says the
+ * account will go below zero. The words never carry the balance; the figures
+ * travel apart, for a reader who may see them.
+ */
 export function fundsCheck(input: {
   accountCode: string;
   availableIqd: bigint;
@@ -252,15 +275,19 @@ export function fundsCheck(input: {
   amountIqd: bigint;
 }): SendCheck {
   const available = input.availableIqd + input.ownReservationIqd;
+  const figures = {
+    availableIqd: toDecimalString(available, 4n),
+    amountIqd: toDecimalString(input.amountIqd, 4n),
+    afterIqd: toDecimalString(available - input.amountIqd, 4n),
+  };
   if (available >= input.amountIqd) {
-    return { code: 'funds', outcome: 'pass', detail: `${input.accountCode} has the funds.` };
+    return { code: 'funds', outcome: 'pass', detail: `${input.accountCode} has the funds.`, figures };
   }
   return {
     code: 'funds',
-    outcome: 'fail',
-    detail:
-      `${input.accountCode} has ${formatMinor(available)} IQD available against ${formatMinor(input.amountIqd)} IQD — ` +
-      'deposit or draw the money first.',
+    outcome: 'warning',
+    detail: `${input.accountCode} does not hold enough money for this payment: paying it takes the account below zero.`,
+    figures,
   };
 }
 

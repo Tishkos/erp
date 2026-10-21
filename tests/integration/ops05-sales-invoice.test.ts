@@ -25,6 +25,7 @@ import * as coa from '@/server/services/chart-of-accounts';
 import * as ap from '@/server/services/ap-invoice';
 import * as ar from '@/server/services/ar-invoice';
 import * as inventory from '@/server/services/inventory';
+import * as items from '@/server/services/items';
 import * as receipts from '@/server/services/customer-receipt';
 import * as journal from '@/server/services/journal';
 import * as audit from '@/server/services/audit';
@@ -779,6 +780,26 @@ describe('ops 5 · the line says what it needs to', () => {
     await ownerPool.query(`update item set cogs_account_id = null where code = $1`, [PANEL]);
     const invoice = await sell([{ quantity: '1', unitPrice: '250000' }]);
     await expect(postSale(invoice.id)).rejects.toThrow(/no COGS account/);
+  });
+
+  it('posts once its category default fills the COGS account the item named none of (0423)', async () => {
+    await buy(jinko);
+    await ownerPool.query(`update item set cogs_account_id = null, category = 'Panels' where code = $1`, [PANEL]);
+    const invoice = await sell([{ quantity: '1', unitPrice: '250000' }]);
+    await expect(postSale(invoice.id)).rejects.toThrow(/Category accounts/);
+
+    const { filled } = await withScope(scope(manager), (tx) =>
+      items.setCategoryAccounts(tx, manager, { category: 'Panels', inventoryAccountId: null, cogsAccountId: accounts.cogs! }),
+    );
+    expect(filled).toBe(1);
+    const { rows } = await ownerPool.query(`select cogs_account_id from item where code = $1`, [PANEL]);
+    expect(rows[0].cogs_account_id).toBe(accounts.cogs);
+
+    // Approved before the refusal; posting is the step that was refused.
+    const posted = await withScope(scope(manager), (tx) => ar.post(tx, manager, invoice.id));
+    expect(await journalOf(posted.journalEntryId)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ account: 'Cost of Goods Sold', debit: 100000 })]),
+    );
   });
 });
 

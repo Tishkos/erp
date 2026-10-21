@@ -81,7 +81,8 @@ Purchases are not typed in Projects; they arrive from Payables.
 See Procurement for the commitments and Project Costs for the cost lines.
 
 ## Project Initiation (تأسيس المشاريع)
-Projects → Projects & Planning → Project Initiation   |   Arabic: المشاريع ← المشاريع والتخطيط ← تأسيس المشاريع
+Projects → Projects & Planning → Leads   |   Arabic: المشاريع ← المشاريع والتخطيط ← العملاء المحتملون
+Since 21 October 2026 the register of this screen is called **Leads** (العملاء المحتملون) in the menu: it lists the records at the first stage of their road. The same records past the first stage are on **Opportunities** (الفرص), and every record is a card on the **Pipeline Board** (لوحة المسار). One record keeps one number (PIN-…) from lead to project.
 Address: /projects/initiation (one record: /projects/initiation/<initiation number>)
 Needs: `view` on `project` to open; `create` to open a new record; `edit_draft` to fill the stages, add BOQ lines, log activities, move to the next stage and mark a record lost; `approve` to approve a tender's Go / No-Go and to confirm the signed contract
 What it is for: The company's Project Guide. Every customer project starts here, before it is a project: you choose its type — a **Direct Sales Project** (مشروع بيع مباشر) or a **Tender Project** (مشروع مناقصة) — and walk the record through the six stages of that workflow, one at a time. When the contract is signed and confirmed, the record becomes an Active Project on Project Master by itself, carrying its Pre-Sales Form, its drawings and its approved BOQ. Nothing here posts to the books or moves stock.
@@ -89,6 +90,7 @@ What it is for: The company's Project Guide. Every customer project starts here,
 ### The two project types — Project Initiation
 - **Direct Sales Project** — for direct customers and special projects: the Pre-Sales Form, the system type and an assessment of the customer's site. Stages 1 to 6: **1 Sales Lead** (عميل مبيعات محتمل) → **2 Opportunity and Pre-Sales Form** (الفرصة ونموذج ما قبل البيع) → **3 Site Survey Design** (مسح الموقع والتصميم) → **4 BOQ Costing** (تسعير جدول الكميات) → **5 Proposal Follow-up** (العرض والمتابعة) → **6 Contract Signing** (توقيع العقد).
 - **Tender Project** — for formal tenders and government tender documents (ITB/RFP): submission deadlines, bid bonds and a compliance matrix. Stages 7 to 12: **7 Tender Lead** (مناقصة محتملة) → **8 Feasibility Review and Tender Qualification (Go / No-Go)** (مراجعة الجدوى وتأهيل المناقصة) → **9 Site Visit & Pre-Bid Meeting** (زيارة الموقع واجتماع ما قبل العطاء) → **10 Tender Design BOQ** (تصميم المناقصة وجدول الكميات) → **11 Compliance Matrix & Bidding** (مصفوفة المطابقة وتقديم العطاء) → **12 Submission & Award** (التقديم والإحالة).
+- **Financed Customer (Renewable Energy Financing)** (عميل ممول — تمويل الطاقة المتجددة) — for a customer whose system a bank loan pays for. Its own seven stages, numbered 1 to 7 as the initiative's sheet numbers them: **1 Customer** (العميل: name, city, phone) → **2 Quotation Sent** (إرسال عرض السعر: agreed / refused) → **3 Bank Approval** (موافقة المصرف: approved / rejected) → **4 Loan — First Payment** (القرض — الدفعة الأولى: partially paid / pending) → **5 Installation** (التركيب: in progress / completed) → **6 Contract** (العقد: signed / pending) → **7 Loan — Fully Granted** (القرض — المنح الكامل: fully granted / pending). Each stage moves on only on its good outcome; under each stage on the record the strip says its outcome (Agreed, Approved, Partially paid …). When the loan is fully granted and the contract is on file, the record is converted into a project like the other two.
 - The type is chosen once, when the record is opened, and cannot be changed afterwards.
 - A record carries one status: **Open** (مفتوح) while it is being worked, **Converted to project** (تحوّل إلى مشروع) once its contract is confirmed, or **Lost** (خسارة) with its reason. A converted or lost record does not change again.
 
@@ -1204,3 +1206,33 @@ From then on **Run recognition** is offered on Billing. Ratifying is done once: 
 - "policy: the recognition method was ratified on <date>" — it is already ratified.
 - "note: is required" — type the decision before pressing Ratify the method.
 - "Permission denied: 'configure' on 'project_setting' is not granted to this user." — ask an administrator for the permission.
+
+## Opportunities (الفرص)
+Projects → Projects & Planning → Opportunities   |   Arabic: المشاريع ← المشاريع والتخطيط ← الفرص
+Address: /projects/opportunities
+Needs: `view` on `project`
+What it is for: The second step of Leads → Opportunities → Projects. It lists every Project Initiation record that is past the first stage of its road and is not yet a project: a direct sale from the Pre-Sales Form on, a tender from Go / No-Go on, a financed customer from the quotation on. A lost record stays here with its reason. A record converted into a project leaves this list and is on Project Master. The page refreshes by itself (the green **Live** badge, مباشر) when somebody changes a record.
+
+### How to find a client — Opportunities
+1. Type part of the number, the customer's name, the phone or the city in the search box.
+2. Narrow it with **Type**, **Stage** and **Status** (Open or Lost), then press **Filter**.
+3. Click the number to open the record; everything is done there.
+
+### Fields — Opportunities
+- **Number** — the record's PIN- number; the same number it had as a lead.
+- **Stage** — the stage it stands at, numbered as its road numbers it.
+- **City**, **Owner**, **Value** (the contract, else the quotation or proposal, else the bid price), **Last update** (newest first), **Status**.
+
+## Pipeline Board (لوحة المسار)
+Projects → Projects & Planning → Pipeline Board   |   Arabic: المشاريع ← المشاريع والتخطيط ← لوحة المسار
+Address: /projects/pipeline
+Needs: `view` on `project`
+What it is for: Every client as a card with its own number, in the column where it stands — **Leads**, **Opportunities**, **Projects** (converted in the last 30 days) and **Lost** (lost in the last 30 days). Choose a **Type** and the columns become that road's stages (for a financed customer: Customer, Quotation Sent, Bank Approval, Loan — First Payment, Installation, Contract, Loan — Fully Granted). The board updates by itself every few seconds when anything on it moves, so it can stay open on a screen. It only shows; every change is made on the record.
+
+### How to watch your own clients — Pipeline Board
+1. Choose **Owner → Mine** and press **Filter**.
+2. Leave the page open: a card moves to its new column by itself when the record moves.
+3. Click a card's number to open the record.
+
+## Updates on a record (التحديثات)
+Every Project Initiation record has an **Updates** section under its stages: each change — opened, a stage's form saved and what it changed (the customer's answer, the bank's answer, the loan, the installation), moved to the next stage, a note, a BOQ line, lost or converted — with who did it and when, newest first. The record page refreshes by itself when somebody else changes it (the green **Live** badge); it does not refresh while you are typing or have a window open — the badge turns amber and the page catches up when you are done.

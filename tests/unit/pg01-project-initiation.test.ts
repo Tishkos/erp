@@ -9,9 +9,11 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   AWARD_STATUSES,
+  BANK_APPROVAL_STATUSES,
   BOQ_CATEGORIES,
   COMPLIANCE_RESPONSES,
   DIRECT_SALES_STAGES,
+  FINANCING_STAGES,
   GUARANTEE_STATUSES,
   INITIATION_ACTIVITY_KINDS,
   INITIATION_FILE_SECTIONS,
@@ -19,8 +21,13 @@ import {
   INITIATION_SECTIONS,
   INITIATION_STAGES,
   INITIATION_STATUSES,
+  INSTALLATION_STATUSES,
   InitiationGateError,
+  LEAD_STAGES,
+  LOAN_STATUSES,
+  PIPELINE_PHASES,
   PROPOSAL_STATUSES,
+  QUOTATION_STATUSES,
   SITE_KINDS,
   SYSTEM_TYPES,
   TENDER_STAGES,
@@ -31,6 +38,7 @@ import {
   boqStage,
   boqTotals,
   coordinate,
+  financingOutcome,
   firstStage,
   guideNumber,
   hasReached,
@@ -38,6 +46,7 @@ import {
   isLastStage,
   missingFor,
   nextStage,
+  phaseOf,
   sectionStage,
   sectionWritable,
   stageStates,
@@ -58,6 +67,7 @@ const empty: InitiationFacts = {
   title: null,
   customerName: null,
   customerPhone: null,
+  customerCity: null,
   leadSourceCode: null,
   initialContactOn: null,
   partnerId: null,
@@ -98,6 +108,16 @@ const empty: InitiationFacts = {
   contractSignedOn: null,
   contractValueIqd: null,
   paymentTerms: null,
+  financingBank: null,
+  bankApprovalStatus: null,
+  bankDecidedOn: null,
+  loanAmountIqd: null,
+  loanStatus: null,
+  loanReceivedIqd: null,
+  loanFirstReceivedOn: null,
+  loanFullyGrantedOn: null,
+  installationStatus: null,
+  installationCompletedOn: null,
   boqLines: 0,
   boqTotalIqd: '0.0000',
   complianceLines: 0,
@@ -109,7 +129,7 @@ const contract = { contractRef: 'C-1', contractSignedOn: '2026-10-12', contractV
 
 describe('PG1 · the two workflows are the guide’s, in its order and numbering', () => {
   it('six stages each, numbered 1–6 and 7–12', () => {
-    expect(INITIATION_KINDS).toEqual(['direct_sales', 'tender']);
+    expect(INITIATION_KINDS).toEqual(['direct_sales', 'tender', 'financing']);
     expect(DIRECT_SALES_STAGES).toEqual(['lead', 'pre_sales', 'site_survey', 'boq_costing', 'proposal', 'contract']);
     expect(TENDER_STAGES).toEqual(['tender_lead', 'go_no_go', 'pre_bid', 'tender_design', 'bidding', 'award']);
     expect(DIRECT_SALES_STAGES.map(guideNumber)).toEqual([1, 2, 3, 4, 5, 6]);
@@ -332,10 +352,16 @@ describe('PG5 · the conversion point: somebody else confirms the contract', () 
 });
 
 describe('PG6 · the migration and the catalogues say what this file says', () => {
-  const sql = readFileSync('src/server/db/migrations/0421_project_initiation.sql', 'utf8');
+  const first = readFileSync('src/server/db/migrations/0421_project_initiation.sql', 'utf8');
+  // 0424 added the financing road and widened the closed lists it touched.
+  const sql = `${first}\n${readFileSync('src/server/db/migrations/0424_project_initiation_financing.sql', 'utf8')}`;
   const listed = (values: readonly string[]) => values.map((value) => `'${value}'`).join(', ');
 
-  it('migration 0421 holds the same closed lists', () => {
+  it('migrations 0421 and 0424 hold the same closed lists', () => {
+    expect(sql).toContain(`ARRAY[${listed(FINANCING_STAGES)}]`);
+    expect(sql).toContain(`"bank_approval_status" IN (${listed(BANK_APPROVAL_STATUSES)})`);
+    expect(sql).toContain(`"loan_status" IN (${listed(LOAN_STATUSES)})`);
+    expect(sql).toContain(`"installation_status" IN (${listed(INSTALLATION_STATUSES)})`);
     expect(sql).toContain(`ARRAY[${listed(DIRECT_SALES_STAGES)}]`);
     expect(sql).toContain(`ARRAY[${listed(TENDER_STAGES)}]`);
     expect(sql).toContain(`"kind" IN (${listed(INITIATION_KINDS)})`);
@@ -373,6 +399,12 @@ describe('PG6 · the migration and the catalogues say what this file says', () =
       has('compliance_response_option', COMPLIANCE_RESPONSES);
       has('activity_kind_option', INITIATION_ACTIVITY_KINDS);
       has('go_decision_option', ['go', 'no_go']);
+      has('quotation_status_option', QUOTATION_STATUSES);
+      has('bank_approval_option', BANK_APPROVAL_STATUSES);
+      has('loan_status_option', LOAN_STATUSES);
+      has('installation_status_option', INSTALLATION_STATUSES);
+      has('phase', PIPELINE_PHASES);
+      has('outcome', ['pending', 'recorded', 'sent', 'agreed', 'refused', 'approved', 'rejected', 'partially_paid', 'in_progress', 'completed', 'signed', 'fully_granted']);
       has('file_section', ['project_initiation', ...INITIATION_FILE_SECTIONS]);
       // Every gate can be said: a missing code with no words would print as its code.
       const everyMissing = new Set<string>();
@@ -384,9 +416,71 @@ describe('PG6 · the migration and the catalogues say what this file says', () =
       everyMissing.add('compliance_lines');
       has('missing', [...everyMissing]);
       // The seeded lead sources read by the Sales Lead form.
-      const seeded = [...sql.matchAll(/\('([A-Z_]+)',\s+'[^']+'\)/g)].map((match) => match[1]!);
+      const seeded = [...first.matchAll(/\('([A-Z_]+)',\s+'[^']+'\)/g)].map((match) => match[1]!);
       expect(seeded.length).toBeGreaterThanOrEqual(9);
       has('lead_source_option', seeded);
     }
+  });
+});
+
+describe('PG7 · the financing road — the Renewable Energy Financing Initiative', () => {
+  const fin = (over: Partial<InitiationFacts>) => facts({ kind: 'financing', ...over });
+
+  it('seven stages of its own, numbered 1–7 as its sheet numbers them', () => {
+    expect(FINANCING_STAGES).toEqual(['fin_customer', 'fin_quotation', 'fin_bank_approval', 'fin_loan_first', 'fin_installation', 'fin_contract', 'fin_loan_full']);
+    expect(FINANCING_STAGES.map(guideNumber)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(firstStage('financing')).toBe('fin_customer');
+    expect(isLastStage('financing', 'fin_loan_full')).toBe(true);
+    expect(isLastStage('financing', 'fin_contract')).toBe(false);
+    expect(boqStage('financing')).toBe('fin_quotation');
+  });
+
+  it('each stage moves on only on the sheet’s good outcome', () => {
+    expect(missingFor(fin({ stage: 'fin_customer', title: 'Roof', customerName: 'Ali' }))).toEqual(['customer_city', 'customer_phone']);
+    expect(missingFor(fin({ stage: 'fin_customer', title: 'Roof', customerName: 'Ali', customerCity: 'Erbil', customerPhone: '0750' }))).toEqual([]);
+    // Refused is not agreed.
+    expect(missingFor(fin({ stage: 'fin_quotation', proposalOn: '2026-10-21', proposalValueIqd: '5000000', proposalStatus: 'rejected' }))).toEqual(['quotation_agreed']);
+    expect(missingFor(fin({ stage: 'fin_quotation', proposalOn: '2026-10-21', proposalValueIqd: '5000000', proposalStatus: 'accepted' }))).toEqual([]);
+    expect(missingFor(fin({ stage: 'fin_bank_approval', financingBank: 'RT Bank', bankApprovalStatus: 'rejected', bankDecidedOn: '2026-10-21', loanAmountIqd: '4000000' }))).toEqual(['bank_approved']);
+    expect(missingFor(fin({ stage: 'fin_loan_first', loanStatus: 'pending' }))).toEqual(['loan_partially_paid', 'loan_received']);
+    expect(missingFor(fin({ stage: 'fin_loan_first', loanStatus: 'partially_paid', loanReceivedIqd: '1000000', loanFirstReceivedOn: '2026-10-22' }))).toEqual([]);
+    expect(missingFor(fin({ stage: 'fin_installation', installationStatus: 'in_progress' }))).toEqual(['installation_completed']);
+    expect(missingFor(fin({ stage: 'fin_contract' }))).toContain('contract_files');
+    // The last stage: the loan fully granted, and the contract still on file.
+    expect(missingFor(fin({ stage: 'fin_loan_full', ...contract, loanStatus: 'partially_paid' }))).toEqual(['loan_fully_granted']);
+    expect(() => assertConvertible(fin({ stage: 'fin_loan_full', ...contract, loanStatus: 'fully_granted', loanFullyGrantedOn: '2026-11-01' }))).not.toThrow();
+  });
+
+  it('its forms are the lead’s, the proposal’s as the quotation, the contract’s and three of its own', () => {
+    expect(sectionStage('financing', 'lead')).toBe('fin_customer');
+    expect(sectionStage('financing', 'proposal')).toBe('fin_quotation');
+    expect(sectionStage('financing', 'bank_approval')).toBe('fin_bank_approval');
+    expect(sectionStage('financing', 'loan')).toBe('fin_loan_first');
+    expect(sectionStage('financing', 'installation')).toBe('fin_installation');
+    expect(sectionStage('financing', 'contract')).toBe('fin_contract');
+    expect(sectionStage('financing', 'pre_sales')).toBeNull();
+    expect(sectionStage('direct_sales', 'bank_approval')).toBeNull();
+    // The loan's form stays open at stage 7, where it is marked fully granted.
+    expect(sectionWritable('financing', 'fin_loan_full', 'open', 'loan')).toBe(true);
+  });
+
+  it('the stepper says the sheet’s outcome of each stage reached', () => {
+    const at = fin({ stage: 'fin_bank_approval', proposalStatus: 'accepted', proposalOn: '2026-10-20', bankApprovalStatus: 'pending' });
+    expect(financingOutcome('fin_quotation', at)).toBe('agreed');
+    expect(financingOutcome('fin_bank_approval', at)).toBe('pending');
+    expect(financingOutcome('fin_contract', fin({ contractSignedOn: '2026-10-21' }))).toBe('signed');
+    expect(financingOutcome('lead', at)).toBeNull();
+  });
+});
+
+describe('PG8 · Leads → Opportunities → Projects', () => {
+  it('a lead at the first stage of any road, an opportunity after, a project once converted', () => {
+    expect(LEAD_STAGES).toEqual(['lead', 'tender_lead', 'fin_customer']);
+    expect(phaseOf('lead', 'open')).toBe('lead');
+    expect(phaseOf('fin_customer', 'lost')).toBe('lead');
+    expect(phaseOf('pre_sales', 'open')).toBe('opportunity');
+    expect(phaseOf('fin_installation', 'lost')).toBe('opportunity');
+    expect(phaseOf('award', 'converted')).toBe('project');
+    expect(phaseOf('fin_loan_full', 'converted')).toBe('project');
   });
 });

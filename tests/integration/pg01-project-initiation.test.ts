@@ -13,6 +13,8 @@
  *        four eyes at the contract, the activities append-only.
  *   PG10 The edges: a guide project type is never typed in by hand, a lost
  *        record says why, the register's filters, and the branch wall.
+ *   PG11 The financing road (2026-10-21) end to end; Leads → Opportunities →
+ *        Projects as the register's phases; the board and the updates.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
@@ -124,7 +126,7 @@ describe('PG7 · Workflow One — a direct sale from its first contact to an Act
     expect(record).toMatchObject({ kind: 'direct_sales', stage: 'lead', status: 'open', next: 'pre_sales', atContract: false });
     // Opened today, so the first contact is today until somebody says otherwise.
     expect(record.missing).toEqual(['customer_phone', 'lead_source']);
-    expect(await rejection(open('franchise'))).toMatch(/Direct Sales project or a Tender project/);
+    expect(await rejection(open('franchise'))).toMatch(/a Direct Sales project, a Tender project or a Financed customer/);
     expect(await rejection(open('direct_sales', '  '))).toMatch(/project name is required/);
   });
 
@@ -366,7 +368,7 @@ describe('PG9 · what the database holds whatever the service does (0421)', () =
     expect(await update(`stage = 'go_no_go'`)).toMatch(/project_initiation_stage_of_kind|one stage forward/);
     expect(await update(`kind = 'tender'`)).toMatch(/number, type, branch and author never change/);
     expect(await update(`initiation_no = 'PIN-X'`)).toMatch(/never change/);
-    expect(await update(`status = 'converted', project_code = null`)).toMatch(/converted at contract signing|project_initiation_converted_has_project/);
+    expect(await update(`status = 'converted', project_code = null`)).toMatch(/converted at the last stage of its workflow|project_initiation_converted_has_project/);
     expect(await update(`status = 'lost'`)).toMatch(/project_initiation_lost_has_reason/);
     expect(await rejection(ownerPool.query(`delete from project_initiation where initiation_no = $1`, [no]))).toMatch(/append-only|cannot be|not allowed|immutable|reject/i);
     // A legitimate step still passes.
@@ -422,7 +424,7 @@ describe('PG9 · what the database holds whatever the service does (0421)', () =
 
 describe('PG10 · the edges', () => {
   it('a Direct Sales or a Tender project is never typed in by hand', async () => {
-    for (const typeCode of ['DIRECT_SALES', 'TENDER']) {
+    for (const typeCode of ['DIRECT_SALES', 'TENDER', 'FINANCING']) {
       expect(
         await rejection(
           as(manager, (tx) =>
@@ -480,5 +482,104 @@ describe('PG10 · the edges', () => {
     // A reader with no grant on projects is refused before anything is read.
     const stranger = await createUser('warehouse_keeper').catch(() => null);
     if (stranger) expect(await rejection(as(stranger, (tx) => initiation.create(tx, stranger, { kind: 'direct_sales', title: 'x', customerName: 'y' })))).toMatch(/create|permission|not permitted/i);
+  });
+});
+
+describe('PG11 · the financing road, Leads → Opportunities → Projects, and the live updates (2026-10-21)', () => {
+  it('a financed customer walks the sheet’s seven stages to an Active Project, each moved on only by its good outcome', async () => {
+    const { initiationNo: no } = await as(engineer, (tx) =>
+      initiation.create(tx, engineer, { kind: 'financing', title: 'Ahmed Karim — 10 kW home system', customerName: 'Ahmed Karim', customerPhone: '0750 111 2233' }),
+    );
+    const list = (phase: 'lead' | 'opportunity' | 'project') => as(engineer, (tx) => initiation.list(tx, { phase })).then((r) => r.rows.map((row) => row.initiationNo));
+    let record = await view(no);
+    expect(record).toMatchObject({ kind: 'financing', stage: 'fin_customer', phase: 'lead', next: 'fin_quotation' });
+    expect(record.missing).toEqual(['customer_city']);
+    expect(await list('lead')).toEqual([no]);
+    expect(await list('opportunity')).toEqual([]);
+    expect(await rejection(next(no))).toMatch(/Stage 1 is not complete: customer city/);
+
+    const before = await as(engineer, (tx) => initiation.liveVersion(tx, no));
+    await save(no, 'lead', { customerCity: 'Erbil' });
+    // The live pages see the record move.
+    expect(await as(engineer, (tx) => initiation.liveVersion(tx, no))).not.toBe(before);
+    await next(no);
+    expect(await list('lead')).toEqual([]);
+    expect(await list('opportunity')).toEqual([no]);
+
+    // 2 — the quotation, priced from its BOQ; refused is not agreed.
+    await boq(no, 'material', '10 kW hybrid kit', '1', '9000000');
+    await save(no, 'proposal', { proposalOn: '2026-10-20', proposalValueIqd: '10,500,000', proposalStatus: 'rejected' });
+    expect(await rejection(next(no))).toMatch(/quotation agreed/);
+    expect(await rejection(save(no, 'proposal', { proposalStatus: 'negotiating' }))).toMatch(/quotation status/);
+    await save(no, 'proposal', { proposalStatus: 'accepted' });
+    expect((await view(no)).steps.find((step) => step.stage === 'fin_quotation')?.outcome).toBe('agreed');
+    await next(no);
+    expect((await view(no)).initiation.boqApprovedAt).not.toBeNull();
+
+    // 3 — the bank. Rejected holds it, at the service and at the database.
+    await save(no, 'bank_approval', { financingBank: 'Rafidain Bank', bankApprovalStatus: 'rejected', bankDecidedOn: '2026-10-22', loanAmountIqd: '8000000' });
+    expect(await rejection(next(no))).toMatch(/bank approved/);
+    expect(await rejection(ownerPool.query(`update project_initiation set stage = 'fin_loan_first' where initiation_no = $1`, [no]))).toMatch(/no bank approval/);
+    await save(no, 'bank_approval', { bankApprovalStatus: 'approved' });
+    await next(no);
+
+    // 4 — the loan, paid in part; never more than the bank lent.
+    expect(await rejection(save(no, 'loan', { loanReceivedIqd: '9000000' }))).toMatch(/more than the loan the bank approved/);
+    expect(await rejection(ownerPool.query(`update project_initiation set loan_received_iqd = 9000000 where initiation_no = $1`, [no]))).toMatch(/project_initiation_loan_amounts/);
+    await save(no, 'loan', { loanStatus: 'partially_paid', loanReceivedIqd: '3000000', loanFirstReceivedOn: '2026-10-25' });
+    await next(no);
+
+    // 5 — the installation.
+    expect(await rejection(save(no, 'installation', { installationStartedOn: '2026-11-05', installationCompletedOn: '2026-11-01' }))).toMatch(/completed before it started/);
+    await save(no, 'installation', { installationStatus: 'in_progress', installationStartedOn: '2026-11-01' });
+    expect(await rejection(next(no))).toMatch(/installation completed/);
+    await save(no, 'installation', { installationStatus: 'completed', installationCompletedOn: '2026-11-04' });
+    await next(no);
+
+    // 6 — the contract, signed and on file.
+    await save(no, 'contract', { contractRef: 'FIN-C-7', contractSignedOn: '2026-11-05', contractValueIqd: '10500000', paymentTerms: 'Paid by the bank loan', partnerId: customerId });
+    await file('initiation_contract', no, 'contract-signed.pdf');
+    await next(no);
+    record = await view(no);
+    expect(record).toMatchObject({ stage: 'fin_loan_full', atContract: true });
+
+    // 7 — fully granted only once all of it is in; then the record becomes a project.
+    expect(await rejection(convert(no, ceo))).toMatch(/loan fully granted/);
+    expect(await rejection(save(no, 'loan', { loanStatus: 'fully_granted', loanFullyGrantedOn: '2026-11-20' }))).toMatch(/only once all of it is received/);
+    await save(no, 'loan', { loanStatus: 'fully_granted', loanReceivedIqd: '8000000', loanFullyGrantedOn: '2026-11-20' });
+    const { projectCode } = await convert(no, ceo);
+    const made = await one<{ type_code: string; status: string }>(`select type_code, status from project where code = $1`, [projectCode]);
+    expect(made.type_code).toBe('FINANCING');
+    expect(await list('opportunity')).toEqual([]);
+    expect(await list('project')).toEqual([no]);
+    expect((await view(no)).phase).toBe('project');
+
+    // The updates say what moved, by whom, newest first.
+    const updates = await as(engineer, (tx) => initiation.timeline(tx, no));
+    expect(updates[0]!.action).toBe('converted');
+    expect(updates.filter((entry) => entry.action === 'stage_advanced').map((entry) => entry.stage).reverse()).toEqual([
+      'fin_quotation',
+      'fin_bank_approval',
+      'fin_loan_first',
+      'fin_installation',
+      'fin_contract',
+      'fin_loan_full',
+    ]);
+    expect(updates.find((entry) => entry.action === 'bank_approval_saved')?.changed).toContainEqual({ field: 'bankApprovalStatus', value: 'approved' });
+  });
+
+  it('the board holds every open record by phase, and the decided ones of the last month', async () => {
+    const lead = (await open('financing', 'Roof 5 kW', 'Sara')).initiationNo;
+    const tender = (await open('tender', 'Street lights', 'Municipality')).initiationNo;
+    const lost = (await open('direct_sales', 'Villa', 'Omar')).initiationNo;
+    await as(engineer, (tx) => initiation.markLost(tx, engineer, lost, 'Went quiet.'));
+    const { cards } = await as(engineer, (tx) => initiation.board(tx));
+    expect(Object.fromEntries(cards.map((card) => [card.initiationNo, `${card.phase}/${card.status}`]))).toEqual({
+      [lead]: 'lead/open',
+      [tender]: 'lead/open',
+      [lost]: 'lead/lost',
+    });
+    expect((await as(engineer, (tx) => initiation.board(tx, { kind: 'financing' }))).cards.map((card) => card.initiationNo)).toEqual([lead]);
+    expect((await as(engineer, (tx) => initiation.board(tx, { ownerUserId: manager.principal.userId }))).cards).toEqual([]);
   });
 });

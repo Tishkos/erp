@@ -8,6 +8,7 @@ import { ProfileLink } from '@/components/admin/profile-link';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
+import { BALANCE_OBJECT } from '@domain/payment-applications';
 import { toDecimalString } from '@domain/money';
 import { isNotFoundError } from '@/server/not-found';
 import { visibleRoute } from '@/server/delivered';
@@ -53,6 +54,8 @@ export default async function NewPaymentApplicationPage({ searchParams }: { sear
     return <Denied object={page('payment_applications')} />;
   }
   const chosen = typeof query.import === 'string' ? query.import.trim() : '';
+  // What each account holds, only for a reader who may see balances (2026-10-21).
+  const maySeeBalances = can(principal, 'view', BALANCE_OBJECT);
 
   const found = await withCurrentUser(async (tx) => {
     const imports = await applications.payableImports(tx);
@@ -177,7 +180,7 @@ export default async function NewPaymentApplicationPage({ searchParams }: { sear
             <IntentSelect aria-label={t('col_account')} defaultValue={pickers.accounts[0]?.id ?? ''} name="bank_cash_account_id" required>
               {pickers.accounts.map((account) => (
                 <option key={account.id} value={account.id}>
-                  {`${account.code} · ${account.name}${account.bankName ? ` · ${account.bankName}` : ''} — ${t('available_short')} ${money(account.availableIqd, 'IQD')}`}
+                  {`${account.code} · ${account.name}${account.bankName ? ` · ${account.bankName}` : ''}${maySeeBalances ? ` — ${t('available_short')} ${money(account.availableIqd, 'IQD')}` : ''}`}
                 </option>
               ))}
             </IntentSelect>

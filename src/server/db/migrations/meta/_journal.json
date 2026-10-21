@@ -1800,6 +1800,27 @@
       "when": 1795900000229,
       "tag": "0422_import_opening_balances",
       "breakpoints": true
+    },
+    {
+      "idx": 257,
+      "version": "7",
+      "when": 1795900000230,
+      "tag": "0423_item_category_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 258,
+      "version": "7",
+      "when": 1795900000231,
+      "tag": "0424_project_initiation_financing",
+      "breakpoints": true
+    },
+    {
+      "idx": 259,
+      "version": "7",
+      "when": 1795900000232,
+      "tag": "0425_bank_overdraft_payment_applications",
+      "breakpoints": true
     }
   ]
 }

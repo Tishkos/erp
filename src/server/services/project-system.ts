@@ -58,7 +58,7 @@ const MONEY = 4n;
  * new-project form does not offer them and `createDefinition` refuses one
  * raised by hand.
  */
-export const INITIATED_TYPES: readonly string[] = ['DIRECT_SALES', 'TENDER'];
+export const INITIATED_TYPES: readonly string[] = ['DIRECT_SALES', 'TENDER', 'FINANCING'];
 
 // ---------------------------------------------------------------------------
 // §4 — the definition

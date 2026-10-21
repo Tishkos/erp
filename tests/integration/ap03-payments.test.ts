@@ -17,6 +17,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ownerPool, rejection } from './setup';
 import { withScope } from '@/server/db/client';
+import { eq } from 'drizzle-orm';
+import { paymentApplication as paymentApplicationTable } from '@/server/db/schema';
 import * as ap from '@/server/services/ap-invoice';
 import * as applications from '@/server/services/payment-applications';
 import * as customs from '@/server/services/customs-pd';
@@ -49,6 +51,11 @@ const iqd = (value: string) => parseDecimal(value, 4n);
 
 /** Money in an account's G/L, posted as a real journal. */
 async function fund(glAccountId: string, amount: string, on = '2026-09-01') {
+  return between(glAccountId, world.accounts.grni!, amount, on);
+}
+
+/** A posted journal: Dr one account, Cr the other — money in when the bank is debited, out when it is credited. */
+async function between(debitAccountId: string, creditAccountId: string, amount: string, on = '2026-09-01') {
   const client = await ownerPool.connect();
   try {
     await client.query('begin');
@@ -69,7 +76,7 @@ async function fund(glAccountId: string, amount: string, on = '2026-09-01') {
           debit_iqd, credit_iqd, debit_usd, credit_usd, currency, branch_code)
        values ($1, 1, $2, $3, 0, $3, 0, 0, 0, 'IQD', $5),
               ($1, 2, $4, 0, $3, 0, $3, 0, 0, 'IQD', $5)`,
-      [entry[0].id, glAccountId, amount, world.accounts.grni, BAGHDAD],
+      [entry[0].id, debitAccountId, amount, creditAccountId, BAGHDAD],
     );
     await client.query(
       `update journal_entry set status = 'posted', approved_by = $2, posted_at = now() where id = $1`,
@@ -157,6 +164,12 @@ const confirm = (id: string, on = '2026-09-14', reference = 'MT103-0001') =>
   withScope(scope(world.manager), (tx) =>
     applications.confirm(tx, world.manager, id, { confirmedOn: on, reference }),
   );
+
+/** The application's row read in the caller's own transaction, for `checksFor`. */
+const statusOfRow = async (tx: Parameters<typeof applications.checksFor>[0], id: string) => {
+  const [row] = await tx.select().from(paymentApplicationTable).where(eq(paymentApplicationTable.id, id));
+  return row!;
+};
 
 const statusOf = async (id: string) => {
   const { rows } = await ownerPool.query(`select * from payment_application where id = $1`, [id]);
@@ -268,24 +281,47 @@ describe('§15.2 · the instalment plan', () => {
 // ---------------------------------------------------------------------------
 
 describe('A11 · ap03-payment-checks', () => {
-  it('without funds Send is refused naming the account; an officer cannot override, a manager can', async () => {
+  it('without funds it is said, never a stop: approved, sent and paid, the account below zero (2026-10-21)', async () => {
     const made = await draft();
     await approve(made.id);
+    // The import's log says the account is short — and never what it holds.
+    const reserved = (await eventsOf()).find((e) => e.event_code === 'FUNDS_RESERVED')!;
+    expect(reserved.summary).toMatch(/does not hold enough; paying it takes it below zero/);
+    expect(reserved.summary).not.toMatch(/available/);
 
-    const refused = await rejection(send(made.id));
-    expect(refused).toMatch(/available against 300,000\.00 IQD/);
+    // The funds check is a warning on the record, with its figures kept apart from its words.
+    const checks = await withScope(scope(world.clerk), async (tx) => applications.checksFor(tx, await statusOfRow(tx, made.id)));
+    const funds = checks.find((check) => check.code === 'funds')!;
+    expect(funds.outcome).toBe('warning');
+    expect(funds.detail).not.toMatch(/IQD|available|300/);
+    expect(funds.figures?.afterIqd).toBe('-300000.0000');
 
-    const officer = await rejection(send(made.id, world.clerk, 'CEO said so'));
-    expect(officer).toMatch(/available against/);
+    // Sent by the officer, with no override to ask for.
+    await send(made.id);
+    expect((await statusOf(made.id)).overridden_checks).toEqual([]);
 
-    await send(made.id, world.manager, 'Owner deposit arrives this afternoon');
-    const row = await statusOf(made.id);
-    expect(row.status).toBe('sent');
-    expect(row.overridden_checks).toEqual(['funds']);
-    expect(row.override_reason).toBe('Owner deposit arrives this afternoon');
-    expect((await eventsOf()).map((e) => e.event_code)).toEqual(
-      expect.arrayContaining(['CHECK_OVERRIDDEN', 'PAYMENT_APPLIED', 'SWIFT_PENDING']),
-    );
+    // Paid: the supplier payment posts and the account goes below zero (C-20, 0425).
+    await postInvoice();
+    const confirmed = await confirm(made.id, '2026-09-14', 'MT103-SHORT');
+    expect(confirmed.supplierPaymentId).toBeTruthy();
+    const bankBalance = async () =>
+      (
+        await ownerPool.query(
+          `select coalesce(sum(l.debit_iqd - l.credit_iqd), 0)::text as balance
+             from journal_line l join journal_entry e on e.id = l.journal_entry_id
+            where l.account_id = $1 and e.status in ('posted', 'reversed')`,
+          [world.accounts.bank],
+        )
+      ).rows[0].balance as string;
+    expect(await bankBalance()).toBe('-300000.0000');
+
+    // Money in still goes in while the account is below zero …
+    await fund(world.accounts.bank!, '100000');
+    expect(await bankBalance()).toBe('-200000.0000');
+    // … and anything else that takes money out is still refused — without saying what it holds.
+    const refused = await rejection(between(world.accounts.grni!, world.accounts.bank!, '1000'));
+    expect(refused).toMatch(/does not hold enough money for this, and a bank or cash account cannot hold less than nothing/);
+    expect(refused).not.toMatch(/200000|-200/);
   });
 
   it('an unverified supplier bank account refuses Send with the cause', async () => {

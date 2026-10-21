@@ -96,12 +96,13 @@ export class SupplierBlockedError extends Error {
  */
 export class InsufficientFundsError extends Error {
   readonly code = 'INSUFFICIENT_FUNDS';
-  constructor(accountCode: string, available: bigint, requested: bigint) {
-    const money = (v: bigint) => toDecimalString(v, 4n);
-    super(
-      `${accountCode} has ${money(available)} IQD available against ${money(requested)} IQD — ` +
-        'deposit or draw the money first, or pay from an account that holds it.',
-    );
+  constructor(
+    accountCode: string,
+    /** Kept for the caller; never in the message — whoever pressed the button may not see balances (2026-10-21). */
+    readonly available: bigint,
+    readonly requested: bigint,
+  ) {
+    super(`${accountCode} does not hold enough money for this payment — deposit or draw the money first, or pay from an account that holds it.`);
     this.name = 'InsufficientFundsError';
   }
 }
@@ -478,6 +479,12 @@ export async function post(
      * reservation is what pays it, not a rival for the same money.
      */
     readonly drawsReservedIqd?: bigint;
+    /**
+     * A payment application's own payment may take the account below zero
+     * (2026-10-21, by direction); its page said so beforehand. 0425's C-20
+     * lets that journal through by the application's link to this payment.
+     */
+    readonly allowOverdraft?: boolean;
   } = {},
 ): Promise<{ journalEntryId: string }> {
   const payment = await load(tx, id);
@@ -505,7 +512,7 @@ export async function post(
   const position = await treasury.accountPosition(tx, payment.bankCashAccountId);
   const amount = parseDecimal(payment.amountIqd, 4n);
   const available = position.availableIqd + (options.drawsReservedIqd ?? 0n);
-  if (available < amount) {
+  if (available < amount && !options.allowOverdraft) {
     throw new InsufficientFundsError(position.accountCode, available, amount);
   }
 

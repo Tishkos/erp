@@ -7,6 +7,7 @@ import { readAttachments, type AttachmentsRead } from '@/components/admin/attach
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
+import { LiveRefresh } from '@/components/admin/live-refresh';
 import { HistoryButton } from '@/components/admin/icon-dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { ProfileLink } from '@/components/admin/profile-link';
@@ -19,12 +20,16 @@ import { formatBusinessDate, formatMoney, formatTimestamp, type Locale } from '@
 import { can } from '@domain/permissions';
 import {
   AWARD_STATUSES,
+  BANK_APPROVAL_STATUSES,
   BOQ_CATEGORIES,
   COMPLIANCE_RESPONSES,
   GUARANTEE_STATUSES,
   INITIATION_ACTIVITY_KINDS,
   INITIATION_FILE_SECTIONS,
+  INSTALLATION_STATUSES,
+  LOAN_STATUSES,
   PROPOSAL_STATUSES,
+  QUOTATION_STATUSES,
   SITE_KINDS,
   SYSTEM_TYPES,
   boqStage,
@@ -72,6 +77,20 @@ import { InitiationPipeline } from '../pipeline';
 export const dynamic = 'force-dynamic';
 
 const ROUTE = '/projects/initiation';
+
+/** The closed list each said field's new value is labelled from, in `admin.project_initiation`. */
+const UPDATE_VALUE_GROUP: Readonly<Record<string, string>> = {
+  stage: 'stage',
+  status: 'status',
+  proposalStatus: 'proposal_status_option',
+  bankApprovalStatus: 'bank_approval_option',
+  loanStatus: 'loan_status_option',
+  installationStatus: 'installation_status_option',
+  awardStatus: 'award_status_option',
+  guaranteeStatus: 'guarantee_status_option',
+  goDecision: 'go_decision_option',
+  systemType: 'system_type_option',
+};
 
 interface Box {
   readonly label: string;
@@ -164,7 +183,9 @@ export default async function ProjectInitiationRecordPage({ params, searchParams
       const notes = await recordNotes.listNotes(tx, { object: initiation.DOCUMENT_TYPE, recordId: initiationNo });
       const pickers = mayEdit || mayApprove ? await initiation.pickers(tx) : null;
       const depts = mayApprove ? (await departments.listAll(tx)).filter((d) => d.active) : [];
-      return { view, files, sectionFiles, notes, pickers, depts };
+      const updates = await initiation.timeline(tx, initiationNo);
+      const version = await initiation.liveVersion(tx, initiationNo);
+      return { view, files, sectionFiles, notes, pickers, depts, updates, version };
     } catch (error) {
       // E1 — a missing record is a 404; anything else reaches the error boundary.
       if (isNotFoundError(error)) return null;
@@ -172,7 +193,7 @@ export default async function ProjectInitiationRecordPage({ params, searchParams
     }
   });
   if (!found) notFound();
-  const { view, files, sectionFiles, notes, pickers, depts } = found;
+  const { view, files, sectionFiles, notes, pickers, depts, updates, version } = found;
   const row = view.initiation;
   const { kind, stage, status } = view;
   const open = status === 'open';
@@ -232,6 +253,8 @@ export default async function ProjectInitiationRecordPage({ params, searchParams
     { label: x('stage_field'), value: <bdi dir="auto">{stageTitle(stage)}</bdi> },
     { label: x('title_field'), value: words(row.title), wide: true },
     { label: kind === 'tender' ? x('issuing_entity') : x('customer_name'), value: words(row.customerName) },
+    ...(kind === 'financing' ? [{ label: x('customer_city'), value: words(row.customerCity) }, { label: x('customer_phone'), value: ltr(row.customerPhone) }] : []),
+    { label: x('phase_field'), value: x(`phase.${view.phase}`) },
     customerBox,
     { label: x('owner'), value: words(view.people.owner) },
     { label: column('branch'), value: <ProfileLink code={row.branchCode} kind="branch" /> },
@@ -255,7 +278,8 @@ export default async function ProjectInitiationRecordPage({ params, searchParams
       <Grid>
         <Field defaultValue={row.title} id="lead-title" label={x('title_field')} name="title" required wide />
         <Field defaultValue={row.customerName} id="lead-customer-name" label={x('customer_name')} name="customer_name" required wide />
-        <Field defaultValue={row.customerPhone ?? ''} id="lead-customer-phone" label={x('customer_phone')} name="customer_phone" />
+        <Field defaultValue={row.customerPhone ?? ''} id="lead-customer-phone" label={x('customer_phone')} name="customer_phone" required={kind === 'financing'} />
+        <Field defaultValue={row.customerCity ?? ''} id="lead-customer-city" label={x('customer_city')} name="customer_city" required={kind === 'financing'} />
         <Field defaultValue={row.initialContactOn ?? today} id="lead-initial-contact" label={x('initial_contact_on')} name="initial_contact_on" type="date" />
         <Select
           defaultValue={row.leadSourceCode ?? ''}
@@ -294,13 +318,62 @@ export default async function ProjectInitiationRecordPage({ params, searchParams
       <Field defaultValue={row.surveyNote ?? ''} id="survey-note" label={x('survey_note')} name="survey_note" wide />
     </>
   );
-  const proposalForm = (
+  const proposalForm =
+    kind === 'financing' ? (
+      // The financing road's quotation, in the proposal's columns: sent, then agreed or refused.
+      <Grid>
+        <Field defaultValue={row.proposalRef ?? ''} id="quotation-ref" label={x('quotation_ref')} name="proposal_ref" />
+        <Field defaultValue={row.proposalOn ?? today} id="quotation-on" label={x('quotation_on')} name="proposal_on" required type="date" />
+        <Field defaultValue={plain(row.proposalValueIqd)} id="quotation-value" label={x('quotation_value')} name="proposal_value_iqd" required />
+        <Select
+          defaultValue={row.proposalStatus && (QUOTATION_STATUSES as readonly string[]).includes(row.proposalStatus) ? row.proposalStatus : 'sent'}
+          id="quotation-status"
+          label={x('quotation_status')}
+          name="proposal_status"
+          options={QUOTATION_STATUSES.map((value) => ({ value, label: x(`quotation_status_option.${value}`) }))}
+        />
+      </Grid>
+    ) : (
+      <Grid>
+        <Field defaultValue={row.proposalRef ?? ''} id="proposal-ref" label={x('proposal_ref')} name="proposal_ref" />
+        <Field defaultValue={row.proposalOn ?? ''} id="proposal-on" label={x('proposal_on')} name="proposal_on" type="date" />
+        <Field defaultValue={plain(row.proposalValueIqd)} id="proposal-value" label={x('proposal_value')} name="proposal_value_iqd" />
+        <Select defaultValue={row.proposalStatus ?? 'draft'} id="proposal-status" label={x('proposal_status')} name="proposal_status" options={PROPOSAL_STATUSES.map((value) => ({ value, label: x(`proposal_status_option.${value}`) }))} />
+      </Grid>
+    );
+  const bankForm = (
     <Grid>
-      <Field defaultValue={row.proposalRef ?? ''} id="proposal-ref" label={x('proposal_ref')} name="proposal_ref" />
-      <Field defaultValue={row.proposalOn ?? ''} id="proposal-on" label={x('proposal_on')} name="proposal_on" type="date" />
-      <Field defaultValue={plain(row.proposalValueIqd)} id="proposal-value" label={x('proposal_value')} name="proposal_value_iqd" />
-      <Select defaultValue={row.proposalStatus ?? 'draft'} id="proposal-status" label={x('proposal_status')} name="proposal_status" options={PROPOSAL_STATUSES.map((value) => ({ value, label: x(`proposal_status_option.${value}`) }))} />
+      <Field defaultValue={row.financingBank ?? ''} id="bank-name" label={x('financing_bank')} name="financing_bank" required />
+      <Field defaultValue={row.financingBankRef ?? ''} id="bank-ref" label={x('financing_bank_ref')} name="financing_bank_ref" />
+      <Select defaultValue={row.bankApprovalStatus ?? 'pending'} id="bank-status" label={x('bank_approval_status')} name="bank_approval_status" options={BANK_APPROVAL_STATUSES.map((value) => ({ value, label: x(`bank_approval_option.${value}`) }))} />
+      <Field defaultValue={row.bankDecidedOn ?? ''} id="bank-decided" label={x('bank_decided_on')} name="bank_decided_on" type="date" />
+      <Field defaultValue={plain(row.loanAmountIqd ?? row.proposalValueIqd)} id="bank-loan-amount" label={x('loan_amount')} name="loan_amount_iqd" />
     </Grid>
+  );
+  // Stages 4 and 7 both write the loan; each section's dialog carries its own ids.
+  const loanForm = (prefix: string) => (
+    <Grid>
+      <Select defaultValue={row.loanStatus ?? 'pending'} id={`${prefix}-status`} label={x('loan_status')} name="loan_status" options={LOAN_STATUSES.map((value) => ({ value, label: x(`loan_status_option.${value}`) }))} />
+      <Field defaultValue={plain(row.loanReceivedIqd)} hint={x('loan_received_hint', { amount: money(row.loanAmountIqd) })} id={`${prefix}-received`} label={x('loan_received')} name="loan_received_iqd" />
+      <Field defaultValue={row.loanFirstReceivedOn ?? ''} id={`${prefix}-first-on`} label={x('loan_first_received_on')} name="loan_first_received_on" type="date" />
+      <Field defaultValue={row.loanFullyGrantedOn ?? ''} id={`${prefix}-full-on`} label={x('loan_fully_granted_on')} name="loan_fully_granted_on" type="date" />
+    </Grid>
+  );
+  const installationForm = (
+    <>
+      <Grid>
+        <Select
+          defaultValue={row.installationStatus ?? 'not_started'}
+          id="installation-status"
+          label={x('installation_status')}
+          name="installation_status"
+          options={INSTALLATION_STATUSES.map((value) => ({ value, label: x(`installation_status_option.${value}`) }))}
+        />
+        <Field defaultValue={row.installationStartedOn ?? ''} id="installation-started" label={x('installation_started_on')} name="installation_started_on" type="date" />
+        <Field defaultValue={row.installationCompletedOn ?? ''} id="installation-completed" label={x('installation_completed_on')} name="installation_completed_on" type="date" />
+      </Grid>
+      <Field defaultValue={row.installationNote ?? ''} id="installation-note" label={x('installation_note')} name="installation_note" type="textarea" wide />
+    </>
   );
   const tenderLeadForm = (
     <Grid>
@@ -370,7 +443,7 @@ export default async function ProjectInitiationRecordPage({ params, searchParams
       doors={paperclip('initiation_contract')}
       foot={editDialog('contract', contractForm)}
       id="stage-contract"
-      title={kind === 'direct_sales' ? stageTitle('contract') : x('section.contract')}
+      title={kind === 'direct_sales' ? stageTitle('contract') : kind === 'financing' ? stageTitle('fin_contract') : x('section.contract')}
     >
       <Boxes
         rows={[
@@ -387,8 +460,15 @@ export default async function ProjectInitiationRecordPage({ params, searchParams
 
   return (
     <AdminPage
-      back={{ href: ROUTE, label: page('project_initiation') }}
-      tabs={<SectionTabs route={ROUTE} />}
+      actions={<LiveRefresh endpoint={`/projects/pipeline/version?no=${encodeURIComponent(row.initiationNo)}`} label={x('live')} version={version} />}
+      back={
+        view.phase === 'opportunity'
+          ? { href: '/projects/opportunities', label: page('project_opportunities') }
+          : view.phase === 'project'
+            ? { href: '/projects', label: page('project_master') }
+            : { href: ROUTE, label: page('project_initiation') }
+      }
+      tabs={<SectionTabs route={view.phase === 'opportunity' ? '/projects/opportunities' : view.phase === 'project' ? '/projects' : ROUTE} />}
       title={`${row.initiationNo} · ${row.title}`}
       trail={[{ href: '/', label: t('dashboard_label') }]}
       variant="sap"
@@ -488,7 +568,7 @@ export default async function ProjectInitiationRecordPage({ params, searchParams
             ) : null}
           </>
         }
-        documentType={page('project_initiation')}
+        documentType={x(`phase.${view.phase}`)}
         fields={fields}
         id="initiation-document"
         linesCount={view.boq.length}
@@ -875,6 +955,165 @@ export default async function ProjectInitiationRecordPage({ params, searchParams
           {contractSection}
         </>
       ) : null}
+
+      {/* ── The Renewable Energy Financing Initiative ───────────────────── */}
+      {kind === 'financing' ? (
+        <>
+          <StageSection chip={chipOf('fin_customer')} chipLabel={chipLabelOf('fin_customer')} foot={editDialog('lead', leadForm)} id="stage-lead" title={stageTitle('fin_customer')}>
+            <Boxes
+              rows={[
+                { label: x('customer_name'), value: words(row.customerName) },
+                { label: x('customer_city'), value: words(row.customerCity) },
+                { label: x('customer_phone'), value: ltr(row.customerPhone) },
+                { label: x('initial_contact_on'), value: ltr(day(row.initialContactOn)) },
+                customerBox,
+                { label: x('lead_note'), value: words(row.leadNote), wide: true },
+              ]}
+            />
+          </StageSection>
+
+          {reached('fin_quotation') ? (
+            <StageSection
+              chip={chipOf('fin_quotation')}
+              chipLabel={chipLabelOf('fin_quotation')}
+              doors={
+                <>
+                  <ExportIcon exportKey="project_proposal" id={row.initiationNo} title={`${x('quotation_print')} ${row.initiationNo}`} />
+                  {paperclip('initiation_proposal')}
+                </>
+              }
+              foot={editDialog('proposal', proposalForm)}
+              id="stage-proposal"
+              title={stageTitle('fin_quotation')}
+            >
+              <Boxes
+                rows={[
+                  { label: x('quotation_ref'), value: ltr(row.proposalRef) },
+                  { label: x('quotation_on'), value: ltr(day(row.proposalOn)) },
+                  { label: x('quotation_value'), value: ltr(money(row.proposalValueIqd)) },
+                  { label: x('quotation_status'), value: coded('quotation_status_option', row.proposalStatus) },
+                ]}
+              />
+            </StageSection>
+          ) : null}
+
+          {reached('fin_bank_approval') ? (
+            <StageSection
+              chip={chipOf('fin_bank_approval')}
+              chipLabel={chipLabelOf('fin_bank_approval')}
+              doors={paperclip('initiation_bank')}
+              foot={editDialog('bank_approval', bankForm)}
+              id="stage-bank_approval"
+              title={stageTitle('fin_bank_approval')}
+            >
+              <Boxes
+                rows={[
+                  { label: x('financing_bank'), value: words(row.financingBank) },
+                  { label: x('financing_bank_ref'), value: ltr(row.financingBankRef) },
+                  { label: x('bank_approval_status'), value: coded('bank_approval_option', row.bankApprovalStatus ?? 'pending') },
+                  { label: x('bank_decided_on'), value: ltr(day(row.bankDecidedOn)) },
+                  { label: x('loan_amount'), value: ltr(money(row.loanAmountIqd)) },
+                ]}
+              />
+            </StageSection>
+          ) : null}
+
+          {reached('fin_loan_first') ? (
+            <StageSection chip={chipOf('fin_loan_first')} chipLabel={chipLabelOf('fin_loan_first')} foot={editDialog('loan', loanForm('loan'))} id="stage-loan" title={stageTitle('fin_loan_first')}>
+              <Boxes
+                rows={[
+                  { label: x('loan_status'), value: coded('loan_status_option', row.loanStatus ?? 'pending') },
+                  { label: x('loan_amount'), value: ltr(money(row.loanAmountIqd)) },
+                  { label: x('loan_received'), value: ltr(money(row.loanReceivedIqd)) },
+                  { label: x('loan_first_received_on'), value: ltr(day(row.loanFirstReceivedOn)) },
+                ]}
+              />
+            </StageSection>
+          ) : null}
+
+          {reached('fin_installation') ? (
+            <StageSection
+              chip={chipOf('fin_installation')}
+              chipLabel={chipLabelOf('fin_installation')}
+              doors={paperclip('initiation_installation')}
+              foot={editDialog('installation', installationForm)}
+              id="stage-installation"
+              title={stageTitle('fin_installation')}
+            >
+              <Boxes
+                rows={[
+                  { label: x('installation_status'), value: coded('installation_status_option', row.installationStatus ?? 'not_started') },
+                  { label: x('installation_started_on'), value: ltr(day(row.installationStartedOn)) },
+                  { label: x('installation_completed_on'), value: ltr(day(row.installationCompletedOn)) },
+                  { label: x('installation_note'), value: words(row.installationNote), wide: true },
+                ]}
+              />
+            </StageSection>
+          ) : null}
+
+          {contractSection}
+
+          {reached('fin_loan_full') ? (
+            <StageSection chip={chipOf('fin_loan_full')} chipLabel={chipLabelOf('fin_loan_full')} foot={editDialog('loan', loanForm('loan-full'))} id="stage-loan-full" title={stageTitle('fin_loan_full')}>
+              <Boxes
+                rows={[
+                  { label: x('loan_status'), value: coded('loan_status_option', row.loanStatus ?? 'pending') },
+                  { label: x('loan_amount'), value: ltr(money(row.loanAmountIqd)) },
+                  { label: x('loan_received'), value: ltr(money(row.loanReceivedIqd)) },
+                  { label: x('loan_fully_granted_on'), value: ltr(day(row.loanFullyGrantedOn)) },
+                ]}
+              />
+            </StageSection>
+          ) : null}
+        </>
+      ) : null}
+
+      {/* ── Updates: every change of the record, newest first, live ───────── */}
+      <section aria-labelledby="initiation-updates-title" className={s.sapDoc} data-initiation-updates="" id="updates">
+        <div className={s.sapWindow}>
+          <h2 className={s.sapTitle} id="initiation-updates-title">
+            <span>{x('updates_title')}</span>
+            <span className={s.sapTitleMeta}>{t('rows_shown', { count: updates.length })}</span>
+          </h2>
+          <ol className="flex flex-col divide-y divide-border px-4 py-2">
+            {updates.length === 0 ? <li className="py-2 text-sm text-muted-fg">{x('updates_none')}</li> : null}
+            {updates.map((entry, index) => {
+              const said = entry.changed
+                .map((change) => {
+                  const field = x.has(`update_field.${change.field}`) ? x(`update_field.${change.field}`) : null;
+                  if (!field) return null;
+                  if (!change.value) return field;
+                  const group = UPDATE_VALUE_GROUP[change.field];
+                  const value = group && x.has(`${group}.${change.value}`) ? x(`${group}.${change.value}`) : change.value;
+                  return `${field}: ${value}`;
+                })
+                .filter((text): text is string => Boolean(text));
+              return (
+                <li className="flex flex-col gap-0.5 py-2 text-sm sm:flex-row sm:gap-4" data-update={entry.action} key={`${entry.at.toISOString()}-${index}`}>
+                  <span className="shrink-0 text-muted-fg tabular-nums sm:w-44">
+                    <bdi dir="ltr">{when(entry.at)}</bdi>
+                  </span>
+                  <span className="min-w-0 [overflow-wrap:anywhere]">
+                    <strong className="font-medium">{x.has(`update.${entry.action}`) ? x(`update.${entry.action}`) : x('update.changed')}</strong>
+                    {entry.action === 'stage_advanced' && entry.stage ? <> · {coded('stage', entry.stage)}</> : null}
+                    {said.length > 0 ? <span className="text-muted-fg"> · {said.join(' · ')}</span> : null}
+                    {entry.reason ? (
+                      <span className="text-muted-fg">
+                        {' '}
+                        · <bdi dir="auto">{entry.reason}</bdi>
+                      </span>
+                    ) : null}
+                    <span className="text-muted-fg">
+                      {' '}
+                      — <bdi dir="auto">{entry.actor ?? '—'}</bdi>
+                    </span>
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      </section>
 
       {/* ── Follow-up activities: what was done and said, newest first ───── */}
       <section aria-labelledby="initiation-activities-title" className={s.sapDoc} id="activities">

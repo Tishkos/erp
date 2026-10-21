@@ -123,8 +123,9 @@ describe('the screen catalogue covers the approved tree', () => {
     // + Automation (Agent 10): one settings screen; its rule and run pages sit behind it.
     // + Manual Stock Additions (2026-10-06): one document screen.
     // + Project Initiation (2026-10-12, the Project Guide): one document screen.
-    expect(allMenuItems()).toHaveLength(255);
-    expect(Object.keys(SCREENS)).toHaveLength(255);
+    // + Opportunities and the Pipeline Board (2026-10-21, Leads → Opportunities → Projects): a list and a workspace.
+    expect(allMenuItems()).toHaveLength(257);
+    expect(Object.keys(SCREENS)).toHaveLength(257);
   });
 
   it('uses only declared archetypes', () => {
@@ -157,7 +158,8 @@ describe('the screen catalogue covers the approved tree', () => {
     // + 1 (Landed Costs became a document on 2026-10-06: the register and the import's landed-cost sheet behind it).
     // + 2 (Manual Stock Additions, a document: the register and the record, 2026-10-06).
     // + 2 (Project Initiation, a document: the register and the record, 2026-10-12).
-    expect(total).toBe(374);
+    // + 1 (Opportunities, a list) + 1 (the Pipeline Board, a workspace), 2026-10-21.
+    expect(total).toBe(376);
   });
 });
 
@@ -211,7 +213,8 @@ describe('every screen has one address', () => {
     );
     expect(shared).toEqual({});
     // 254: Manual Stock Additions (2026-10-06). 255: Project Initiation (2026-10-12).
-    expect(screenRoutes().size).toBe(255);
+    // 256–257: Opportunities and the Pipeline Board (2026-10-21).
+    expect(screenRoutes().size).toBe(257);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -387,6 +390,8 @@ describe('every screen has one address', () => {
       // The Project Guide (2026-10-12) — Project Initiation.
       '/projects/initiation',
       '/projects/material-issues',
+      '/projects/opportunities',
+      '/projects/pipeline',
       '/projects/plan',
       '/projects/procurement',
       '/projects/progress',

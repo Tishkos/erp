@@ -131,6 +131,36 @@ export async function projectInitiation(ctx: BuildContext, initiationNo: string)
       add(x('proposal_value'), money(row.proposalValueIqd), true);
       add(x('proposal_status'), option('proposal_status_option', row.proposalStatus));
     }
+  } else if (view.kind === 'financing') {
+    // The Renewable Energy Financing Initiative's sheet, stage by stage.
+    add(x('customer_city'), row.customerCity);
+    add(x('customer_phone'), row.customerPhone, true);
+    add(x('initial_contact_on'), day(row.initialContactOn), true);
+    if (reached('fin_quotation')) {
+      add(x('quotation_ref'), row.proposalRef, true);
+      add(x('quotation_on'), day(row.proposalOn), true);
+      add(x('quotation_value'), money(row.proposalValueIqd), true);
+      add(x('quotation_status'), option('quotation_status_option', row.proposalStatus));
+    }
+    if (reached('fin_bank_approval')) {
+      add(x('financing_bank'), row.financingBank);
+      add(x('financing_bank_ref'), row.financingBankRef, true);
+      add(x('bank_approval_status'), option('bank_approval_option', row.bankApprovalStatus ?? 'pending'));
+      add(x('bank_decided_on'), day(row.bankDecidedOn), true);
+      add(x('loan_amount'), money(row.loanAmountIqd), true);
+    }
+    if (reached('fin_loan_first')) {
+      add(x('loan_status'), option('loan_status_option', row.loanStatus ?? 'pending'));
+      add(x('loan_received'), money(row.loanReceivedIqd), true);
+      add(x('loan_first_received_on'), day(row.loanFirstReceivedOn), true);
+      if (row.loanFullyGrantedOn) add(x('loan_fully_granted_on'), day(row.loanFullyGrantedOn), true);
+    }
+    if (reached('fin_installation')) {
+      add(x('installation_status'), option('installation_status_option', row.installationStatus ?? 'not_started'));
+      add(x('installation_started_on'), day(row.installationStartedOn), true);
+      add(x('installation_completed_on'), day(row.installationCompletedOn), true);
+      if (row.installationNote) add(x('installation_note'), row.installationNote);
+    }
   } else {
     add(x('tender_ref'), row.tenderRef, true);
     add(x('submission_deadline'), day(row.submissionDeadline), true);

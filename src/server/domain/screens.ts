@@ -161,6 +161,9 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   // 6 — Projects
   // The Project Guide (2026-10-12): the register of initiations and one record's page.
   project_initiation: 'document',
+  // Leads → Opportunities → Projects (2026-10-21): the same records past their first stage; the live board.
+  project_opportunities: 'list',
+  project_board: 'workspace',
   project_master: 'document',
   contracts: 'document',
   wbs: 'workspace',
@@ -588,6 +591,8 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/administration/automation',
   // The Project Guide (2026-10-12) — Project Initiation: the two workflows before a project.
   '/projects/initiation',
+  '/projects/opportunities',
+  '/projects/pipeline',
   // REQ-PM-001 PM-1 — the Project System's structure.
   '/projects',
   '/projects/contracts',

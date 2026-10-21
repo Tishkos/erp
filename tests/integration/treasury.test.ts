@@ -380,7 +380,7 @@ describe('07.1 gate · currency and approval limits (§17)', () => {
           }),
         ),
       ),
-    ).toMatch(/holds 1000.0000 and this needs 2000.0000/);
+    ).toMatch(/does not hold enough money for this/);
   });
 });
 
@@ -590,7 +590,7 @@ describe('07.4 gate · an inter-account transfer is one balanced journal (§17)'
           }),
         ),
       ),
-    ).toMatch(/holds 1000.0000 and this needs 4000.0000/);
+    ).toMatch(/does not hold enough money for this/);
   });
 
   it('refuses to overfill a cash float beyond its limit (§17)', async () => {

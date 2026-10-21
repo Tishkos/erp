@@ -115,7 +115,7 @@
     "inventory_reports": "Reports",
     "inventory_settings": "Settings",
     "project_master": "Project Master",
-    "project_initiation": "Project Initiation",
+    "project_initiation": "Leads",
     "contracts": "Contracts",
     "wbs": "WBS",
     "cost_plan": "Cost Plan",
@@ -329,7 +329,9 @@
     "cloud_files_settings": "Cloud Files Settings",
     "exceptions": "Exceptions",
     "control_center": "Control Center",
-    "automation": "Automation"
+    "automation": "Automation",
+    "project_opportunities": "Opportunities",
+    "project_board": "Pipeline Board"
   },
   "auth": {
     "email": "Email",
@@ -2200,6 +2202,15 @@
       "cash_limit_hint": "The most this float may hold."
     },
     "items": {
+      "category_accounts": "Category accounts",
+      "category_accounts_intro": "The inventory and COGS accounts an item takes when it names none. Saving a default also fills every stock item it answers for that names no account, and a new item takes it as it is made. A sale still posts to the item's own accounts.",
+      "category_accounts_scope": "Default for",
+      "category_accounts_company": "The company (any category without its own)",
+      "category_accounts_none": "No default is set yet.",
+      "category_accounts_lacking": "Items without accounts",
+      "category_accounts_lacking_total": "{count, plural, =0 {Every stock item names its inventory and COGS accounts.} one {# stock item names no inventory or COGS account, so it cannot be sold.} other {# stock items name no inventory or COGS account, so they cannot be sold.}}",
+      "category_accounts_unset": "Categories in use with no default of their own: {list}",
+      "category_accounts_save": "Save default",
       "subtitle": "The one item record Purchasing, Inventory and Sales all use.",
       "new": "New item",
       "created_note": "The system gives the item its code when you save. It is the identity every document selects by, and it does not change afterwards.",
@@ -3693,7 +3704,10 @@
       "drafts_open": "Continue",
       "drafts_discard": "Discard",
       "drafts_saved": "Last typed {time}",
-      "paper_file_optional": "Attach the paper (optional)"
+      "paper_file_optional": "Attach the paper (optional)",
+      "overdraft_title": "{account} does not hold enough money for this payment.",
+      "overdraft_body": "It can still be submitted, approved, sent and paid — paying it takes the account below zero.",
+      "overdraft_figures": "Available {available} · this payment {amount} · after it {after}."
     },
     "supplier_advances": {
       "subtitle": "Money paid to a supplier before the invoice — the deposits on imports, and advances against orders.",
@@ -5889,11 +5903,13 @@
       "kind_all": "All types",
       "kind_option": {
         "direct_sales": "Direct Sales Project",
-        "tender": "Tender Project"
+        "tender": "Tender Project",
+        "financing": "Financed Customer (Renewable Energy Financing)"
       },
       "kind_about": {
         "direct_sales": "For direct customers and special projects: the Pre-Sales Form, the system type and an assessment of the customer’s site.",
-        "tender": "For formal tenders and government tender documents (ITB/RFP): submission deadlines, bid bonds and a compliance matrix."
+        "tender": "For formal tenders and government tender documents (ITB/RFP): submission deadlines, bid bonds and a compliance matrix.",
+        "financing": "For customers whose system a bank loan pays for: the customer, the quotation agreed, the bank’s approval, the loan paid in part, the installation, the contract and the loan fully granted."
       },
       "title_field": "Project name",
       "customer_name": "Customer name",
@@ -5926,7 +5942,14 @@
         "pre_bid": "Site Visit & Pre-Bid Meeting",
         "tender_design": "Tender Design BOQ",
         "bidding": "Compliance Matrix & Bidding",
-        "award": "Submission & Award"
+        "award": "Submission & Award",
+        "fin_customer": "Customer",
+        "fin_quotation": "Quotation Sent",
+        "fin_bank_approval": "Bank Approval",
+        "fin_loan_first": "Loan — First Payment",
+        "fin_installation": "Installation",
+        "fin_contract": "Contract",
+        "fin_loan_full": "Loan — Fully Granted"
       },
       "section": {
         "lead": "Sales Lead",
@@ -5938,7 +5961,10 @@
         "pre_bid": "Site Visit & Pre-Bid Meeting",
         "bidding": "Bid and guarantee",
         "award": "Submission & Award",
-        "contract": "Contract Signing"
+        "contract": "Contract Signing",
+        "bank_approval": "Bank Approval",
+        "loan": "Loan",
+        "installation": "Installation"
       },
       "pipeline_title": "Workflow",
       "pipeline_meta": "{done} of {total} stages complete",
@@ -5993,7 +6019,19 @@
         "contract_value": "Contract value",
         "payment_terms": "Payment terms",
         "contract_files": "The signed contract, uploaded",
-        "customer_partner": "An approved customer from the Customers list"
+        "customer_partner": "An approved customer from the Customers list",
+        "customer_city": "the customer’s city",
+        "quotation_on": "the date the quotation was sent",
+        "quotation_value": "the quotation’s value",
+        "quotation_agreed": "the customer’s agreement to the quotation",
+        "financing_bank": "the financing bank",
+        "bank_approved": "the bank’s approval",
+        "bank_decided_on": "the date the bank decided",
+        "loan_amount": "the loan amount the bank approved",
+        "loan_partially_paid": "the loan paid in part",
+        "loan_received": "the amount received and its date",
+        "installation_completed": "the installation completed, with its date",
+        "loan_fully_granted": "the loan fully granted, with its date"
       },
       "second_person_note": "The contract is ready. Somebody other than whoever raised this record confirms it, and the project is released in the same step.",
       "customer_partner": "Customer (approved)",
@@ -6190,7 +6228,9 @@
         "initiation_proposal": "Proposal",
         "initiation_tender_docs": "Tender documents",
         "initiation_bid": "Bid and guarantee",
-        "initiation_contract": "Signed contract"
+        "initiation_contract": "Signed contract",
+        "initiation_bank": "Bank and loan papers",
+        "initiation_installation": "Installation"
       },
       "file_name": "File",
       "file_section_label": "Filed under",
@@ -6198,7 +6238,127 @@
       "proposal_technical": "Technical proposal",
       "proposal_commercial": "Commercial proposal",
       "proposal_scope": "Scope of supply and works",
-      "proposal_total": "Proposal value"
+      "proposal_total": "Proposal value",
+      "subtitle_lead": "Every client at first contact — a sales lead, a tender lead or a financed customer — each with its own number, kept from lead to project.",
+      "subtitle_opportunity": "Clients past their first stage and not yet a project: the Pre-Sales Form onwards, a tender from Go / No-Go, a financed customer from the quotation.",
+      "board_subtitle": "Every client as a card in the column where it stands — leads, opportunities, projects — updated live.",
+      "board_empty": "Nobody here.",
+      "board_truncated": "Only the 400 most recently updated records are on the board. Choose a type to see the rest.",
+      "owner_everyone": "Everyone",
+      "owner_me": "Mine",
+      "live": "Live",
+      "last_update": "Last update",
+      "phase_field": "Pipeline",
+      "phase": {
+        "lead": "Lead",
+        "opportunity": "Opportunity",
+        "project": "Project"
+      },
+      "customer_city": "City",
+      "customer_phone_hint": "The financed customer’s first stage asks for the phone and the city.",
+      "outcome": {
+        "pending": "Pending",
+        "recorded": "Recorded",
+        "sent": "Sent",
+        "agreed": "Agreed",
+        "refused": "Refused",
+        "approved": "Approved",
+        "rejected": "Rejected",
+        "partially_paid": "Partially paid",
+        "in_progress": "In progress",
+        "completed": "Completed",
+        "signed": "Signed",
+        "fully_granted": "Fully granted"
+      },
+      "quotation_ref": "Quotation no.",
+      "quotation_on": "Sent on",
+      "quotation_value": "Quotation value (IQD)",
+      "quotation_status": "Customer’s answer",
+      "quotation_status_option": {
+        "sent": "Sent — waiting",
+        "accepted": "Agreed",
+        "rejected": "Refused"
+      },
+      "quotation_print": "Quotation",
+      "financing_bank": "Financing bank",
+      "financing_bank_ref": "Bank application no.",
+      "bank_approval_status": "Bank’s answer",
+      "bank_approval_option": {
+        "pending": "Pending",
+        "approved": "Approved",
+        "rejected": "Rejected"
+      },
+      "bank_decided_on": "Decided on",
+      "loan_amount": "Loan approved (IQD)",
+      "loan_status": "Loan",
+      "loan_status_option": {
+        "pending": "Pending",
+        "partially_paid": "Partially paid",
+        "fully_granted": "Fully granted"
+      },
+      "loan_received": "Received so far (IQD)",
+      "loan_received_hint": "Of the {amount} the bank approved.",
+      "loan_first_received_on": "First payment received on",
+      "loan_fully_granted_on": "Fully granted on",
+      "installation_status": "Installation",
+      "installation_status_option": {
+        "not_started": "Not started",
+        "in_progress": "In progress",
+        "completed": "Completed"
+      },
+      "installation_started_on": "Started on",
+      "installation_completed_on": "Completed on",
+      "installation_note": "Installation note",
+      "updates_title": "Updates",
+      "updates_none": "Nothing yet.",
+      "update": {
+        "created": "Opened",
+        "stage_advanced": "Moved to stage",
+        "changed": "Updated",
+        "file": "File added",
+        "lead_saved": "Customer details saved",
+        "pre_sales_saved": "Pre-Sales Form saved",
+        "site_survey_saved": "Site survey saved",
+        "proposal_saved": "Proposal / quotation saved",
+        "tender_lead_saved": "Tender lead saved",
+        "go_no_go_saved": "Qualification saved",
+        "pre_bid_saved": "Site visit saved",
+        "bidding_saved": "Bid saved",
+        "award_saved": "Submission & award saved",
+        "contract_saved": "Contract saved",
+        "bank_approval_saved": "Bank approval saved",
+        "loan_saved": "Loan saved",
+        "installation_saved": "Installation saved",
+        "boq_line_added": "BOQ line added",
+        "boq_line_removed": "BOQ line removed",
+        "compliance_line_added": "Compliance line added",
+        "compliance_line_answered": "Compliance line answered",
+        "compliance_line_removed": "Compliance line removed",
+        "activity_logged": "Activity logged",
+        "note_added": "Note added",
+        "go": "Decided: Go",
+        "no_go": "Decided: No-Go",
+        "lost": "Marked lost",
+        "converted": "Converted into a project"
+      },
+      "update_field": {
+        "stage": "Stage",
+        "status": "Status",
+        "proposalStatus": "Answer",
+        "bankApprovalStatus": "Bank",
+        "loanStatus": "Loan",
+        "installationStatus": "Installation",
+        "awardStatus": "Award",
+        "guaranteeStatus": "Guarantee",
+        "goDecision": "Decision",
+        "systemType": "System type"
+      },
+      "board_column": {
+        "lead": "Leads",
+        "opportunity": "Opportunities",
+        "project": "Projects",
+        "lost": "Lost"
+      }
     },
     "project_settings": {
       "title": "Project Settings",
@@ -8536,6 +8696,36 @@
       "col_paid": "Paid",
       "col_left": "Left",
       "from_sheet": "From the sheet"
+    },
+    "tracking": {
+      "title": "Live tracking",
+      "live": "Live",
+      "asking": "Asking the shipping line where the container is…",
+      "open_on": "Track on {carrier}’s site",
+      "last_event": "Last event",
+      "on_vessel": "On vessel",
+      "carrier_eta": "Line’s expected arrival",
+      "our_eta": "Our ETA",
+      "checked": "Checked {time}",
+      "none": "The line has no events for this container yet.",
+      "not_configured": "The live feed from {carrier} is not set up on this server yet. The link opens {carrier}’s own tracking page for this container.",
+      "unknown_carrier": "The shipping line cannot be told from this container number. Write the shipping line on the B/L and the tracking follows it.",
+      "failed": "The shipping line did not answer just now. It is asked again in a few minutes; the link opens its own page.",
+      "estimated": "expected",
+      "planned": "planned",
+      "event": {
+        "empty_out": "Empty container released",
+        "gate_in": "Gate in at the terminal",
+        "loaded": "Loaded on vessel",
+        "departed": "Vessel departed",
+        "arrived": "Vessel arrived",
+        "discharged": "Discharged from vessel",
+        "transshipped": "Transshipped",
+        "gate_out": "Gate out (full)",
+        "empty_returned": "Empty container returned",
+        "customs": "Customs / inspection",
+        "other": "Event"
+      }
     }
   },
   "profile": {

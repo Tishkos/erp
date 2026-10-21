@@ -115,7 +115,7 @@
     "inventory_reports": "التقارير",
     "inventory_settings": "الإعدادات",
     "project_master": "الملف الرئيسي للمشروع",
-    "project_initiation": "تأسيس المشاريع",
+    "project_initiation": "العملاء المحتملون",
     "contracts": "العقود",
     "wbs": "هيكل تقسيم العمل (WBS)",
     "cost_plan": "خطة التكاليف",
@@ -329,7 +329,9 @@
     "cloud_files_settings": "إعدادات Cloud Files",
     "exceptions": "الاستثناءات",
     "control_center": "مركز التحكم",
-    "automation": "الأتمتة"
+    "automation": "الأتمتة",
+    "project_opportunities": "الفرص",
+    "project_board": "لوحة المسار"
   },
   "auth": {
     "email": "البريد الإلكتروني",
@@ -2200,6 +2202,15 @@
       "cash_limit_hint": "أقصى ما تحمله هذه العهدة."
     },
     "items": {
+      "category_accounts": "حسابات الفئات",
+      "category_accounts_intro": "حسابا المخزون وتكلفة البضاعة المبيعة اللذان يأخذهما الصنف حين لا يسمّي حساباً. حفظ الافتراضي يملأ أيضاً كل صنف مخزني يشمله ولا يسمّي حساباً، ويأخذه الصنف الجديد عند إنشائه. يبقى البيع مرحَّلاً إلى حسابات الصنف نفسه.",
+      "category_accounts_scope": "الافتراضي لـ",
+      "category_accounts_company": "الشركة (أي فئة ليس لها افتراضي خاص)",
+      "category_accounts_none": "لم يُحدَّد افتراضي بعد.",
+      "category_accounts_lacking": "أصناف بلا حسابات",
+      "category_accounts_lacking_total": "{count, plural, =0 {كل صنف مخزني يسمّي حسابي المخزون وتكلفة البضاعة المبيعة.} one {صنف مخزني واحد لا يسمّي حساب مخزون أو تكلفة بضاعة مبيعة، فلا يمكن بيعه.} other {# أصناف مخزنية لا تسمّي حساب مخزون أو تكلفة بضاعة مبيعة، فلا يمكن بيعها.}}",
+      "category_accounts_unset": "فئات مستخدمة ليس لها افتراضي خاص: {list}",
+      "category_accounts_save": "حفظ الافتراضي",
       "subtitle": "سجل الصنف الواحد الذي تستخدمه المشتريات والمخزون والمبيعات.",
       "new": "صنف جديد",
       "created_note": "يمنح النظام الصنف رمزه عند الحفظ. وهو الهوية التي يختار بها كل مستند، فلا يتغير بعد ذلك.",
@@ -3693,7 +3704,10 @@
       "drafts_open": "متابعة",
       "drafts_discard": "تجاهل",
       "drafts_saved": "آخر كتابة {time}",
-      "paper_file_optional": "أرفق الورقة (اختياري)"
+      "paper_file_optional": "أرفق الورقة (اختياري)",
+      "overdraft_title": "لا يحتوي {account} على مال كافٍ لهذه الدفعة.",
+      "overdraft_body": "يمكن مع ذلك تقديمها والموافقة عليها وإرسالها ودفعها — دفعها يجعل رصيد الحساب تحت الصفر.",
+      "overdraft_figures": "المتاح {available} · هذه الدفعة {amount} · بعدها {after}."
     },
     "supplier_advances": {
       "subtitle": "المبالغ المدفوعة للمورد قبل الفاتورة — عربون الاستيراد والسلف مقابل أوامر الشراء.",
@@ -5889,11 +5903,13 @@
       "kind_all": "كل الأنواع",
       "kind_option": {
         "direct_sales": "مشروع بيع مباشر",
-        "tender": "مشروع مناقصة"
+        "tender": "مشروع مناقصة",
+        "financing": "عميل ممول (تمويل الطاقة المتجددة)"
       },
       "kind_about": {
         "direct_sales": "للعملاء المباشرين والمشاريع الخاصة: نموذج ما قبل البيع، ونوع النظام، وتقييم موقع العميل.",
-        "tender": "للمناقصات الرسمية ووثائق المناقصات الحكومية (ITB/RFP): مواعيد التقديم، وخطابات ضمان العطاء، ومصفوفة المطابقة."
+        "tender": "للمناقصات الرسمية ووثائق المناقصات الحكومية (ITB/RFP): مواعيد التقديم، وخطابات ضمان العطاء، ومصفوفة المطابقة.",
+        "financing": "للعملاء الذين يدفع قرض مصرفي ثمن منظومتهم: العميل، الموافقة على عرض السعر، موافقة المصرف، دفع جزء من القرض، التركيب، العقد، ومنح القرض كاملاً."
       },
       "title_field": "اسم المشروع",
       "customer_name": "اسم العميل",
@@ -5926,7 +5942,14 @@
         "pre_bid": "زيارة الموقع واجتماع ما قبل العطاء",
         "tender_design": "تصميم المناقصة وجدول الكميات",
         "bidding": "مصفوفة المطابقة وتقديم العطاء",
-        "award": "التقديم والإحالة"
+        "award": "التقديم والإحالة",
+        "fin_customer": "العميل",
+        "fin_quotation": "إرسال عرض السعر",
+        "fin_bank_approval": "موافقة المصرف",
+        "fin_loan_first": "القرض — الدفعة الأولى",
+        "fin_installation": "التركيب",
+        "fin_contract": "العقد",
+        "fin_loan_full": "القرض — المنح الكامل"
       },
       "section": {
         "lead": "عميل مبيعات محتمل",
@@ -5938,7 +5961,10 @@
         "pre_bid": "زيارة الموقع واجتماع ما قبل العطاء",
         "bidding": "العطاء والضمان",
         "award": "التقديم والإحالة",
-        "contract": "توقيع العقد"
+        "contract": "توقيع العقد",
+        "bank_approval": "موافقة المصرف",
+        "loan": "القرض",
+        "installation": "التركيب"
       },
       "pipeline_title": "مسار العمل",
       "pipeline_meta": "اكتملت {done} من {total} مراحل",
@@ -5993,7 +6019,19 @@
         "contract_value": "قيمة العقد",
         "payment_terms": "شروط الدفع",
         "contract_files": "العقد الموقّع، مرفوعاً",
-        "customer_partner": "عميل معتمد من قائمة العملاء"
+        "customer_partner": "عميل معتمد من قائمة العملاء",
+        "customer_city": "مدينة العميل",
+        "quotation_on": "تاريخ إرسال عرض السعر",
+        "quotation_value": "قيمة عرض السعر",
+        "quotation_agreed": "موافقة العميل على عرض السعر",
+        "financing_bank": "المصرف الممول",
+        "bank_approved": "موافقة المصرف",
+        "bank_decided_on": "تاريخ قرار المصرف",
+        "loan_amount": "مبلغ القرض الذي وافق عليه المصرف",
+        "loan_partially_paid": "دفع جزء من القرض",
+        "loan_received": "المبلغ المستلم وتاريخه",
+        "installation_completed": "اكتمال التركيب مع تاريخه",
+        "loan_fully_granted": "منح القرض كاملاً مع تاريخه"
       },
       "second_person_note": "العقد جاهز. يؤكّده شخص غير من رفع هذا السجل، ويُطلَق المشروع في الخطوة نفسها.",
       "customer_partner": "العميل (المعتمد)",
@@ -6190,7 +6228,9 @@
         "initiation_proposal": "العرض",
         "initiation_tender_docs": "وثائق المناقصة",
         "initiation_bid": "العطاء والضمان",
-        "initiation_contract": "العقد الموقّع"
+        "initiation_contract": "العقد الموقّع",
+        "initiation_bank": "أوراق المصرف والقرض",
+        "initiation_installation": "التركيب"
       },
       "file_name": "الملف",
       "file_section_label": "محفوظ تحت",
@@ -6198,7 +6238,127 @@
       "proposal_technical": "العرض الفني",
       "proposal_commercial": "العرض التجاري",
       "proposal_scope": "نطاق التوريد والأعمال",
-      "proposal_total": "قيمة العرض"
+      "proposal_total": "قيمة العرض",
+      "subtitle_lead": "كل عميل عند أول تواصل — عميل محتمل للبيع أو مناقصة أو عميل ممول — لكل منهم رقمه الخاص، يبقى معه من عميل محتمل حتى المشروع.",
+      "subtitle_opportunity": "العملاء الذين تجاوزوا المرحلة الأولى ولم يصبحوا مشروعاً بعد: من نموذج ما قبل البيع، والمناقصة من قرار المشاركة، والعميل الممول من عرض السعر.",
+      "board_subtitle": "كل عميل بطاقة في العمود الذي يقف فيه — عملاء محتملون، فرص، مشاريع — محدّثة مباشرة.",
+      "board_empty": "لا أحد هنا.",
+      "board_truncated": "تظهر على اللوحة أحدث 400 سجل تحديثاً فقط. اختر النوع لرؤية البقية.",
+      "owner_everyone": "الجميع",
+      "owner_me": "سجلاتي",
+      "live": "مباشر",
+      "last_update": "آخر تحديث",
+      "phase_field": "المسار",
+      "phase": {
+        "lead": "عميل محتمل",
+        "opportunity": "فرصة",
+        "project": "مشروع"
+      },
+      "customer_city": "المدينة",
+      "customer_phone_hint": "المرحلة الأولى للعميل الممول تطلب الهاتف والمدينة.",
+      "outcome": {
+        "pending": "قيد الانتظار",
+        "recorded": "مسجّل",
+        "sent": "مُرسل",
+        "agreed": "موافق عليه",
+        "refused": "مرفوض",
+        "approved": "تمت الموافقة",
+        "rejected": "مرفوض",
+        "partially_paid": "مدفوع جزئياً",
+        "in_progress": "قيد التنفيذ",
+        "completed": "مكتمل",
+        "signed": "موقّع",
+        "fully_granted": "ممنوح بالكامل"
+      },
+      "quotation_ref": "رقم عرض السعر",
+      "quotation_on": "تاريخ الإرسال",
+      "quotation_value": "قيمة عرض السعر (دينار)",
+      "quotation_status": "رد العميل",
+      "quotation_status_option": {
+        "sent": "مُرسل — بانتظار الرد",
+        "accepted": "موافق عليه",
+        "rejected": "مرفوض"
+      },
+      "quotation_print": "عرض السعر",
+      "financing_bank": "المصرف الممول",
+      "financing_bank_ref": "رقم طلب المصرف",
+      "bank_approval_status": "رد المصرف",
+      "bank_approval_option": {
+        "pending": "قيد الانتظار",
+        "approved": "تمت الموافقة",
+        "rejected": "مرفوض"
+      },
+      "bank_decided_on": "تاريخ القرار",
+      "loan_amount": "القرض الموافق عليه (دينار)",
+      "loan_status": "القرض",
+      "loan_status_option": {
+        "pending": "قيد الانتظار",
+        "partially_paid": "مدفوع جزئياً",
+        "fully_granted": "ممنوح بالكامل"
+      },
+      "loan_received": "المستلم حتى الآن (دينار)",
+      "loan_received_hint": "من أصل {amount} وافق عليها المصرف.",
+      "loan_first_received_on": "تاريخ استلام الدفعة الأولى",
+      "loan_fully_granted_on": "تاريخ المنح الكامل",
+      "installation_status": "التركيب",
+      "installation_status_option": {
+        "not_started": "لم يبدأ",
+        "in_progress": "قيد التنفيذ",
+        "completed": "مكتمل"
+      },
+      "installation_started_on": "تاريخ البدء",
+      "installation_completed_on": "تاريخ الاكتمال",
+      "installation_note": "ملاحظة التركيب",
+      "updates_title": "التحديثات",
+      "updates_none": "لا شيء بعد.",
+      "update": {
+        "created": "فُتح السجل",
+        "stage_advanced": "انتقل إلى المرحلة",
+        "changed": "تحديث",
+        "file": "أضيف ملف",
+        "lead_saved": "حُفظت بيانات العميل",
+        "pre_sales_saved": "حُفظ نموذج ما قبل البيع",
+        "site_survey_saved": "حُفظ مسح الموقع",
+        "proposal_saved": "حُفظ العرض / عرض السعر",
+        "tender_lead_saved": "حُفظت بيانات المناقصة",
+        "go_no_go_saved": "حُفظ التأهيل",
+        "pre_bid_saved": "حُفظت زيارة الموقع",
+        "bidding_saved": "حُفظ العطاء",
+        "award_saved": "حُفظ التقديم والإحالة",
+        "contract_saved": "حُفظ العقد",
+        "bank_approval_saved": "حُفظت موافقة المصرف",
+        "loan_saved": "حُفظ القرض",
+        "installation_saved": "حُفظ التركيب",
+        "boq_line_added": "أضيف بند إلى جدول الكميات",
+        "boq_line_removed": "أزيل بند من جدول الكميات",
+        "compliance_line_added": "أضيف بند امتثال",
+        "compliance_line_answered": "أجيب بند امتثال",
+        "compliance_line_removed": "أزيل بند امتثال",
+        "activity_logged": "سُجّل نشاط",
+        "note_added": "أضيفت ملاحظة",
+        "go": "القرار: المشاركة",
+        "no_go": "القرار: عدم المشاركة",
+        "lost": "سُجّل كخسارة",
+        "converted": "تحوّل إلى مشروع"
+      },
+      "update_field": {
+        "stage": "المرحلة",
+        "status": "الحالة",
+        "proposalStatus": "الرد",
+        "bankApprovalStatus": "المصرف",
+        "loanStatus": "القرض",
+        "installationStatus": "التركيب",
+        "awardStatus": "الإحالة",
+        "guaranteeStatus": "الضمان",
+        "goDecision": "القرار",
+        "systemType": "نوع المنظومة"
+      },
+      "board_column": {
+        "lead": "العملاء المحتملون",
+        "opportunity": "الفرص",
+        "project": "المشاريع",
+        "lost": "الخاسرة"
+      }
     },
     "project_settings": {
       "title": "إعدادات المشاريع",
@@ -8536,6 +8696,36 @@
       "col_paid": "المدفوع",
       "col_left": "المتبقي",
       "from_sheet": "من الجدول"
+    },
+    "tracking": {
+      "title": "التتبع المباشر",
+      "live": "مباشر",
+      "asking": "جارٍ سؤال الخط الملاحي عن موقع الحاوية…",
+      "open_on": "التتبع على موقع {carrier}",
+      "last_event": "آخر حدث",
+      "on_vessel": "على السفينة",
+      "carrier_eta": "الوصول المتوقع حسب الخط",
+      "our_eta": "موعد الوصول لدينا",
+      "checked": "آخر فحص {time}",
+      "none": "لا توجد أحداث لهذه الحاوية لدى الخط بعد.",
+      "not_configured": "لم يُفعَّل التتبع المباشر من {carrier} على هذا الخادم بعد. الرابط يفتح صفحة تتبع {carrier} لهذه الحاوية.",
+      "unknown_carrier": "لا يمكن معرفة الخط الملاحي من رقم الحاوية. اكتب الخط الملاحي في بوليصة الشحن ليتبعه التتبع.",
+      "failed": "لم يرد الخط الملاحي الآن. سيُسأل مجدداً بعد دقائق؛ الرابط يفتح صفحته.",
+      "estimated": "متوقع",
+      "planned": "مخطط",
+      "event": {
+        "empty_out": "تسليم حاوية فارغة",
+        "gate_in": "دخول بوابة المحطة",
+        "loaded": "تحميل على السفينة",
+        "departed": "مغادرة السفينة",
+        "arrived": "وصول السفينة",
+        "discharged": "تفريغ من السفينة",
+        "transshipped": "إعادة شحن",
+        "gate_out": "خروج من البوابة (ممتلئة)",
+        "empty_returned": "إعادة الحاوية فارغة",
+        "customs": "جمارك / تفتيش",
+        "other": "حدث"
+      }
     }
   },
   "profile": {

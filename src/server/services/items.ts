@@ -21,12 +21,13 @@
  * is why `isStock` decides whether tracking is asked for at all rather than
  * being one more field on one long form.
  */
-import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   businessPartner,
   chartOfAccount,
   item,
+  itemCategoryAccount,
   itemSupplier,
   itemUom,
   unitOfMeasure,
@@ -479,6 +480,202 @@ async function valuesFor(tx: Tx, input: ItemInput) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// 0423 — the stock accounts an item takes when it names none
+// ---------------------------------------------------------------------------
+
+/**
+ * The inventory and COGS accounts an item of this category takes when it
+ * names none: the category's own row, account by account, else the company
+ * default (the row with no category). Null where neither says.
+ */
+export async function defaultsFor(
+  tx: Tx,
+  category: string | null | undefined,
+): Promise<{ inventoryAccountId: string | null; cogsAccountId: string | null }> {
+  const name = (category ?? '').trim();
+  const rows = await tx
+    .select({
+      category: itemCategoryAccount.category,
+      inventoryAccountId: itemCategoryAccount.inventoryAccountId,
+      cogsAccountId: itemCategoryAccount.cogsAccountId,
+    })
+    .from(itemCategoryAccount)
+    .where(
+      name
+        ? or(isNull(itemCategoryAccount.category), eq(itemCategoryAccount.category, name))
+        : isNull(itemCategoryAccount.category),
+    );
+  const own = rows.find((row) => row.category !== null);
+  const company = rows.find((row) => row.category === null);
+  return {
+    inventoryAccountId: own?.inventoryAccountId ?? company?.inventoryAccountId ?? null,
+    cogsAccountId: own?.cogsAccountId ?? company?.cogsAccountId ?? null,
+  };
+}
+
+/** An item's values with an empty stock account taken from its defaults; a service is left alone. */
+async function withStockDefaults<
+  T extends {
+    readonly category: string | null;
+    readonly isStock: boolean;
+    readonly inventoryAccountId: string | null;
+    readonly cogsAccountId: string | null;
+  },
+>(tx: Tx, values: T): Promise<T> {
+  if (!values.isStock || (values.inventoryAccountId && values.cogsAccountId)) return values;
+  const defaults = await defaultsFor(tx, values.category);
+  return {
+    ...values,
+    inventoryAccountId: values.inventoryAccountId ?? defaults.inventoryAccountId,
+    cogsAccountId: values.cogsAccountId ?? defaults.cogsAccountId,
+  };
+}
+
+/**
+ * Every default as set, the company's first, with how many stock items still
+ * name no inventory or COGS account by category ('' for items with none), and
+ * the categories in use that have no row of their own.
+ */
+export async function categoryAccounts(tx: Tx) {
+  const inventoryAccount = sql<string | null>`(
+    select a.code || ' · ' || a.name from chart_of_account a where a.id = ${itemCategoryAccount.inventoryAccountId}
+  )`;
+  const cogsAccount = sql<string | null>`(
+    select a.code || ' · ' || a.name from chart_of_account a where a.id = ${itemCategoryAccount.cogsAccountId}
+  )`;
+  const rows = await tx
+    .select({
+      category: itemCategoryAccount.category,
+      inventoryAccountId: itemCategoryAccount.inventoryAccountId,
+      cogsAccountId: itemCategoryAccount.cogsAccountId,
+      inventoryAccount,
+      cogsAccount,
+      updatedAt: itemCategoryAccount.updatedAt,
+    })
+    .from(itemCategoryAccount)
+    .orderBy(sql`${itemCategoryAccount.category} asc nulls first`);
+  const missing = await tx
+    .select({ category: item.category, count: sql<number>`count(*)::int` })
+    .from(item)
+    .where(and(eq(item.isStock, true), or(isNull(item.inventoryAccountId), isNull(item.cogsAccountId))))
+    .groupBy(item.category);
+  const known = new Set(rows.map((row) => row.category ?? ''));
+  return {
+    rows,
+    lacking: Object.fromEntries(missing.map((row) => [row.category ?? '', row.count])) as Record<string, number>,
+    lackingTotal: missing.reduce((sum, row) => sum + row.count, 0),
+    unset: (await categories(tx)).filter((category) => !known.has(category)),
+  };
+}
+
+/**
+ * Sets the default stock accounts of a category — or, with `category` null,
+ * the company's — and fills every stock item it now answers for that names no
+ * inventory or COGS account. Each item filled is its own audit row, as an
+ * edit of the item would be. Postings keep reading the item alone.
+ */
+export async function setCategoryAccounts(
+  tx: Tx,
+  ctx: ActorContext,
+  input: {
+    readonly category: string | null;
+    readonly inventoryAccountId: string | null;
+    readonly cogsAccountId: string | null;
+  },
+): Promise<{ filled: number }> {
+  await permit(ctx, 'configure', PERMISSION_OBJECT);
+  const category = optionalText(input.category, 100);
+  const inventoryAccountId = await assertAccount(tx, input.inventoryAccountId, 'inventoryAccountId', 'asset');
+  const cogsAccountId = await assertAccount(tx, input.cogsAccountId, 'cogsAccountId', 'expense');
+  if (!inventoryAccountId && !cogsAccountId) {
+    throw new AdminValidationError('cogsAccountId', 'choose an inventory account, a COGS account or both');
+  }
+
+  const [before] = await tx
+    .select()
+    .from(itemCategoryAccount)
+    .where(category ? eq(itemCategoryAccount.category, category) : isNull(itemCategoryAccount.category))
+    .for('update');
+  if (before) {
+    await tx
+      .update(itemCategoryAccount)
+      .set({ inventoryAccountId, cogsAccountId, updatedBy: ctx.principal.userId, updatedAt: new Date() })
+      .where(eq(itemCategoryAccount.id, before.id));
+  } else {
+    await tx.insert(itemCategoryAccount).values({
+      category,
+      inventoryAccountId,
+      cogsAccountId,
+      createdBy: ctx.principal.userId,
+      updatedBy: ctx.principal.userId,
+    });
+  }
+  await recordChange(tx, ctx, {
+    action: 'item.category_accounts_set',
+    objectType: PERMISSION_OBJECT,
+    objectId: category ?? '*',
+    before: before ? { inventoryAccountId: before.inventoryAccountId, cogsAccountId: before.cogsAccountId } : null,
+    after: { category, inventoryAccountId, cogsAccountId },
+  });
+
+  const filled = await fillMissingAccounts(tx, ctx, category === null ? {} : { category });
+  return { filled: filled.length };
+}
+
+/**
+ * Fills the stock items that name no inventory or COGS account from their
+ * defaults — of one category, or of every category. An item its defaults do
+ * not answer for is left as it is; an account an item already names is never
+ * replaced. One audit row per item filled.
+ */
+export async function fillMissingAccounts(
+  tx: Tx,
+  ctx: ActorContext,
+  scope: { readonly category?: string },
+): Promise<{ code: string; inventoryAccountId: string | null; cogsAccountId: string | null }[]> {
+  await permit(ctx, 'configure', PERMISSION_OBJECT);
+  const lacking = await tx
+    .select({
+      id: item.id,
+      code: item.code,
+      category: item.category,
+      inventoryAccountId: item.inventoryAccountId,
+      cogsAccountId: item.cogsAccountId,
+    })
+    .from(item)
+    .where(
+      and(
+        eq(item.isStock, true),
+        or(isNull(item.inventoryAccountId), isNull(item.cogsAccountId)),
+        scope.category !== undefined ? eq(item.category, scope.category) : undefined,
+      ),
+    )
+    .orderBy(asc(item.code))
+    .for('update');
+
+  const filled: { code: string; inventoryAccountId: string | null; cogsAccountId: string | null }[] = [];
+  const known = new Map<string, Awaited<ReturnType<typeof defaultsFor>>>();
+  for (const row of lacking) {
+    const key = row.category ?? '';
+    const defaults = known.get(key) ?? (await defaultsFor(tx, row.category));
+    known.set(key, defaults);
+    const inventoryAccountId = row.inventoryAccountId ?? defaults.inventoryAccountId;
+    const cogsAccountId = row.cogsAccountId ?? defaults.cogsAccountId;
+    if (inventoryAccountId === row.inventoryAccountId && cogsAccountId === row.cogsAccountId) continue;
+    await tx.update(item).set({ inventoryAccountId, cogsAccountId, updatedAt: new Date() }).where(eq(item.id, row.id));
+    await recordChange(tx, ctx, {
+      action: 'item.stock_accounts_defaulted',
+      objectType: PERMISSION_OBJECT,
+      objectId: row.code,
+      before: { inventoryAccountId: row.inventoryAccountId, cogsAccountId: row.cogsAccountId },
+      after: { inventoryAccountId, cogsAccountId, defaultOf: row.category ?? '*' },
+    });
+    filled.push({ code: row.code, inventoryAccountId, cogsAccountId });
+  }
+  return filled;
+}
+
 /**
  * Registers the base unit among the item's units.
  *
@@ -578,7 +775,8 @@ export async function create(
   requireText(input.name, 'name');
   const code = await allocateFreeCode(tx, ctx.principal.userId);
 
-  const values = await valuesFor(tx, input);
+  // 0423 — an account the form left empty is the category's default (or the company's).
+  const values = await withStockDefaults(tx, await valuesFor(tx, input));
   const [created] = await tx
     .insert(item)
     .values({ code, ...values, createdBy: ctx.principal.userId })
@@ -604,7 +802,8 @@ export async function create(
 export async function update(tx: Tx, ctx: ActorContext, code: string, input: ItemInput) {
   await permit(ctx, 'configure', PERMISSION_OBJECT, code);
   const before = await get(tx, code);
-  const values = await valuesFor(tx, input);
+  // 0423 — an account left empty takes the default of its (possibly new) category.
+  const values = await withStockDefaults(tx, await valuesFor(tx, input));
 
   await tx.update(item).set({ ...values, updatedAt: new Date() }).where(eq(item.code, code));
   if (values.baseUomCode !== before.baseUomCode) {

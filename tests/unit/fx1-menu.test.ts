@@ -143,7 +143,7 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
     expect(keysOf('inventory_control')).toEqual(['stock_count', 'stock_reconciliation', 'inventory_checks', 'inventory_valuation', 'fifo_valuation']);
     expect(routeFor(section('inventory_control').items.find((item) => item.key === 'fifo_valuation')!, 'inventory_control')).toBe('/inventory/fifo-valuation');
     // The Project Guide (2026-10-12): Project Initiation stands first — it is what a customer project begins as.
-    expect(keysOf('projects')).toEqual(['project_initiation', 'project_master', 'contracts', 'wbs', 'cost_plan', 'project_budgets', 'change_orders']);
+    expect(keysOf('projects')).toEqual(['project_initiation', 'project_opportunities', 'project_board', 'project_master', 'contracts', 'wbs', 'cost_plan', 'project_budgets', 'change_orders']);
     expect(keysOf('projects_execution')).toEqual(['project_costs', 'project_procurement', 'material_issues', 'progress']);
     expect(keysOf('projects_billing')).toEqual(['project_billing', 'project_forecast', 'project_close', 'project_reports']);
   });

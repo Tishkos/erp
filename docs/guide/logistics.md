@@ -610,6 +610,13 @@ List columns: Container no. (with size/type), B/L no., Import application, Suppl
 - "… has been received; it is the record now." / "… has been received; it cannot be cancelled." / "Say why the container is cancelled." / "… is already cancelled." / "… is already on a live B/L."
 - Claiming: "… has 2 containers still to arrive. A shortage is claimed once every container is in — or add the balance shipment as another container."; "Nothing of … is left in transit: there is no shortage to claim."; "Say what is claimed and why — the supplier will ask."; "Give the date of the claim."; "ITEM-1: 30 base units are still in transit, which is not a whole number of BOX. Claim it from the Purchase Returns screen, line by line."
 
+### Live tracking — Containers
+Every container's page has a **Live tracking** section (التتبع المباشر) under the container's document. It asks the shipping line where the box is now and shows: the **last event** (loaded, departed, arrived, discharged, gate in / gate out …) with its place and time, the **vessel** it is on, and the **line's expected arrival** beside our own ETA (in red when the line expects it later than we do), then every event the line gave, newest first — expected and planned ones greyed.
+- The line is known from the container number (MSCU / MEDU … is MSC, MSKU is Maersk, HLXU is Hapag-Lloyd, CMAU is CMA CGM, and others) or, for a leased box (TGHU, TCNU …), from the shipping line written on the B/L.
+- **Track on <line>'s site** (التتبع على موقع الخط) always opens the line's own public tracking page for this container.
+- The section refreshes by itself every five minutes while the page is open. Nothing is saved: the line's answer is shown, not stored.
+- "The live feed from <line> is not set up on this server yet" means the company has not yet entered that line's API key; use the link meanwhile. "The shipping line cannot be told" means: write the shipping line on the B/L.
+
 ## Ports & Routes (الموانئ والمسارات)
 Path: Logistics → Shipping → Ports & Routes   |   Arabic: اللوجستيات ← الشحن ← الموانئ والمسارات
 Address: /logistics/ports (one port: /logistics/ports/<code>)

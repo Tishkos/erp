@@ -7,6 +7,8 @@ import { NewRecordDialog } from '@/components/admin/dialog';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { Attachments, readAttachments } from '@/components/admin/attachments';
 import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
+import { ContainerTracking } from '@/components/admin/container-tracking';
+import { TRACKING_KINDS } from '@domain/container-tracking';
 import { RecordHistory } from '@/components/admin/history';
 import { ProfileLink } from '@/components/admin/profile-link';
 import { RecordNotesDoor } from '@/components/admin/record-notes-door';
@@ -62,7 +64,7 @@ export default async function ContainerPage({
   const query = await searchParams;
   const id = typeof query.id === 'string' ? query.id : null;
 
-  const [t, lg, pdT, admin, page, locale, context, outcome] = await Promise.all([
+  const [t, lg, pdT, admin, page, locale, context, outcome, tr] = await Promise.all([
     getTranslations('admin.shipments'),
     getTranslations('admin.logistics'),
     getTranslations('admin.customs_pd'),
@@ -71,6 +73,7 @@ export default async function ContainerPage({
     getLocale(),
     requireContext(),
     outcomeOf(searchParams),
+    getTranslations('admin.tracking'),
   ]);
   const { principal } = context;
   if (!can(principal, 'view', shipments.CONTAINER_OBJECT)) {
@@ -536,6 +539,40 @@ export default async function ContainerPage({
           </tbody>
         </table>
       </DocumentWindow>
+
+      {/* ── Live tracking: where the line says the box is now (2026-10-21) ── */}
+      {container.cancelledAt ? null : (
+        <section aria-labelledby="container-tracking-title" className={s.sapDoc} id="tracking">
+          <div className={s.sapWindow}>
+            <h2 className={s.sapTitle} id="container-tracking-title">
+              <span>{tr('title')}</span>
+            </h2>
+            <ContainerTracking
+              endpoint={`/payables/containers/${encodeURIComponent(container.containerNo)}/tracking?id=${container.id}`}
+              labels={{
+                title: tr('title'),
+                live: tr('live'),
+                asking: tr('asking'),
+                open_on: tr('open_on', { carrier: '{carrier}' }),
+                last_event: tr('last_event'),
+                on_vessel: tr('on_vessel'),
+                carrier_eta: tr('carrier_eta'),
+                our_eta: tr('our_eta'),
+                checked: tr('checked', { time: '{time}' }),
+                none: tr('none'),
+                not_configured: tr('not_configured', { carrier: '{carrier}' }),
+                unknown_carrier: tr('unknown_carrier'),
+                failed: tr('failed'),
+                estimated: tr('estimated'),
+                planned: tr('planned'),
+                events: Object.fromEntries(TRACKING_KINDS.map((kind) => [kind, tr(`event.${kind}`)])),
+              }}
+              locale={locale}
+              ourEta={container.eta}
+            />
+          </div>
+        </section>
+      )}
 
       {/* ── Every stage it has passed, dated (§17.2 — all kept) ───────── */}
       <section aria-labelledby="container-history-title" className={s.sapDoc}>

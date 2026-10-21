@@ -248,6 +248,36 @@ export const itemSupplier = pgTable(
   ],
 );
 
+/**
+ * 0423 — the stock accounts an item takes when it names none (2026-10-21, by
+ * direction: "configure a default account for the item group, so invoices can
+ * be posted"). One row per item category, and one with `category` null: the
+ * company's default for an item whose category has none.
+ *
+ * A default, never a second answer: setting a row fills the items that name
+ * no account, and a new item takes it as it is made. Postings still read the
+ * item's own accounts and nothing else (`domain/posting-map.ts`). Never
+ * deleted; a change is audited.
+ */
+export const itemCategoryAccount = pgTable(
+  'item_category_account',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** The item's `category`, exactly as the items carry it; null is the company default. */
+    category: text('category'),
+    inventoryAccountId: uuid('inventory_account_id').references(() => chartOfAccount.id),
+    cogsAccountId: uuid('cogs_account_id').references(() => chartOfAccount.id),
+    createdBy: uuid('created_by').notNull().references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: uuid('updated_by').notNull().references(() => appUser.id),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('item_category_account_category_uniq').on(sql`coalesce(${t.category}, '')`),
+    check('item_category_account_category_present', sql`${t.category} is null or btrim(${t.category}) <> ''`),
+  ],
+);
+
 // ---------------------------------------------------------------------------
 // 03.5 — bank and cash accounts
 // ---------------------------------------------------------------------------

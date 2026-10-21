@@ -22,6 +22,8 @@ export async function createInitiation(form: FormData): Promise<void> {
         kind: text(form, 'kind'),
         title: text(form, 'title'),
         customerName: text(form, 'customer_name'),
+        customerPhone: text(form, 'customer_phone') || null,
+        customerCity: text(form, 'customer_city') || null,
         ownerUserId: text(form, 'owner_user_id') || null,
       }),
     (value) => {
@@ -79,6 +81,21 @@ const FIELDS: Readonly<Record<string, keyof initiation.SectionInput>> = {
   contract_signed_on: 'contractSignedOn',
   contract_value_iqd: 'contractValueIqd',
   payment_terms: 'paymentTerms',
+  // The financing road (0424).
+  customer_city: 'customerCity',
+  financing_bank: 'financingBank',
+  financing_bank_ref: 'financingBankRef',
+  bank_approval_status: 'bankApprovalStatus',
+  bank_decided_on: 'bankDecidedOn',
+  loan_amount_iqd: 'loanAmountIqd',
+  loan_status: 'loanStatus',
+  loan_received_iqd: 'loanReceivedIqd',
+  loan_first_received_on: 'loanFirstReceivedOn',
+  loan_fully_granted_on: 'loanFullyGrantedOn',
+  installation_status: 'installationStatus',
+  installation_started_on: 'installationStartedOn',
+  installation_completed_on: 'installationCompletedOn',
+  installation_note: 'installationNote',
 };
 
 /** One stage's form: the section it belongs to, and the fields it showed. */

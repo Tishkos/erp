@@ -681,8 +681,9 @@ export async function approve(
     payableId: row.payableId,
     eventCode: 'FUNDS_RESERVED',
     summary:
+      // The log is read by everybody who opens the import: it says what was reserved, never what the account holds.
       `${row.applicationNo} approved — ${row.currency} ${shown(parseDecimal(row.amountTxn, MONEY_SCALE))} ` +
-      `reserved on ${account.code} (available before: ${shown(position.availableIqd)} IQD)`,
+      `reserved on ${account.code}${position.availableIqd < parseDecimal(row.amountIqd, MONEY_SCALE) ? ' — the account does not hold enough; paying it takes it below zero' : ''}`,
     sourceType: PERMISSION_OBJECT,
     sourceId: row.id,
     sourceNo: row.applicationNo,
@@ -1039,7 +1040,7 @@ export async function confirm(tx: Tx, ctx: ActorContext, id: string, input: Conf
     }
     // The application's own reservation is the money that pays it (§15.1).
     const reserved = isReserved(row.status) ? parseDecimal(row.amountIqd, MONEY_SCALE) : 0n;
-    await payments.post(tx, ctx, created.id, { drawsReservedIqd: reserved });
+    await payments.post(tx, ctx, created.id, { drawsReservedIqd: reserved, allowOverdraft: true });
     await tx.update(supplierPayment).set({ amountTxn: money(amountTxn) }).where(eq(supplierPayment.id, created.id));
     supplierPaymentId = created.id;
     documentNo = created.paymentNo;

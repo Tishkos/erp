@@ -339,6 +339,11 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       // The Project Guide (2026-10-12, by direction): a customer project begins as a Project
       // Initiation — a direct sale or a tender — and becomes a project when its contract is signed.
       page('project_initiation', 'project', '/projects/initiation'),
+      // Leads → Opportunities → Projects (2026-10-21, by direction): the initiation register
+      // above is Leads; the same records past their first stage are Opportunities, and the
+      // board shows them all, live, by where they stand.
+      page('project_opportunities', 'project', '/projects/opportunities'),
+      page('project_board', 'project', '/projects/pipeline'),
       // REQ-PM-001 PM-1 — the Project System's master screens.
       page('project_master', 'project', '/projects'),
       page('contracts', 'project', '/projects/contracts'),

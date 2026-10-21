@@ -108,9 +108,10 @@ export class InsufficientFundsError extends Error {
     readonly availableIqd: bigint,
     readonly requiredIqd: bigint,
   ) {
+    // The figures stay on the error for the code that needs them; the sentence is read by whoever
+    // pressed the button, who may not see balances (2026-10-21, by direction).
     super(
-      `${accountCode} holds ${toDecimalString(availableIqd, 4n)} and this needs ` +
-        `${toDecimalString(requiredIqd, 4n)}. Paying anyway would either bounce at the bank or ` +
+      `${accountCode} does not hold enough money for this. Paying anyway would either bounce at the bank or ` +
         'create an overdraft nobody arranged (§17).',
     );
     this.name = 'InsufficientFundsError';
@@ -186,8 +187,7 @@ export class CashLimitExceededError extends Error {
     readonly balanceIqd: bigint,
   ) {
     super(
-      `${accountCode} would hold ${toDecimalString(balanceIqd, 4n)}, above its cash limit of ` +
-        `${toDecimalString(limitIqd, 4n)} (§17). A float above its limit is cash sitting in a drawer ` +
+      `${accountCode} would go above its cash limit (§17). A float above its limit is cash sitting in a drawer ` +
         'that should be in a bank — bank the excess, or have the limit raised.',
     );
     this.name = 'CashLimitExceededError';

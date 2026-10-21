@@ -23,7 +23,8 @@ import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
-import { toDecimalString } from '@domain/money';
+import { parseDecimal, toDecimalString } from '@domain/money';
+import { BALANCE_OBJECT, isReserved } from '@domain/payment-applications';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as applications from '@/server/services/payment-applications';
@@ -308,6 +309,19 @@ export default async function PaymentApplicationPage({
   const showChecks = row.status === 'draft' || row.status === 'submitted' || row.status === 'approved';
 
   /*
+   * Not enough money is said, never a stop (2026-10-21, by direction): until
+   * the application is paid, its page warns that paying it takes the account
+   * below zero. What the account holds is shown only to a reader who may see
+   * balances; everybody else reads the warning without figures.
+   */
+  const maySeeBalances = can(principal, 'view', BALANCE_OBJECT);
+  const ownReservation = isReserved(row.status) ? parseDecimal(row.amountIqd, 4n) : 0n;
+  const availableForThis = found.position.availableIqd + ownReservation;
+  const thisPayment = parseDecimal(row.amountIqd, 4n);
+  const goesBelowZero =
+    ['draft', 'submitted', 'approved', 'sent'].includes(row.status) && availableForThis < thisPayment;
+
+  /*
    * A paper and the step it proves (2026-10-06, by direction: "once posted it
    * has attachments; whenever someone updates them it has to be pointed out
    * what this attachment is"). One form per kind, each asking only what that
@@ -381,6 +395,24 @@ export default async function PaymentApplicationPage({
       variant="sap"
     >
       <Flash error={outcome.error} errorTitle={admin('error_title')} saved={outcome.saved} savedLabel={admin('saved')} />
+
+      {goesBelowZero ? (
+        <p className={`${s.sapNote} mb-4`} data-overdraft-warning="" role="note">
+          <strong>{t('overdraft_title', { account: account.code })}</strong> {t('overdraft_body')}
+          {maySeeBalances ? (
+            <>
+              {' '}
+              <bdi dir="auto">
+                {t('overdraft_figures', {
+                  available: money(toDecimalString(availableForThis, 4n), 'IQD'),
+                  amount: money(row.amountIqd, 'IQD'),
+                  after: money(toDecimalString(availableForThis - thisPayment, 4n), 'IQD'),
+                })}
+              </bdi>
+            </>
+          ) : null}
+        </p>
+      ) : null}
 
       {/* Owner's decision 4.6 (2026-10-04): a payment application is the request
           to the bank; the allocation to invoices lives on the supplier payment
@@ -510,7 +542,8 @@ export default async function PaymentApplicationPage({
         number={row.applicationNo}
         totals={[
           { label: t('col_amount'), value: money(row.amountTxn) },
-          { label: t('available_now', { account: account.code }), value: money(toDecimalString(found.position.availableIqd, 4n), 'IQD') },
+          // What the account holds, only for a reader who may see balances (2026-10-21).
+          ...(maySeeBalances ? [{ label: t('available_now', { account: account.code }), value: money(toDecimalString(found.position.availableIqd, 4n), 'IQD') }] : []),
         ]}
       >
         {showChecks ? (
@@ -536,6 +569,17 @@ export default async function PaymentApplicationPage({
                   </td>
                   <td>
                     <bdi dir="auto">{check.detail}</bdi>
+                    {check.figures && maySeeBalances && check.outcome !== 'pass' ? (
+                      <span className="block text-xs text-muted-fg">
+                        <bdi dir="auto">
+                          {t('overdraft_figures', {
+                            available: money(check.figures.availableIqd, 'IQD'),
+                            amount: money(check.figures.amountIqd, 'IQD'),
+                            after: money(check.figures.afterIqd, 'IQD'),
+                          })}
+                        </bdi>
+                      </span>
+                    ) : null}
                   </td>
                 </tr>
               ))}

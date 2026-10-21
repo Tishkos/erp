@@ -834,6 +834,8 @@ export async function resetTestData(): Promise<void> {
     `);
     await client.query('delete from payment_method');
 
+    // 0423 — a category default is never deleted by the application (trigger), so a reset truncates.
+    await client.query('truncate item_category_account');
     await client.query('delete from item_uom');
     await client.query('delete from item_supplier');
     await client.query('delete from item');

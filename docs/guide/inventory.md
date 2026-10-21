@@ -777,7 +777,23 @@ The link is what may be bought: a purchase invoice line, a draft line and a purc
 - **Inventory account** (حساب المخزون) — an asset account. Where the item's stock value is held: debited when stock comes in, credited when it leaves. Without it the item cannot be bought into a warehouse, sold, or adjusted.
 - **COGS account** (حساب تكلفة المبيعات) — an expense account. Receives the FIFO cost of the item when it is sold. Without it the item cannot be sold.
 - **Sales account** (حساب المبيعات) — a revenue account; optional. Left as **Decided by posting rule** (تحدده قاعدة القيد), the sale posts to the general sales account set on Posting Mappings; a more specific posting exception, where Finance has made one, wins over the item's account.
-So: before an item can be bought it needs an inventory account; before it can be sold it needs an inventory account and a COGS account. The New item form asks for both. The Update form lets them be emptied — do not empty them.
+So: before an item can be bought it needs an inventory account; before it can be sold it needs an inventory account and a COGS account. The New item form asks for both (it starts on the company default when one is set). The Update form lets them be emptied — do not empty them: an emptied account is filled again from its category's default on save, when there is one.
+
+### How to set default accounts by category — Items
+Since 2026-10-21. For items that name no inventory or COGS account — items brought in from a sheet or the old system, mostly — so that their sales invoices post instead of stopping at "names no COGS account".
+1. Open **Items** (الأصناف) and press **Category accounts** (حسابات الفئات). Needs `configure` on `item` (the accounting manager).
+2. The window says how many stock items still name no inventory or COGS account, lists the defaults already set with **Items without accounts** (أصناف بلا حسابات) for each, and names the categories in use that have no default of their own.
+3. **Default for** (الافتراضي لـ): **The company (any category without its own)** (الشركة (أي فئة ليس لها افتراضي خاص)), or one of the categories the items carry.
+4. **Inventory account** (حساب المخزون) — an asset posting account; **COGS account** (حساب تكلفة المبيعات) — an expense posting account. Choose one or both.
+5. Press **Save default** (حفظ الافتراضي). Every stock item it answers for that names no such account is given it at once — each one written to that item's Audit log ("item.stock_accounts_defaulted") — and a new item takes it as it is made.
+6. A category's own default wins, account by account; the company default answers for the rest. An account an item already names is never replaced: to move items that already have accounts, change them on each item.
+7. Then post the invoice again (Sales Invoices → the invoice → Post); its approval stands.
+A default is not used by the posting itself: a sale always posts to the item's own accounts. Saving a default again replaces it (the old value stays in the audit log); a default is never deleted.
+
+### Refusals — Category accounts — Items
+- "inventoryAccountId: must be an asset account" / "cogsAccountId: must be an expense account" — choose a posting account of the right type.
+- "cogsAccountId: choose an inventory account, a COGS account or both" — choose at least one account.
+- Not allowed to … `configure` on `item` — ask the accounting manager.
 
 ### Fields — Items
 New item form:
@@ -815,7 +831,7 @@ An item has no approval: it is usable as soon as it is created — **Active** (�
 - "… is not a quantity of the base unit. Say how many base units one of this unit holds, e.g. 24 or 0.5." — type a plain number in One unit holds.
 - "reason: is required to deactivate an item" / "reason: is required" — type the reason.
 - "The item counter is a hundred numbers behind the catalogue. Set it past the highest code in use on the Numbering screen before adding another item." — ask the administrator to move the item code counter forward on the Numbering screen.
-- Refusals this item causes on other screens when an account is missing: on a purchase invoice "Line … item … names no inventory account, so its stock has nowhere to be held. Set one on the item."; on a sales invoice "Line … sells …, which names no inventory account. Set one on the item." and "Line … sells …, which names no COGS account, so its cost has nowhere to go. Set one on the item."; on Item Reconciliation "… names no inventory account, so the adjustment has nowhere to post. Set one on the item." In each case open the item, set the account in the Update panel and save, then repeat the document.
+- Refusals this item causes on other screens when an account is missing: on a purchase invoice "Line … item … names no inventory account, so its stock has nowhere to be held. Set one on the item."; on a sales invoice "Line … sells …, which names no inventory account. Set one on the item, or set the default for its category under Items › Category accounts." and "Line … sells …, which names no COGS account, so its cost has nowhere to go. Set one on the item, or set the default for its category under Items › Category accounts." (see "How to set default accounts by category"); on Item Reconciliation "… names no inventory account, so the adjustment has nowhere to post. Set one on the item." In each case open the item, set the account in the Update panel and save, then repeat the document.
 - Refusals about units on other screens: "… is not kept in …. Add … to the item's units (Items → … → Units), or choose one of its units." — add the unit on the item; "… is not a whole number of …. Enter the quantity in a unit it divides into, or in the base unit." — the quantity does not convert exactly to the base unit; "Line … sells … in …; a sale is written in the item's base unit, …." — write the sales line in the base unit.
 
 ## Units of Measure (وحدات القياس)

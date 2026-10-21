@@ -149,9 +149,13 @@ describe('§15.3 · the checks on Send', () => {
       fundsCheck({ accountCode: 'BNK-1', availableIqd: m('0'), ownReservationIqd: m('500'), amountIqd: m('500') })
         .outcome,
     ).toBe('pass');
+    // Short of money is a warning, never a stop (2026-10-21); the words never carry the balance,
+    // the figures travel apart for a reader who may see them.
     const short = fundsCheck({ accountCode: 'BNK-1', availableIqd: m('100'), ownReservationIqd: 0n, amountIqd: m('500') });
-    expect(short.outcome).toBe('fail');
-    expect(short.detail).toMatch(/BNK-1 has 100\.00 IQD available against 500\.00 IQD/);
+    expect(short.outcome).toBe('warning');
+    expect(failing([short])).toEqual([]);
+    expect(short.detail).toBe('BNK-1 does not hold enough money for this payment: paying it takes the account below zero.');
+    expect(short.figures).toEqual({ availableIqd: '100.0000', amountIqd: '500.0000', afterIqd: '-400.0000' });
   });
 
   it('the payee must be named, the supplier’s, and verified', () => {
