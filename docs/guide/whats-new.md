@@ -2,8 +2,18 @@
 
 What changed in each version of the system, newest first: what is new, what was fixed, and what a person has to do. Answer "what is new", "the newest update", "the latest version", "the changelog", "release notes", «ما الجديد», «آخر تحديث», «التحديث الجديد», «شنو الجديد» from here. The version that is running is shown in the footer of every screen.
 
+## What is new in version 1.1.6 (ما الجديد في الإصدار 1.1.6)
+Version 1.1.6 is the newest version of the system (الإصدار الأحدث). It went live on 22 October 2026. What to do: reload the page once (حدّثوا الصفحة مرة واحدة).
+
+### Changed: printouts — What is new in version 1.1.6
+- Under the figures, the **amount in figures with its currency** (المبلغ بالأرقام مع العملة) now stands beside the amount in words.
+- In every printed table the heading and the values under it are **centred together** (في الوسط).
+
+### Changed: the company's name — What is new in version 1.1.6
+- The system now says **Qimah Al-Safinah** (قمة السفینە) where it said "QS ERP" — the browser tab, WhatsApp answers, the update page; the cloud files are **Qimah Al-Safinah Cloud Files**.
+
 ## What is new in version 1.1.5 (ما الجديد في الإصدار 1.1.5)
-Version 1.1.5 is the newest version of the system (الإصدار الأحدث). It went live on 21 October 2026. What to do: reload the page once (حدّثوا الصفحة مرة واحدة).
+Version 1.1.5 went live on 21 October 2026, before version 1.1.6 above. What to do: reload the page once (حدّثوا الصفحة مرة واحدة).
 
 ### New: printed copies in the company's look — What is new in version 1.1.5
 - Every printout and PDF (invoices, payments, statements, reports, and the PDFs Noah sends) now carries the company's look (تصميم الشركة): the Q logo, the logo's dark blue, a clean table, the details on a soft card, and the logo faint behind every page. The system's name is no longer printed anywhere.

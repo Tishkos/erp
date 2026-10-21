@@ -44,7 +44,7 @@ export default async function SecurityPage({ searchParams }: { searchParams: Sea
     { allowRestricted: true },
   );
   const fmt = (d: Date | null) => (d ? formatTimestamp(d.toISOString(), locale as Locale) : admin('none'));
-  const issuer = encodeURIComponent(companyName || 'QS ERP');
+  const issuer = encodeURIComponent(companyName || 'Qimah Al-Safinah');
   const otpauth = status.pendingSecret
     ? `otpauth://totp/${issuer}:${encodeURIComponent(email)}?secret=${status.pendingSecret}&issuer=${issuer}&digits=6&period=30`
     : null;

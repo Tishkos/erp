@@ -78,7 +78,7 @@ describe('IM2 · nginx and the maintenance page', () => {
     expect(page).toContain('<meta http-equiv="refresh"');
     expect(page).not.toMatch(/<script/i);
     expect(page).not.toMatch(/src="\//);
-    expect(page).toContain('QS ERP');
+    expect(page).toContain('Qimah Al-Safinah');
     // Both languages, since the shell is bilingual.
     expect(page).toContain('dir="rtl"');
   });

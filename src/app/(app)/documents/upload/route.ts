@@ -9,7 +9,7 @@ import * as files from '@/server/services/cloud-files';
 import { CloudLinkError, CloudPathError, MAX_UPLOAD_BYTES, openInCloudUrl, parseLinkTarget } from '@/server/domain/cloud-files';
 
 /**
- * Putting one file into QS Cloud Files, as the person.
+ * Putting one file into Qimah Al-Safinah Cloud Files, as the person.
  *
  * Raw bytes in the body (so a 200 MB file is never held in memory and the
  * browser can report progress), the rest in the query:
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
       return json(409, {
         ok: false,
         code: plan.state,
-        error: plan.state === 'not_configured' ? 'QS Cloud Files is not configured.' : 'Link your Cloud Files account first.',
+        error: plan.state === 'not_configured' ? 'Qimah Al-Safinah Cloud Files is not configured.' : 'Link your Cloud Files account first.',
       });
     }
     const { session, target } = plan;

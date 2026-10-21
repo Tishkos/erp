@@ -28,7 +28,7 @@ const notoSansArabic = Noto_Sans_Arabic({
 });
 
 export const metadata: Metadata = {
-  title: 'QS ERP | Qimah Al-Safinah',
+  title: 'Qimah Al-Safinah',
   description: 'Qimah Al-Safinah integrated enterprise resource planning system',
 };
 

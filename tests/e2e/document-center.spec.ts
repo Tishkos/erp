@@ -284,7 +284,7 @@ test.describe('Document Center · QS Cloud Files', () => {
     await page.goto(`/finance/journals/${RECORD}`);
     await page.getByRole('button', { name: /Attachments/ }).first().click();
     const clip = page.getByRole('dialog');
-    await expect(clip.getByRole('heading', { name: 'QS Cloud Files' })).toBeVisible();
+    await expect(clip.getByRole('heading', { name: 'Qimah Al-Safinah Cloud Files' })).toBeVisible();
     await expect(clip.getByRole('link', { name: 'Supplier agreement.pdf' })).toBeVisible();
     await expect(clip.getByText(/linked by System Administrator/)).toBeVisible();
     // The paperclip open, desktop in English and a phone in Arabic.
@@ -294,7 +294,7 @@ test.describe('Document Center · QS Cloud Files', () => {
     await page.goto(`/finance/journals/${RECORD}`);
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
     await page.getByRole('button', { name: /المرفقات/ }).first().click();
-    await expect(page.getByRole('dialog').getByRole('heading', { name: 'QS Cloud Files' })).toBeVisible();
+    await expect(page.getByRole('dialog').getByRole('heading', { name: 'Qimah Al-Safinah Cloud Files' })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth), 'no horizontal scroll at 390px').toBeLessThanOrEqual(390);
     await page.screenshot({ path: `${SHOTS}/record-paperclip-mobile-ar.png` });
     await keepEnglish(page.context());

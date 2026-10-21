@@ -3,7 +3,7 @@ import mainLogoMark from '../../../mainLogoMark.png';
 import logoBackdrop from '../../server/print/assets/logo-backdrop.png';
 import { display, heading, printedAt } from '@/server/print/format';
 import { isNumeric, type Letterhead, type PrintModel, type Table } from '@/server/print/model';
-import { amountInWords, spelledAmountOf } from '@/server/print/words';
+import { amountLineOf } from '@/server/print/words';
 import { printFont } from './print-font';
 import styles from './print.module.css';
 
@@ -25,8 +25,7 @@ export function PrintSheet({ model, head }: { readonly model: PrintModel; readon
   const dir = head.locale === 'ar' ? 'rtl' : 'ltr';
   const draft = model.kind === 'document' && model.posted === false;
   const names = head.locale === 'ar' ? [head.companyAr, head.companyEn] : [head.companyEn, head.companyAr];
-  const spelled = spelledAmountOf(model);
-  const words = spelled ? amountInWords(spelled.amount, spelled.currency, head.locale) : null;
+  const amount = amountLineOf(model, head.locale);
 
   return (
     <div
@@ -90,11 +89,17 @@ export function PrintSheet({ model, head }: { readonly model: PrintModel; readon
           </dl>
         ) : null}
 
-        {words ? (
-          <p className={styles.inWords}>
-            <span>{head.labels.amountInWords}</span>
-            <strong>{head.labels.amountWordsOnly.replace('{amount}', words)}</strong>
-          </p>
+        {amount ? (
+          <div className={styles.inWords}>
+            <p>
+              <span>{head.labels.amountInWords}</span>
+              <strong>{head.labels.amountWordsOnly.replace('{amount}', amount.words)}</strong>
+            </p>
+            <p className={styles.inFigures}>
+              <span>{head.labels.amount}</span>
+              <bdi dir="ltr">{amount.figure}</bdi>
+            </p>
+          </div>
         ) : null}
 
         {model.signatures ? (
@@ -168,7 +173,7 @@ function SheetTable({
                   <td
                     className={isNumeric(column) ? styles.num : undefined}
                     key={column.key}
-                    style={i === 0 && row.depth ? { paddingInlineStart: `${2 + row.depth * 3}mm` } : undefined}
+                    style={i === 0 && row.depth ? { paddingInlineStart: `${2 + row.depth * 3}mm`, textAlign: 'start' } : undefined}
                   >
                     {column.kind === 'text' ? <bdi dir="auto">{text}</bdi> : <bdi dir="ltr">{text}</bdi>}
                   </td>

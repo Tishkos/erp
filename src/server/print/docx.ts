@@ -30,7 +30,7 @@ import { hasRightToLeft } from './bidi';
 import { display, heading, printedAt } from './format';
 import { columnWidths } from './pdf';
 import { isNumeric, type Fact, type Letterhead, type PrintModel, type Table as PrintTable } from './model';
-import { amountInWords, spelledAmountOf } from './words';
+import { amountLineOf } from './words';
 
 /**
  * The Word document — the PDF's layout as an editable document.
@@ -345,30 +345,42 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
   }
 
   // The amount in words, under the figures.
-  const spelled = spelledAmountOf(model);
-  const words = spelled ? amountInWords(spelled.amount, spelled.currency, head.locale) : null;
-  if (words) {
+  const amount = amountLineOf(model, head.locale);
+  if (amount) {
+    const figureWidth = Math.round(contentWidth * 0.3);
     body.push(paragraph([], { spacingAfter: 120 }));
     body.push(
       new Table({
         width: { size: contentWidth, type: WidthType.DXA },
-        columnWidths: [contentWidth],
+        columnWidths: [contentWidth - figureWidth, figureWidth],
         layout: TableLayoutType.FIXED,
         visuallyRightToLeft: rtl,
-        borders: { ...noBorders, left: { style: BorderStyle.SINGLE, size: 18, color: BRAND } },
+        borders: noBorders,
         rows: [
           new TableRow({
             cantSplit: true,
             children: [
               new TableCell({
-                width: { size: contentWidth, type: WidthType.DXA },
+                width: { size: contentWidth - figureWidth, type: WidthType.DXA },
                 shading: { type: ShadingType.CLEAR, color: 'auto', fill: CARD },
                 borders: rtl
                   ? { ...noBorders, right: { style: BorderStyle.SINGLE, size: 18, color: BRAND } }
                   : { ...noBorders, left: { style: BorderStyle.SINGLE, size: 18, color: BRAND } },
                 children: [
                   paragraph([run(head.labels.amountInWords, { size: SMALL, color: MUTED })]),
-                  paragraph([run(head.labels.amountWordsOnly.replace('{amount}', words), { bold: true, color: NAVY })]),
+                  paragraph([run(head.labels.amountWordsOnly.replace('{amount}', amount.words), { bold: true, color: NAVY })]),
+                ],
+              }),
+              new TableCell({
+                width: { size: figureWidth, type: WidthType.DXA },
+                shading: { type: ShadingType.CLEAR, color: 'auto', fill: CARD },
+                verticalAlign: VerticalAlignTable.CENTER,
+                borders: rtl
+                  ? { ...noBorders, right: { style: BorderStyle.SINGLE, size: 4, color: HAIR } }
+                  : { ...noBorders, left: { style: BorderStyle.SINGLE, size: 4, color: HAIR } },
+                children: [
+                  paragraph([run(head.labels.amount, { size: SMALL, color: MUTED })], { end: true }),
+                  paragraph([run(amount.figure, { bold: true, size: BODY + 7, color: NAVY })], { end: true }),
                 ],
               }),
             ],
@@ -476,6 +488,9 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
       return Math.ceil(longest * (size / 2) * 0.56 * TWIP_PER_PT) + 240;
     }).map((w) => Math.round(w));
     const shade = (fill: string) => ({ type: ShadingType.CLEAR, color: 'auto', fill });
+    // A heading and the cells under it share one centre, as in the PDF; the
+    // first column of a tree (indented by depth) keeps to its reading start.
+    const tree = table.rows.some((row) => (row.depth ?? 0) > 0);
 
     const header = new TableRow({
       tableHeader: true,
@@ -486,7 +501,7 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
             width: { size: widths[i]!, type: WidthType.DXA },
             shading: shade(NAVY),
             verticalAlign: VerticalAlignTable.CENTER,
-            children: [paragraph([run(heading(column, model), { bold: true, size: size - 1, color: 'FFFFFF' })], { end: isNumeric(column) })],
+            children: [paragraph([run(heading(column, model), { bold: true, size: size - 1, color: 'FFFFFF' })], { center: !(tree && i === 0) })],
           }),
       ),
     });
@@ -515,10 +530,11 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
             (column, i) =>
               new TableCell({
                 width: { size: widths[i]!, type: WidthType.DXA },
+                verticalAlign: VerticalAlignTable.CENTER,
                 ...(fill ? { shading: shade(fill) } : {}),
                 children: [
                   paragraph([run(display(column, row.cells[column.key] ?? null, model, head.locale), { bold, size })], {
-                    end: isNumeric(column),
+                    center: !(tree && i === 0),
                     ...(i === 0 && row.depth ? { indent: row.depth * 200 } : {}),
                   }),
                 ],
@@ -549,7 +565,7 @@ export async function renderDocx(model: PrintModel, head: Letterhead): Promise<B
                   borders: { top: { style: BorderStyle.SINGLE, size: 12, color: BRAND } },
                   children: [
                     paragraph([run(display(column, totals.cells[column.key] ?? null, model, head.locale), { bold: true, size })], {
-                      end: isNumeric(column),
+                      center: true,
                     }),
                   ],
                 }),

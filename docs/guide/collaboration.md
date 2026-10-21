@@ -1,9 +1,9 @@
 # Chat, tasks and documents — user guide
 
-This guide covers the screens people use to work together rather than to post documents: Chat (المحادثات), the AI dock — Noah (نوح — الذكاء الاصطناعي) in the corner of every screen, the Task Center — My Tasks (مهامي), the Document Centre (مركز المستندات) with QS Cloud Files, and the Cloud Files Settings (إعدادات Cloud Files) an administrator uses to switch the cloud files on.
+This guide covers the screens people use to work together rather than to post documents: Chat (المحادثات), the AI dock — Noah (نوح — الذكاء الاصطناعي) in the corner of every screen, the Task Center — My Tasks (مهامي), the Document Centre (مركز المستندات) with Qimah Al-Safinah Cloud Files, and the Cloud Files Settings (إعدادات Cloud Files) an administrator uses to switch the cloud files on.
 **Chat** is for talking to colleagues inside the system, one to one or in a group. A message is never edited or deleted, only withdrawn with a reason. The **Messages** (الرسائل) button in the top bar shows how many messages are unread.
 A **task** is a piece of work one person asks another to do, in a section, with a priority and a deadline. It moves by buttons from Draft to Assigned, Accepted, In progress, Handed in and Completed, and **Reply in Chat** opens a conversation about it.
-The **Document Centre** is a window onto the company's cloud file store, QS Cloud Files. Each person links their own cloud account once, then browses, uploads and links files to the records they belong to. The files stay in the cloud; the system keeps only the links. The same files show on a record under its paperclip, in the **QS Cloud Files** panel.
+The **Document Centre** is a window onto the company's cloud file store, Qimah Al-Safinah Cloud Files. Each person links their own cloud account once, then browses, uploads and links files to the records they belong to. The files stay in the cloud; the system keeps only the links. The same files show on a record under its paperclip, in the **Qimah Al-Safinah Cloud Files** panel.
 None of these screens posts anything to the books. After an action the page answers as everywhere else: "Saved." or "That could not be saved." followed by the reason, which is always in English.
 
 ## Chat (المحادثات)
@@ -301,7 +301,7 @@ A task is never deleted. A completed or cancelled task cannot be changed or reop
 1. **Reply in Chat** (الرد في المحادثة) opens Chat on the conversation about this task with the other person on it — the person it is assigned to, or the one who assigned or raised it — and fills the message box with "About TASK-001 — <title>: ". Nothing is sent until you press Send. The button shows when you may write in Chat and somebody other than you is on the task.
 2. **Watchers** (المتابعون): people who follow the task without working on it. They can open it and are notified of its steps; they get no buttons. While the task is not finished, the person who raised it, assigned it or is working on it (or an administrator) chooses a name in **Add a watcher** (إضافة متابع) and presses **Add** (إضافة), or presses **Remove** (إزالة) on a row. Offered are active people who can view tasks in the task's branch. At most ten.
 3. **Notes** (speech bubble): anybody who can open the task may add a note; notes are dated, signed and never edited.
-4. **Files** (paperclip): while the task is not completed or cancelled, press **Choose a file** (اختر ملفاً) then **Attach** (إرفاق) — up to 25 MB, the usual rules. If QS Cloud Files is switched on, the same window has the **QS Cloud Files** panel to link cloud files to the task.
+4. **Files** (paperclip): while the task is not completed or cancelled, press **Choose a file** (اختر ملفاً) then **Attach** (إرفاق) — up to 25 MB, the usual rules. If Qimah Al-Safinah Cloud Files is switched on, the same window has the **Qimah Al-Safinah Cloud Files** panel to link cloud files to the task.
 5. **Printer**: a copy of the task in English or Arabic, as PDF, Excel or Word.
 6. **Clock**: every step, who took it, when and with what reason.
 
@@ -400,11 +400,11 @@ The reason follows "That could not be saved." on the task's page.
 ## Document Centre (مركز المستندات)
 Path: Documents → Documents & Tasks → Document Centre   |   Arabic: المستندات ← المستندات والمهام ← مركز المستندات
 Address: /documents
-Needs: `view` on `cloud_files` to open the screen and to see the QS Cloud Files panel on a record; `create` on `cloud_files` to upload, make folders, link and unlink. Three more things must be true: an administrator has switched QS Cloud Files on (Cloud Files Settings); you have linked your own Cloud Files account; and, for anything about a record, you may open that record. As delivered, the roles that may use the paperclip have the Document Centre; a role without the attachments permission (the project manager, as delivered) has none until an administrator grants it.
-What it is for: The Document Center — the system's window onto QS Cloud Files, the company's cloud file store: "Your files in QS Cloud Files, linked to the records they belong to." You browse, search, download, preview, upload, make folders, and link a cloud file to the record it belongs to. Nothing is copied into the system: the files stay in the cloud, and what you see there is exactly what the cloud lets your own account see.
+Needs: `view` on `cloud_files` to open the screen and to see the Qimah Al-Safinah Cloud Files panel on a record; `create` on `cloud_files` to upload, make folders, link and unlink. Three more things must be true: an administrator has switched Qimah Al-Safinah Cloud Files on (Cloud Files Settings); you have linked your own Cloud Files account; and, for anything about a record, you may open that record. As delivered, the roles that may use the paperclip have the Document Centre; a role without the attachments permission (the project manager, as delivered) has none until an administrator grants it.
+What it is for: The Document Center — the system's window onto Qimah Al-Safinah Cloud Files, the company's cloud file store: "Your files in Qimah Al-Safinah Cloud Files, linked to the records they belong to." You browse, search, download, preview, upload, make folders, and link a cloud file to the record it belongs to. Nothing is copied into the system: the files stay in the cloud, and what you see there is exactly what the cloud lets your own account see.
 
 ### How to link your Cloud Files account — Document Centre
-Needs: `view` on `cloud_files`, and a user name and password of your own in QS Cloud Files.
+Needs: `view` on `cloud_files`, and a user name and password of your own in Qimah Al-Safinah Cloud Files.
 1. Open Documents → Documents & Tasks → Document Centre. The first time it says **Link your Cloud Files account** (اربط حسابك في Cloud Files): "Qimah opens your files as you, with an app password that you approve in Cloud Files. It is stored encrypted, is never shown again, and you can revoke it whenever you wish."
 2. Press **Link my account** (ربط حسابي). The page now says "Waiting for your approval in Cloud Files" (بانتظار موافقتك في Cloud Files) and when the request expires — twenty minutes from now.
 3. Press **Open Cloud Files** (فتح Cloud Files). The cloud's own page opens in a new tab. Sign in there if asked and press Grant access.
@@ -467,16 +467,16 @@ From the Document Centre:
 3. Type the **Record number** (رقم السجل) exactly as printed: "The number shown on the record, for example the invoice number."
 4. Press **Link** (ربط). "Saved."; the record's number now shows in the file's **Linked to** (مرتبط بـ) column and is a link to the record.
 From the record:
-1. Open the record, press the paperclip, and in the **QS Cloud Files** panel press **Link a file from Cloud Files** (ربط ملف من Cloud Files).
+1. Open the record, press the paperclip, and in the **Qimah Al-Safinah Cloud Files** panel press **Link a file from Cloud Files** (ربط ملف من Cloud Files).
 2. The Document Centre opens with the note "Choose a file to link to <kind> <number>." Browse to the file.
 3. Press **Link to this record** (ربط بهذا السجل). You are back on the record with the file listed. **Back to the record** (العودة إلى السجل) returns without linking.
 - A file can be linked to several records, and a record can have many files.
 - A link copies nothing: it points at the cloud's file. If the file is renamed or moved in the cloud the link follows it.
 - People who have acted on the record and can open it are told "A file was linked to <number>".
 
-### How to use the QS Cloud Files panel under a record's paperclip — Document Centre
+### How to use the Qimah Al-Safinah Cloud Files panel under a record's paperclip — Document Centre
 Needs: `view` on `cloud_files` to see the panel, `create` to change it; Cloud Files switched on; and the right to open the record.
-1. Open a record and press the paperclip. Under the system's own attachments is the panel **QS Cloud Files**. The number on the paperclip counts both.
+1. Open a record and press the paperclip. Under the system's own attachments is the panel **Qimah Al-Safinah Cloud Files**. The number on the paperclip counts both.
 2. Each linked file shows its name, size, "linked by <name>" (ربطه …), when, and **Open in Cloud Files** (فتح في Cloud Files). Press the name to download it; a linked folder opens in the Document Centre.
 3. To add a file from your computer: **Choose files** (اختر ملفات), then **Upload** (رفع). "The file goes into this record's folder in Cloud Files and is linked to the record." The folder is made if it is not there.
 4. **Link a file from Cloud Files** (ربط ملف من Cloud Files) picks a file that is already in the cloud.
@@ -504,7 +504,7 @@ Other fields:
 
 ### Statuses — Document Centre
 The screen is always in one of these states, and says which:
-- **This integration is not configured** (هذا التكامل غير مُهيأ) — "QS Cloud Files has not been switched on for this company. Ask an administrator to connect it." Nothing works until an administrator switches it on in Cloud Files Settings; a person who may open those settings sees the button **Open Cloud Files settings** (فتح إعدادات Cloud Files).
+- **This integration is not configured** (هذا التكامل غير مُهيأ) — "Qimah Al-Safinah Cloud Files has not been switched on for this company. Ask an administrator to connect it." Nothing works until an administrator switches it on in Cloud Files Settings; a person who may open those settings sees the button **Open Cloud Files settings** (فتح إعدادات Cloud Files).
 - **Link your Cloud Files account** (اربط حسابك في Cloud Files) — it is on, but you have not linked. Press **Link my account** (ربط حسابي).
 - **Waiting for your approval in Cloud Files** (بانتظار موافقتك في Cloud Files) — you started linking and have not yet pressed Grant access in the cloud. The request lasts twenty minutes.
 - **Your Cloud Files link is no longer valid** (ربطك بـ Cloud Files لم يعد صالحًا) — the cloud refuses the stored app password, or the address changed. Press **Link my account again** (ربط حسابي من جديد).
@@ -515,7 +515,7 @@ A link between a file and a record is either live or ended. An ended link (unlin
 
 ### What happens next — Document Centre
 - An upload or a new folder is reported only after the cloud has confirmed it; the list is then read again from the cloud.
-- A linked file shows on the record under the paperclip, in the **QS Cloud Files** panel, and the record's number shows beside the file here.
+- A linked file shows on the record under the paperclip, in the **Qimah Al-Safinah Cloud Files** panel, and the record's number shows beside the file here.
 - Whether a colleague can open a linked file is decided by the cloud, not by the link: the file must be theirs or shared with them. To share a record's files with the people who work on that kind of record, use **Create the record's folder** and keep the files in it.
 - A folder made from the system is shared with the cloud groups the administrator mapped to roles, with the rights set in Cloud Files Settings at that moment. A later change of the mapping does not re-share folders already made.
 - Uploads, new folders, links, unlinks, downloads and previews are written to the audit trail; linking and unlinking also show in the record's own history.
@@ -541,7 +541,7 @@ The reason shows beside the file as "Not uploaded: <reason>" (لم يُرفع: �
 - "Cloud Files did not confirm the upload, so it is not counted as uploaded. Try again."
 - "Cloud Files refused the file because it is too large." / "Cloud Files has no room left for that file." — the cloud's own limits; ask whoever runs Cloud Files.
 - "Cloud Files does not allow that for this account." — your cloud account may not add files to that folder.
-- "Link your Cloud Files account first." / "Cloud Files no longer accepts your account. Link it again." / "QS Cloud Files is not configured."
+- "Link your Cloud Files account first." / "Cloud Files no longer accepts your account. Link it again." / "Qimah Al-Safinah Cloud Files is not configured."
 - "You cannot add files to that record." — from a record's paperclip: the record is not yours to open.
 - "You do not have permission to add files." — you hold no `create` on `cloud_files`.
 - "Your session has ended. Sign in again."
@@ -549,7 +549,7 @@ The reason shows beside the file as "Not uploaded: <reason>" (لم يُرفع: �
 
 ### Refusals — Document Centre
 - "Not available to you" — you hold no `view` on `cloud_files`; ask an administrator.
-- "This integration is not configured." — QS Cloud Files is not switched on; ask an administrator.
+- "This integration is not configured." — Qimah Al-Safinah Cloud Files is not switched on; ask an administrator.
 - "Link your Cloud Files account to continue." — link your account, then repeat what you were doing.
 - "Your Cloud Files link is no longer valid. Link your account again."
 - "server key: ERP_SECRET_KEY is not set on this server. Ask your administrator." — nobody can link until the server is set up; pass the sentence on.
@@ -568,9 +568,9 @@ The reason shows beside the file as "Not uploaded: <reason>" (لم يُرفع: �
 Path: Settings → Administration → Cloud Files Settings   |   Arabic: الإعدادات ← الإدارة ← إعدادات Cloud Files
 Address: /administration/cloud-files
 Needs: `view` on `cloud_setting` to open the screen; `configure` on `cloud_setting` to change anything on it (Save, Test the address, Map a role, Deactivate, Switch back on). As delivered: the roles that could configure attachments, the CEO and the system administrator.
-What it is for: Switching QS Cloud Files on or off for the whole company, saying where the cloud server is, where the Document Centre starts and where record folders are made, and mapping the system's roles to the cloud's groups: "Switch QS Cloud Files on, say where it is, and map ERP roles to its groups." No password is typed here; each person links their own cloud account in the Document Centre.
+What it is for: Switching Qimah Al-Safinah Cloud Files on or off for the whole company, saying where the cloud server is, where the Document Centre starts and where record folders are made, and mapping the system's roles to the cloud's groups: "Switch Qimah Al-Safinah Cloud Files on, say where it is, and map ERP roles to its groups." No password is typed here; each person links their own cloud account in the Document Centre.
 
-### How to switch QS Cloud Files on — Cloud Files Settings
+### How to switch Qimah Al-Safinah Cloud Files on — Cloud Files Settings
 Needs: `configure` on `cloud_setting`.
 1. Open Settings → Administration → Cloud Files Settings. The panel **Connection** (الاتصال) holds the settings.
 2. Type the **Address of Cloud Files** (عنوان Cloud Files) — "Where Nextcloud is, for example https://files.qs-groups.com. Must be https."
@@ -585,7 +585,7 @@ If a red band **Server key missing** (مفتاح الخادم غير مضبوط)
 ### How to switch it off or change the address — Cloud Files Settings
 Needs: `configure` on `cloud_setting`.
 1. To switch off, untick **Cloud Files is switched on** (Cloud Files مُفعّل) and press **Save** (حفظ).
-2. Within about ten seconds the Document Centre says "This integration is not configured" for everybody and the QS Cloud Files panel disappears from every paperclip. Nothing is deleted: the files are in the cloud, and the links and people's linked accounts are kept for when it is switched on again.
+2. Within about ten seconds the Document Centre says "This integration is not configured" for everybody and the Qimah Al-Safinah Cloud Files panel disappears from every paperclip. Nothing is deleted: the files are in the cloud, and the links and people's linked accounts are kept for when it is switched on again.
 3. To change the address, type the new one, press **Test the address** (اختبار العنوان), then **Save** (حفظ). Every person's link was made with the old address, so each of them is asked to link again.
 4. Changing **Document Center starts in** moves where everybody's list begins; a person who has no such folder in their own cloud files is told the start folder does not exist for them.
 A person who may open the screen but not change it sees the same values as plain text, without the buttons.

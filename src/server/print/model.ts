@@ -174,6 +174,8 @@ export interface PrintLabels {
   readonly preparedBy: string;
   readonly approvedBy: string;
   readonly receivedBy: string;
+  /** "Amount" — the figure beside the words. */
+  readonly amount: string;
   /** "Amount in words". */
   readonly amountInWords: string;
   /** "{amount} only" — the words go where {amount} is. */

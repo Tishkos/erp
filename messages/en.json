@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "QS ERP",
+    "name": "Qimah Al-Safinah",
     "tagline": "Integrated ERP System"
   },
   "nav": {
@@ -904,7 +904,7 @@
     "journals_unavailable_title": "No journal data in this workspace",
     "journals_unavailable_body": "This front-end view does not widen the existing account query or request ledger entries.",
     "footer": "© 2026 Qimah Al-Safinah. All rights reserved.",
-    "version": "QS ERP v0.0.0",
+    "version": "Qimah Al-Safinah v0.0.0",
     "preview": {
       "label": "Front-end preview",
       "confirmation": "Preview completed. No account data was saved.",
@@ -1020,7 +1020,7 @@
     "next_action": "Next action"
   },
   "shell": {
-    "brand": "QS ERP",
+    "brand": "Qimah Al-Safinah",
     "logo_alt": "Qimah Al-Safinah",
     "company_name": "Qimah Al-Safinah",
     "company_name_secondary": "قمة السفینە",
@@ -9170,6 +9170,7 @@
     "prepared_by": "Prepared by",
     "approved_by": "Approved by (CEO)",
     "received_by": "Received by",
+    "amount": "Amount",
     "amount_in_words": "Amount in words",
     "amount_words_only": "{amount} only",
     "totals": "Totals",
@@ -9717,11 +9718,11 @@
     }
   },
   "cloudFiles": {
-    "subtitle": "Your files in QS Cloud Files, linked to the records they belong to.",
-    "settings_subtitle": "Switch QS Cloud Files on, say where it is, and map ERP roles to its groups.",
+    "subtitle": "Your files in Qimah Al-Safinah Cloud Files, linked to the records they belong to.",
+    "settings_subtitle": "Switch Qimah Al-Safinah Cloud Files on, say where it is, and map ERP roles to its groups.",
     "not_configured_title": "This integration is not configured",
-    "not_configured_body_admin": "QS Cloud Files has not been switched on for this company. Connect it in Cloud Files settings: the address, where the Document Center starts, and which groups the roles belong to.",
-    "not_configured_body": "QS Cloud Files has not been switched on for this company. Ask an administrator to connect it.",
+    "not_configured_body_admin": "Qimah Al-Safinah Cloud Files has not been switched on for this company. Connect it in Cloud Files settings: the address, where the Document Center starts, and which groups the roles belong to.",
+    "not_configured_body": "Qimah Al-Safinah Cloud Files has not been switched on for this company. Ask an administrator to connect it.",
     "not_configured_action": "Open Cloud Files settings",
     "not_linked_title": "Link your Cloud Files account",
     "not_linked_body": "Qimah opens your files as you, with an app password that you approve in Cloud Files. It is stored encrypted, is never shown again, and you can revoke it whenever you wish.",
@@ -9811,7 +9812,7 @@
     "link_number": "Record number",
     "link_number_hint": "The number shown on the record, for example the invoice number.",
     "link_make": "Link",
-    "record_title": "QS Cloud Files",
+    "record_title": "Qimah Al-Safinah Cloud Files",
     "record_none": "No Cloud Files are linked to this record yet.",
     "record_not_linked_body": "Link your Cloud Files account to see and add the files of this record.",
     "record_unreachable": "Cloud Files cannot be reached just now, so the linked files are listed without their details.",

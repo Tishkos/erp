@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "QS ERP",
+    "name": "قمة السفینە",
     "tagline": "نظام ERP متكامل"
   },
   "nav": {
@@ -904,7 +904,7 @@
     "journals_unavailable_title": "لا توجد بيانات قيود في مساحة العمل",
     "journals_unavailable_body": "لا توسّع واجهة العرض هذه استعلام الحسابات الحالي ولا تطلب قيود دفتر الأستاذ.",
     "footer": "© 2026 قمة السفینە. جميع الحقوق محفوظة.",
-    "version": "QS ERP v0.0.0",
+    "version": "قمة السفینە v0.0.0",
     "preview": {
       "label": "معاينة للواجهة فقط",
       "confirmation": "اكتملت المعاينة ولم تُحفظ أي بيانات حسابات.",
@@ -1020,7 +1020,7 @@
     "next_action": "الإجراء التالي"
   },
   "shell": {
-    "brand": "QS ERP",
+    "brand": "قمة السفینە",
     "logo_alt": "قمة السفینە",
     "company_name": "قمة السفینە",
     "company_name_secondary": "Qimah Al-Safinah",
@@ -9170,6 +9170,7 @@
     "prepared_by": "أعدّه",
     "approved_by": "اعتمده (المدير التنفيذي)",
     "received_by": "استلمه",
+    "amount": "المبلغ",
     "amount_in_words": "المبلغ كتابةً",
     "amount_words_only": "فقط {amount} لا غير",
     "totals": "الإجماليات",
@@ -9717,11 +9718,11 @@
     }
   },
   "cloudFiles": {
-    "subtitle": "ملفاتك في QS Cloud Files، مرتبطة بالسجلات التي تخصها.",
-    "settings_subtitle": "فعّل QS Cloud Files وحدّد عنوانه واربط أدوار النظام بمجموعاته.",
+    "subtitle": "ملفاتك في Qimah Al-Safinah Cloud Files، مرتبطة بالسجلات التي تخصها.",
+    "settings_subtitle": "فعّل Qimah Al-Safinah Cloud Files وحدّد عنوانه واربط أدوار النظام بمجموعاته.",
     "not_configured_title": "هذا التكامل غير مُهيأ",
-    "not_configured_body_admin": "لم يتم تفعيل QS Cloud Files لهذه الشركة. اربطه من إعدادات Cloud Files: العنوان، والمجلد الذي يبدأ منه مركز المستندات، والمجموعات التي تنتمي إليها الأدوار.",
-    "not_configured_body": "لم يتم تفعيل QS Cloud Files لهذه الشركة. اطلب من المسؤول ربطه.",
+    "not_configured_body_admin": "لم يتم تفعيل Qimah Al-Safinah Cloud Files لهذه الشركة. اربطه من إعدادات Cloud Files: العنوان، والمجلد الذي يبدأ منه مركز المستندات، والمجموعات التي تنتمي إليها الأدوار.",
+    "not_configured_body": "لم يتم تفعيل Qimah Al-Safinah Cloud Files لهذه الشركة. اطلب من المسؤول ربطه.",
     "not_configured_action": "فتح إعدادات Cloud Files",
     "not_linked_title": "اربط حسابك في Cloud Files",
     "not_linked_body": "يفتح النظام ملفاتك باسمك، بكلمة مرور تطبيق توافق عليها في Cloud Files. تُحفظ مشفّرة ولا تُعرض مرة أخرى، ويمكنك إلغاؤها متى شئت.",
@@ -9811,7 +9812,7 @@
     "link_number": "رقم السجل",
     "link_number_hint": "الرقم الظاهر على السجل، مثل رقم الفاتورة.",
     "link_make": "ربط",
-    "record_title": "QS Cloud Files",
+    "record_title": "Qimah Al-Safinah Cloud Files",
     "record_none": "لا توجد ملفات من Cloud Files مرتبطة بهذا السجل بعد.",
     "record_not_linked_body": "اربط حسابك في Cloud Files لترى ملفات هذا السجل وتضيف إليها.",
     "record_unreachable": "تعذّر الوصول إلى Cloud Files الآن، لذلك تُعرض الملفات المرتبطة دون تفاصيلها.",

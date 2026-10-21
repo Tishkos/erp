@@ -2,7 +2,7 @@ import PDFDocument from 'pdfkit';
 import { directionOf, visualRuns, type Direction, type Run } from './bidi';
 import { asset } from './assets';
 import { display, heading, pageOf, printedAt } from './format';
-import { amountInWords, spelledAmountOf } from './words';
+import { amountLineOf } from './words';
 import { isNumeric, type Column, type Fact, type Letterhead, type PrintModel, type Row, type Table } from './model';
 
 /**
@@ -422,12 +422,21 @@ export async function renderPdf(model: PrintModel, head: Letterhead): Promise<Bu
     const headLines = columns.map((column, i) => pen.wrap(heading(column, model), widths[i]! - 2 * padX, { size: headSize, weight: 'bold' }));
     const headerHeight = Math.max(...headLines.map((lines) => lines.length)) * headSize * 1.42 + 2 * padY + 1;
 
+    // A heading and the cells under it share one centre (by direction,
+    // 2026-10-22: "header and sub cells should be centred together"), each
+    // set in the middle of its row's height too. The first column of a tree
+    // (a statement's lines, indented by depth) keeps to its reading start.
+    const tree = table.rows.some((row) => (row.depth ?? 0) > 0);
+    const alignOf = (i: number): Align => (tree && i === 0 ? 'start' : 'center');
+    const middle = (rowHeight: number, lines: number, step: number) => (rowHeight - lines * step) / 2 + 0.5;
+
     const drawHeader = () => {
       doc.roundedRect(content.x, y, content.width, headerHeight, 5).fill(NAVY);
       doc.rect(content.x, y + headerHeight / 2, content.width, headerHeight / 2).fill(NAVY);
-      columns.forEach((column, i) => {
+      columns.forEach((_, i) => {
+        const top = y + middle(headerHeight, headLines[i]!.length, headSize * 1.42);
         headLines[i]!.forEach((line, k) =>
-          pen.line(line, cellBox(i), y + padY + 0.5 + k * headSize * 1.42, isNumeric(column) ? 'end' : 'start', {
+          pen.line(line, cellBox(i), top + k * headSize * 1.42, alignOf(i), {
             size: headSize,
             weight: 'bold',
             color: WHITE,
@@ -462,8 +471,9 @@ export async function renderPdf(model: PrintModel, head: Letterhead): Promise<Bu
       if (marked) doc.rect(content.x, y, content.width, height).fill(TINT);
       else if (index % 2 === 1) doc.rect(content.x, y, content.width, height).fill(ROW_TINT);
       columns.forEach((column, i) => {
+        const top = y + middle(height, wrapped[i]!.length, lineHeight);
         wrapped[i]!.forEach((line, k) => {
-          pen.line(line, cellBox(i, i === 0 ? indent : 0), y + padY + 0.5 + k * lineHeight, isNumeric(column) ? 'end' : 'start', {
+          pen.line(line, cellBox(i, i === 0 ? indent : 0), top + k * lineHeight, alignOf(i), {
             size,
             weight,
             color: marked ? NAVY : INK,
@@ -489,7 +499,7 @@ export async function renderPdf(model: PrintModel, head: Letterhead): Promise<Bu
       columns.forEach((column, i) => {
         if (i < span) return;
         const text = display(column, totals.cells[column.key] ?? null, model, head.locale);
-        pen.line(text, cellBox(i), y + padY + 2, isNumeric(column) ? 'end' : 'start', { size, weight: 'heavy', color: NAVY, ltr: true });
+        pen.line(text, cellBox(i), y + padY + 2, 'center', { size, weight: 'heavy', color: NAVY, ltr: true });
       });
       y += height;
     }
@@ -526,22 +536,34 @@ export async function renderPdf(model: PrintModel, head: Letterhead): Promise<Bu
    * "فقط سبعة وأربعون مليونًا … دينار عراقي لا غير".
    */
   function inWords() {
-    const spelled = spelledAmountOf(model);
-    const words = spelled ? amountInWords(spelled.amount, spelled.currency, head.locale) : null;
-    if (!words) return;
-    const text = head.labels.amountWordsOnly.replace('{amount}', words);
-    const inner = content.width - 24;
-    const lines = pen.wrap(text, inner, { size: 9, weight: 'bold' });
-    const height = 10 + 7 * LEADING + lines.length * 9 * LEADING + 8;
+    const amount = amountLineOf(model, head.locale);
+    if (!amount) return;
+    const text = head.labels.amountWordsOnly.replace('{amount}', amount.words);
+    // The figure and its currency at the reading end, as wide as it needs.
+    const figureSize = 12;
+    const figureWidth =
+      Math.max(
+        pen.width(amount.figure, { size: figureSize, weight: 'heavy', ltr: true }),
+        pen.width(head.labels.amount, { size: 7, weight: 'medium' }),
+      ) + 24;
+    const wordsWidth = content.width - figureWidth - 24;
+    const lines = pen.wrap(text, wordsWidth, { size: 9, weight: 'bold' });
+    const height = Math.max(10 + 7 * LEADING + lines.length * 9 * LEADING + 8, 10 + 7 * LEADING + figureSize * LEADING + 6);
     ensure(height + 8);
     y += 6;
     doc.roundedRect(content.x, y, content.width, height, 6).fill(CARD);
     doc.rect(atStart(3), y + 6, 3, height - 12).fill(BRAND);
-    const box: Box = { x: content.x + 12, width: inner };
-    pen.line(head.labels.amountInWords, box, y + 7, 'start', { size: 7, weight: 'medium', color: MUTED });
+    const words: Box = { x: rtl ? content.x + figureWidth + 12 : content.x + 12, width: wordsWidth };
+    pen.line(head.labels.amountInWords, words, y + 7, 'start', { size: 7, weight: 'medium', color: MUTED });
     lines.forEach((line, index) =>
-      pen.line(line, box, y + 7 + 7 * LEADING + index * 9 * LEADING, 'start', { size: 9, weight: 'bold', color: NAVY }),
+      pen.line(line, words, y + 7 + 7 * LEADING + index * 9 * LEADING, 'start', { size: 9, weight: 'bold', color: NAVY }),
     );
+    const figure: Box = { x: atEnd(figureWidth), width: figureWidth - 12 };
+    const figureBox: Box = rtl ? { x: content.x + 12, width: figureWidth - 12 } : figure;
+    const ruleX = rtl ? content.x + figureWidth : content.x + content.width - figureWidth;
+    doc.moveTo(ruleX, y + 8).lineTo(ruleX, y + height - 8).lineWidth(0.6).strokeColor(HAIR).stroke();
+    pen.line(head.labels.amount, figureBox, y + 7, 'end', { size: 7, weight: 'medium', color: MUTED });
+    pen.line(amount.figure, figureBox, y + 7 + 7 * LEADING, 'end', { size: figureSize, weight: 'heavy', color: NAVY, ltr: true });
     y += height + 4;
   }
 

@@ -54,7 +54,7 @@ async function deliver(
         displayName: to.displayName,
         password,
         reason,
-        companyName: current?.legalName ?? 'QS',
+        companyName: current?.legalName ?? 'Qimah Al-Safinah',
       });
     } catch {
       mailFailed = true;

@@ -83,10 +83,12 @@
   inline-size: min(60%, 120mm);
 }
 
-/* The amount in words, under the figures. */
+/* The amount in words beside the amount in figures, under the table. */
 .inWords {
   display: grid;
-  gap: 0.5mm;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2mm 6mm;
   margin-block: 4mm 0;
   padding: 2.5mm 4mm;
   border-inline-start: 3pt solid var(--print-brand);
@@ -101,10 +103,41 @@
   font-weight: 500;
 }
 
+.inWords p {
+  display: grid;
+  gap: 0.5mm;
+  margin: 0;
+}
+
 .inWords strong {
   color: var(--print-navy);
   font-size: 9.5pt;
   font-weight: 700;
+}
+
+.inFigures {
+  padding-inline-start: 6mm;
+  border-inline-start: 0.6pt solid var(--print-hair);
+  text-align: end;
+}
+
+.inFigures bdi {
+  color: var(--print-navy);
+  font-size: 12pt;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+@media screen and (max-width: 40rem) {
+  .inWords {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inFigures {
+    padding-inline-start: 0;
+    border-inline-start: 0;
+    text-align: start;
+  }
 }
 
 /* The toolbar exists only on screen. */
@@ -314,13 +347,15 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* A heading and the cells under it share one centre, set in the middle of
+   the row's height (2026-10-22, by direction). */
 .lines th,
 .lines td {
   padding: 1.5mm 2mm;
   border-block-end: 0.5pt solid var(--print-hair);
   font-size: 8.8pt;
-  text-align: start;
-  vertical-align: top;
+  text-align: center;
+  vertical-align: middle;
 }
 
 .lines th {
@@ -345,7 +380,7 @@
 }
 
 .lines .num {
-  text-align: end;
+  text-align: center;
   white-space: nowrap;
 }
 

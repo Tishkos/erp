@@ -7,6 +7,21 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 
 ## Unreleased
 
+## 1.1.6 — 2026-10-22
+
+### Changed — printed copies
+- The amount in words now stands beside the **amount in figures with its currency** ("52,120,000 IQD"), in the PDF, the Word file and the browser's print (by direction: "no amount in numbers … should contain the amount in numbers and currency too").
+- A table's **heading and the cells under it are centred together**, and each cell sits in the middle of its row's height; the first column of an indented statement keeps to its reading start.
+
+### Changed — the company's name instead of "QS"
+- The application's name is **Qimah Al-Safinah** (قمة السفینە in Arabic) wherever it said "QS ERP": the browser tab, the brand, the WhatsApp answer's footer, the maintenance page, the authenticator's default label; "QS Cloud Files" is **Qimah Al-Safinah Cloud Files**; the guide follows.
+
+### Migrations
+- None. Rollback: the previous build.
+
+### Test evidence
+- The unit suite (166 files), `tests/integration/ops14-print-export.test.ts`, `tests/integration/wa02-intents.test.ts`.
+
 ## 1.1.5 — 2026-10-21
 
 ### New — printed copies in the company's look

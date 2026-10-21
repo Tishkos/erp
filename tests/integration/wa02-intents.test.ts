@@ -156,7 +156,7 @@ describe('W3 · wa02-intents — each ask returns the figures the screen shows',
     expect(en.text).toContain('Solar Panel 550W — 10 EA — 1,000,000 IQD');
     expect(en.text).toContain('Total at FIFO cost: 1,000,000 IQD');
     expect(en.attachment).toBeNull();
-    expect(en.text).toMatch(/— QS ERP · as of .* · branch BGW · read as The CEO$/);
+    expect(en.text).toMatch(/— Qimah Al-Safinah · as of .* · branch BGW · read as The CEO$/);
 
     const ar = await ask(`شنو موجود بمخزن ${WAREHOUSE}`);
     expect(ar.intent.kind).toBe('stock');

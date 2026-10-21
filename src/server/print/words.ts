@@ -1,4 +1,4 @@
-import type { Locale } from '@/i18n/config';
+import { formatMoney, type Locale } from '@/i18n/config';
 import type { PrintModel } from './model';
 
 /**
@@ -72,6 +72,20 @@ export function amountInWords(amount: string, currency: Currency, locale: Locale
   }
   if (whole === 0n && minor === 0n) return null;
   return locale === 'ar' ? arabic(whole, minor, currency, negative) : english(whole, minor, currency, negative);
+}
+
+/**
+ * What the three formats print under the figures: the amount in figures with
+ * its currency ("57,190,000 IQD") beside the same amount in words — both, by
+ * direction (2026-10-22: "no amount in numbers … should contain also the
+ * amount in numbers and currency").
+ */
+export function amountLineOf(model: PrintModel, locale: Locale): { figure: string; words: string } | null {
+  const spelled = spelledAmountOf(model);
+  if (!spelled) return null;
+  const words = amountInWords(spelled.amount, spelled.currency, locale);
+  if (!words) return null;
+  return { figure: formatMoney(spelled.amount, spelled.currency, locale).replace(/\u200e/g, ''), words };
 }
 
 // ------------------------------------------------------------------- English

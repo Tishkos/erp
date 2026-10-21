@@ -135,7 +135,7 @@ describe('language and names', () => {
 
   it('W-R7 — the footer names when, where and as whom', () => {
     const line = footer('en', { at: new Date('2026-10-02T06:30:00Z'), branchCode: 'HQ', userName: 'CEO' });
-    expect(line).toBe('— QS ERP · as of 2026-10-02 06:30 UTC · branch HQ · read as CEO');
+    expect(line).toBe('— Qimah Al-Safinah · as of 2026-10-02 06:30 UTC · branch HQ · read as CEO');
     expect(footer('ar', { at: new Date('2026-10-02T06:30:00Z'), branchCode: 'HQ', userName: 'CEO' })).toContain('الفرع HQ');
     expect(helpText('ar')).toContain('للقراءة فقط');
   });

@@ -1117,11 +1117,11 @@ export interface Observed {
   readonly error?: string | null;
 }
 
-/** The answer without the "— QS ERP · as of … · read as …" line every reply ends with. */
+/** The answer without the "— Qimah Al-Safinah · as of … · read as …" line every reply ends with. */
 export function withoutStamp(answer: string): string {
   return answer
     .split(/\r?\n/)
-    .filter((line) => !/^\s*—\s*QS ERP\b/.test(line))
+    .filter((line) => !/^\s*—\s*(QS ERP|Qimah Al-Safinah|قمة السفینە)/.test(line))
     .join('\n')
     .trim();
 }
