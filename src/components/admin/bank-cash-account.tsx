@@ -28,7 +28,6 @@ import { outcomeOf, type SearchParams } from './params';
 import { Denied } from '@/components/denied';
 import { ExportMenu } from '@/components/print/export-menu';
 import { can } from '@domain/permissions';
-import { toDecimalString } from '@domain/money';
 import { AdminNotFoundError } from '@/server/services/administration';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as accounts from '@/server/services/bank-cash-accounts';
@@ -299,7 +298,8 @@ export async function AccountRecord({
         row,
         bankRows: mayEdit && kind === 'bank' ? await banks.listActive(tx) : [],
         // REQ-AP-001 §15.1 — Booked / Reserved / Available.
-        reserved: await reservations.accountPosition(tx, row.id).catch(() => null),
+        // In the account's own currency: a dollar account's balance, held and available in dollars.
+        reserved: await reservations.accountPositionInCurrency(tx, row.id).catch(() => null),
         gl: mayEdit ? await accounts.availableGlAccounts(tx, row.glAccountId) : [],
         people: mayEdit ? await users.listAll(tx) : [],
         moneys: mayEdit ? await rates.currencies(tx) : [],
@@ -333,6 +333,10 @@ export async function AccountRecord({
   if (!data) notFound();
   const { row, gl, people, moneys, position, bankRows, reserved, ledgerLines } = data;
   const money = (amount: string) => formatMoney(amount, row.currency, locale as Locale);
+  // The ledger's own figures — the year's money in and out, the opening, the transfers — are dinars
+  // whatever the account's currency, and say so (2026-10-22: they were printed with the account's "USD").
+  const dinars = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
+  const foreign = row.currency !== 'IQD';
   // The address is the truth about which list this belongs on; a cash account
   // reached through the bank route is the wrong page for it.
   if (row.accountType !== kind) notFound();
@@ -486,8 +490,13 @@ export async function AccountRecord({
                 <div className={s.holdingsHead}>
                   <span>{t('accounts_shared.holds_now')}</span>
                   <span className={s.holdingsAmount}>
-                    <bdi dir="ltr">{money(position.closingIqd)}</bdi>
+                    <bdi dir="ltr">{foreign && reserved ? money(reserved.balance) : money(position.closingIqd)}</bdi>
                   </span>
+                  {foreign ? (
+                    <span className="block text-xs text-muted-fg">
+                      <bdi dir="ltr">{dinars(position.closingIqd)}</bdi>
+                    </span>
+                  ) : null}
                 </div>
 
                 <div className={s.holdingsFlows}>
@@ -497,7 +506,7 @@ export async function AccountRecord({
                       {t('accounts_shared.received_in', { year: String(year) })}
                     </span>
                     <strong>
-                      <bdi dir="ltr">{money(position.moneyInIqd)}</bdi>
+                      <bdi dir="ltr">{dinars(position.moneyInIqd)}</bdi>
                     </strong>
                   </div>
 
@@ -519,7 +528,7 @@ export async function AccountRecord({
                         {t('accounts_shared.reserved')}
                       </span>
                       <strong>
-                        <bdi dir="ltr">{money(toDecimalString(reserved.committedIqd, 4n))}</bdi>
+                        <bdi dir="ltr">{money(reserved.committed)}</bdi>
                       </strong>
                     </div>
                   ) : null}
@@ -530,14 +539,14 @@ export async function AccountRecord({
                       {t('accounts_shared.paid_out_in', { year: String(year) })}
                     </span>
                     <strong>
-                      <bdi dir="ltr">{money(position.moneyOutIqd)}</bdi>
+                      <bdi dir="ltr">{dinars(position.moneyOutIqd)}</bdi>
                     </strong>
                   </div>
 
                   <div className={s.holdingsFlow}>
                     <span>{t('accounts_shared.opening_year', { year: String(year) })}</span>
                     <strong>
-                      <bdi dir="ltr">{money(position.openingIqd)}</bdi>
+                      <bdi dir="ltr">{dinars(position.openingIqd)}</bdi>
                     </strong>
                   </div>
 
@@ -545,7 +554,7 @@ export async function AccountRecord({
                     <div className={s.holdingsFlow}>
                       <span>{t('accounts_shared.available')}</span>
                       <strong>
-                        <bdi dir="ltr">{money(toDecimalString(reserved.availableIqd, 4n))}</bdi>
+                        <bdi dir="ltr">{money(reserved.available)}</bdi>
                       </strong>
                     </div>
                   ) : null}
@@ -570,13 +579,13 @@ export async function AccountRecord({
                       <div className={s.holdingsFlow}>
                         <span>{t('accounts_shared.transfers_in')}</span>
                         <strong>
-                          <bdi dir="ltr">{money(position.transfersInIqd)}</bdi>
+                          <bdi dir="ltr">{dinars(position.transfersInIqd)}</bdi>
                         </strong>
                       </div>
                       <div className={s.holdingsFlow}>
                         <span>{t('accounts_shared.transfers_out')}</span>
                         <strong>
-                          <bdi dir="ltr">{money(position.transfersOutIqd)}</bdi>
+                          <bdi dir="ltr">{dinars(position.transfersOutIqd)}</bdi>
                         </strong>
                       </div>
                     </>

@@ -7,6 +7,17 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 
 ## Unreleased
 
+## 1.1.7 — 2026-10-22
+
+### Fixed — a dollar bank account's page printed its dinars as dollars
+- On a USD bank or cash account's page, *Available to pay with*, *Reserved* and *Holds now* were dinar figures written with "USD" ("Available to pay with -3,727,352,680.00 USD" on Arab Bank: −3.7 billion dinars, about −2.96 million dollars). They are now in the account's own currency — its ledger lines' dollar columns, less each approved or sent payment application's own amount (an approved transfer's likewise; anything kept only in dinars at today's rate) — with the dinars under *Holds now*. The year's money in and out, the opening and the transfers are the ledger's dinars and now say IQD. `treasury.accountPositionInCurrency`; the payment applications' own funds check is unchanged.
+
+### Migrations
+- None. Rollback: the previous build.
+
+### Test evidence
+- The unit suite (166 files); the figures read on live against the same SQL.
+
 ## 1.1.6 — 2026-10-22
 
 ### Changed — printed copies

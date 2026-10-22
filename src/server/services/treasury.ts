@@ -14,6 +14,7 @@ import { and, eq, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import { bankCashAccount, bankTransfer, cashCount } from '../db/schema';
 import { divideHalfUp, LEDGER_CURRENCY as LEDGER, parseDecimal, toDecimalString } from '../domain/money';
+import { businessToday } from '../domain/business-date';
 import {
   assertCurrencyMatches,
   assertSufficientFunds,
@@ -113,6 +114,63 @@ export async function accountPosition(
     balanceIqd,
     committedIqd,
     availableIqd: balanceIqd - committedIqd,
+  };
+}
+
+/**
+ * The same position in the account's own currency, for the account's page
+ * (2026-10-22, by direction: a dollar account read "Available to pay with
+ * -3,727,352,680.00 USD" — its dinars printed as dollars). What a dollar bank
+ * holds is its ledger lines' dollar columns; what is held back is each
+ * application's own amount where it is in the account's currency (the bank
+ * lock keeps them so), an approved transfer's own amount likewise, and
+ * anything kept only in dinars at today's accounting rate. A dinar account
+ * reads exactly as `accountPosition`.
+ */
+export async function accountPositionInCurrency(
+  tx: Tx,
+  bankCashAccountId: string,
+): Promise<{ currency: string; balance: string; committed: string; available: string; balanceIqd: string }> {
+  const position = await accountPosition(tx, bankCashAccountId);
+  if (position.currency === LEDGER) {
+    return {
+      currency: LEDGER,
+      balance: toDecimalString(position.balanceIqd, 4n),
+      committed: toDecimalString(position.committedIqd, 4n),
+      available: toDecimalString(position.availableIqd, 4n),
+      balanceIqd: toDecimalString(position.balanceIqd, 4n),
+    };
+  }
+  const rate = await rateService.rateOn(tx, position.currency, businessToday());
+  const perUnit = toDecimalString(rate.iqdPerUnit, 8n);
+  const [row] = (
+    await tx.execute(sql`
+      select
+        coalesce((select sum(l.debit_txn - l.credit_txn)
+                    from journal_line l join journal_entry e on e.id = l.journal_entry_id
+                   where l.account_id = b.gl_account_id and e.status in ('posted', 'reversed')), 0)::numeric(19,4)::text as "balance",
+        (coalesce((select sum(case when p.currency = b.currency then p.amount_txn else round(p.amount_iqd / ${perUnit}::numeric, 4) end)
+                     from payment_application p
+                    where p.bank_cash_account_id = b.id and p.status in ('approved', 'sent')), 0)
+         + coalesce((select sum(case when t.from_currency = b.currency then t.amount else round(t.amount / ${perUnit}::numeric, 4) end)
+                       from bank_transfer t
+                      where t.from_account_id = b.id and t.status = 'approved'), 0)
+         + coalesce((select sum(round(l.amount_iqd / ${perUnit}::numeric, 4))
+                       from payment_batch_line l join payment_batch p on p.id = l.batch_id
+                      where p.bank_cash_account_id = b.id and p.status = 'approved' and l.status = 'pending'), 0)
+        )::numeric(19,4)::text as "committed"
+        from bank_cash_account b
+       where b.id = ${bankCashAccountId}
+    `)
+  ).rows as { balance: string; committed: string }[];
+  const balance = parseDecimal(row?.balance ?? '0', 4n);
+  const committed = parseDecimal(row?.committed ?? '0', 4n);
+  return {
+    currency: position.currency,
+    balance: toDecimalString(balance, 4n),
+    committed: toDecimalString(committed, 4n),
+    available: toDecimalString(balance - committed, 4n),
+    balanceIqd: toDecimalString(position.balanceIqd, 4n),
   };
 }
 

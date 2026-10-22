@@ -2,8 +2,14 @@
 
 What changed in each version of the system, newest first: what is new, what was fixed, and what a person has to do. Answer "what is new", "the newest update", "the latest version", "the changelog", "release notes", «ما الجديد», «آخر تحديث», «التحديث الجديد», «شنو الجديد» from here. The version that is running is shown in the footer of every screen.
 
+## What is new in version 1.1.7 (ما الجديد في الإصدار 1.1.7)
+Version 1.1.7 is the newest version of the system (الإصدار الأحدث). It went live on 22 October 2026. What to do: reload the page once (حدّثوا الصفحة مرة واحدة).
+
+### Fixed: a dollar bank account's figures — What is new in version 1.1.7
+- On a USD bank account's page, **Available to pay with** (المتاح للدفع), **Reserved** and **Holds now** are now in dollars. They were dinar figures shown with "USD" — Arab Bank read "-3,727,352,680.00 USD", which was dinars. The money in and out of the year is in dinars and now says IQD.
+
 ## What is new in version 1.1.6 (ما الجديد في الإصدار 1.1.6)
-Version 1.1.6 is the newest version of the system (الإصدار الأحدث). It went live on 22 October 2026. What to do: reload the page once (حدّثوا الصفحة مرة واحدة).
+Version 1.1.6 went live on 22 October 2026, before version 1.1.7 above. What to do: reload the page once (حدّثوا الصفحة مرة واحدة).
 
 ### Changed: printouts — What is new in version 1.1.6
 - Under the figures, the **amount in figures with its currency** (المبلغ بالأرقام مع العملة) now stands beside the amount in words.
