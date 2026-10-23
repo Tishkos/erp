@@ -270,7 +270,7 @@ describe('FX8 · an import agreed in dollars closes on its exchange difference',
     const { rows: asset } = await ownerPool.query(`select id from chart_of_account where code = 'A000001'`);
     const { rows: gl } = await ownerPool.query(
       `insert into chart_of_account (code, name, account_type, parent_id, is_group, is_active, approval_status, level, currency_restriction)
-       values ('A800003','Bank — USD account','asset',$1,false,true,'approved',1,'IQD') returning id`,
+       values ('A800003','Bank — USD account','asset',$1,false,true,'approved',1,'USD') returning id`,
       [asset[0].id],
     );
     const usd = await withScope(scope(world.manager), (tx) =>
@@ -394,7 +394,7 @@ describe('FX10 · the advance\u2019s payment application is raised when the invo
     const { rows: asset } = await ownerPool.query(`select id from chart_of_account where code = 'A000001'`);
     const { rows: gl } = await ownerPool.query(
       `insert into chart_of_account (code, name, account_type, parent_id, is_group, is_active, approval_status, level, currency_restriction)
-       values ('A800004','Bank — USD advances','asset',$1,false,true,'approved',1,'IQD') returning id`,
+       values ('A800004','Bank — USD advances','asset',$1,false,true,'approved',1,'USD') returning id`,
       [asset[0].id],
     );
     const usd = await withScope(scope(world.manager), (tx) =>

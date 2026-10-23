@@ -110,6 +110,8 @@ export const PAYMENT_APPLICATION_STATUSES = [
   'debited',
   'rejected',
   'cancelled',
+  // Paid, then undone with a reason (0427).
+  'reversed',
 ] as const;
 export type PaymentApplicationStatus = (typeof PAYMENT_APPLICATION_STATUSES)[number];
 
@@ -188,6 +190,10 @@ export const paymentApplication = pgTable(
     confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
     closedBy: uuid('closed_by').references(() => appUser.id),
     closedAt: timestamp('closed_at', { withTimezone: true }),
+    /** 0427 — a paid application undone: who, when, why. All three or none. */
+    reversedBy: uuid('reversed_by').references(() => appUser.id),
+    reversedAt: timestamp('reversed_at', { withTimezone: true }),
+    reversalReason: text('reversal_reason'),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

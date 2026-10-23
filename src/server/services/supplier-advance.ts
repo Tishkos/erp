@@ -39,6 +39,7 @@ import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
 import * as payables from './payables';
+import * as journal from './journal';
 import * as posting from './posting';
 import * as statuses from './statuses';
 import { allocateDocumentNumber } from './numbering';
@@ -867,6 +868,85 @@ export async function refund(
   });
 
   return { journalEntryId: result.journalEntryId, advanceBalance: balance };
+}
+
+export class AdvanceInUseError extends Error {
+  readonly code = 'SUPPLIER_ADVANCE_IN_USE';
+  constructor(
+    readonly advanceNo: string,
+    readonly invoiceNos: readonly string[],
+  ) {
+    super(
+      invoiceNos.length > 0
+        ? `Supplier advance ${advanceNo} has been applied to ${invoiceNos.join(', ')}; ` +
+            'the deposit pays that invoice now and cannot be taken back while it does.'
+        : `Supplier advance ${advanceNo} has been partly refunded; the money that came back cannot be paid out again by a reversal.`,
+    );
+    this.name = 'AdvanceInUseError';
+  }
+}
+
+/**
+ * A paid advance that should not have been paid — the payment application
+ * that paid it is reversed (0427, 2026-10-24). Its journal is mirrored line
+ * for line (`journal.reverse`: a dollar deposit comes back in dollars, at the
+ * rate it left at), and the advance is `reversed` with the reason. Refused
+ * while any of it is applied to an invoice or refunded: that money has gone
+ * on to something else, and naming the invoice says where.
+ */
+export async function reverse(
+  tx: Tx,
+  ctx: ActorContext,
+  id: string,
+  input: { reason: string; reversalDate?: string | null },
+): Promise<{ reversalEntryId: string }> {
+  const [advance] = await tx.select().from(supplierAdvance).where(eq(supplierAdvance.id, id)).for('update');
+  if (!advance) throw new SupplierAdvanceNotFoundError(id);
+  await authz.authorize(ctx.principal, 'reverse_cancel', PERMISSION_OBJECT, { branchCode: advance.branchCode });
+
+  const reason = input.reason?.trim() ?? '';
+  if (!reason) throw new Error(`Say why supplier advance ${advance.advanceNo} is reversed.`);
+  if (advance.status === 'reversed') {
+    throw new SupplierAdvanceStateError(advance.advanceNo, advance.status, 'it has been reversed already.');
+  }
+  if (!advance.journalEntryId || !['posted', 'partially_executed', 'settled'].includes(advance.status)) {
+    throw new SupplierAdvanceStateError(advance.advanceNo, advance.status, 'only a paid advance is reversed.');
+  }
+
+  const applied = await tx
+    .select({ invoiceNo: apInvoice.invoiceNo })
+    .from(supplierAdvanceSettlement)
+    .innerJoin(apInvoice, eq(apInvoice.id, supplierAdvanceSettlement.apInvoiceId))
+    .where(and(eq(supplierAdvanceSettlement.supplierAdvanceId, id), isNull(supplierAdvanceSettlement.reversedAt)));
+  if (applied.length > 0) throw new AdvanceInUseError(advance.advanceNo, applied.map((row) => row.invoiceNo));
+  if (parseDecimal(advance.refundedAmountIqd, 4n) > 0n || parseDecimal(advance.settledAmountIqd, 4n) > 0n) {
+    throw new AdvanceInUseError(advance.advanceNo, []);
+  }
+
+  const reversal = await journal.reverse(tx, ctx, advance.journalEntryId, {
+    reason: `Supplier advance ${advance.advanceNo} reversed — ${reason}`,
+    postingDate: input.reversalDate ?? null,
+  });
+
+  // `posted → reversed` is the document's own rule (0037).
+  await statuses.assertTransitionAllowed(tx, DOCUMENT_TYPE, 'posted', 'reversed', reason);
+  await tx
+    .update(supplierAdvance)
+    .set({ status: 'reversed', reversedBy: ctx.principal.userId, reversedAt: new Date(), reversalReason: reason, updatedAt: new Date() })
+    .where(eq(supplierAdvance.id, id));
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'supplier_advance.reversed',
+    objectType: PERMISSION_OBJECT,
+    objectId: id,
+    branchCode: advance.branchCode,
+    before: { status: advance.status },
+    after: { status: 'reversed', reversalEntryNo: reversal.entryNo },
+    reason,
+    outcome: 'success',
+  });
+  return { reversalEntryId: reversal.id };
 }
 
 /**

@@ -153,6 +153,8 @@ export async function createApInvoice(formData: FormData): Promise<void> {
       ...(currency === 'IQD' ? {} : { importCurrency: currency }),
       // §24.3 — ticked Import and naming an open import: the invoice joins it.
       payableId: text(formData, 'is_import') === '1' ? text(formData, 'payable_id').trim() || null : null,
+      // 0426 — the import it opens is paid after the goods arrive (no advance asked).
+      payAfterArrival: text(formData, 'is_import') === '1' && text(formData, 'pay_after_arrival') === '1',
       // §15.3 — what the supplier is paid in front and where it leaves from:
       // with the account and the method the payment application is raised
       // when the invoice posts (2026-10-06). 0411 — "Payable in advance": no

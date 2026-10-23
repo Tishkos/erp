@@ -30,6 +30,7 @@ import {
   apInvoice,
   bankCashAccount,
   businessPartner,
+  journalLine,
   supplierAdvance,
   supplierCreditMemo,
   supplierPayment,
@@ -46,6 +47,7 @@ import * as authz from './authorization';
 import * as audit from './audit';
 import * as dueNotices from './due-notices';
 import { knownInvoiceDueSql } from './known-due-date';
+import * as journal from './journal';
 import * as posting from './posting';
 import * as statuses from './statuses';
 import { allocateDocumentNumber } from './numbering';
@@ -676,9 +678,32 @@ export async function reverse(
   const criteria = { branchCode: payment.branchCode };
   const dimensions = { branch: payment.branchCode, business_partner: supplier?.code ?? null };
 
-  // The same two accounts, the other way round. Not a re-derived entry: the
-  // amounts are the payment's own, so what comes back is exactly what left.
-  const reversal = await posting.post(tx, ctx, {
+  /*
+   * A bank line in another currency — the dollars that left a USD account
+   * (2026-10-21) — is undone in that currency at the rate it went out at: the
+   * journal mirrored line for line (`journal.reverse`), so the dollars and the
+   * dinars both come back exactly. Posted afresh, the line would be converted
+   * at today's rate and no longer balance the supplier's dinars (2026-10-24,
+   * found while building the reversal of a paid payment application).
+   */
+  const [foreign] = await tx
+    .select({ id: journalLine.id })
+    .from(journalLine)
+    .where(and(eq(journalLine.journalEntryId, payment.journalEntryId), sql`${journalLine.currency} <> 'IQD'`))
+    .limit(1);
+
+  // Otherwise the same two accounts, the other way round. Not a re-derived
+  // entry: the amounts are the payment's own, so what comes back is exactly what left.
+  const reversal = foreign
+    ? {
+        journalEntryId: (
+          await journal.reverse(tx, ctx, payment.journalEntryId, {
+            reason: `Supplier payment ${payment.paymentNo} reversed — ${input.reason.trim()}`,
+            postingDate: input.reversalDate,
+          })
+        ).id,
+      }
+    : await posting.post(tx, ctx, {
     eventType: 'purchasing.supplier_payment',
     documentTypeCode: DOCUMENT_TYPE,
     source: { module: 'purchasing', documentId: id, event: 'reversed' },

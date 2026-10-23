@@ -305,6 +305,22 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
         </label>
       ),
     },
+    /*
+     * 0426 (2026-10-24, by direction: "a button where we skip … the current
+     * import which pays later … for creating new import"): the import this
+     * invoice opens is paid after the goods arrive — no advance is asked, no
+     * goods wait for one, and no payment clock runs until they are all in.
+     * Joining an existing import, that import's own setting rules.
+     */
+    {
+      label: x('pay_after_arrival'),
+      control: true,
+      value: (
+        <label>
+          <input data-pay-after-arrival="" name="pay_after_arrival" type="checkbox" value="1" /> {x('pay_after_arrival_hint')}
+        </label>
+      ),
+    },
     {
       label: x('import_application'),
       control: true,
@@ -370,8 +386,10 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
           accountField="advance_paid_from"
           currencyField="currency"
           importField="is_import"
+          payLaterField="pay_after_arrival"
           labels={{
             needsAccount: x('advance_needs_account'),
+            paysLater: x('advance_pays_later'),
             basis: x('advance_basis'),
             none: x('advance_basis_none'),
             percent: x('advance_basis_percent'),

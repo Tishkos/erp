@@ -282,6 +282,16 @@ export const payable = pgTable(
     /** REQ-AP-001 §24.3 (0237) — the sheet's "Clear?", for the §20.1 comparison. */
     legacyCleared: boolean('legacy_cleared'),
 
+    /**
+     * 0426 — an import paid after the goods arrive: no advance, no goods held
+     * for one, no payment clock until every container is received
+     * (`services/pay-after-arrival.ts`). Who set it, when and why.
+     */
+    payAfterArrival: boolean('pay_after_arrival').notNull().default(false),
+    payAfterArrivalSetBy: uuid('pay_after_arrival_set_by').references(() => appUser.id),
+    payAfterArrivalSetAt: timestamp('pay_after_arrival_set_at', { withTimezone: true }),
+    payAfterArrivalReason: text('pay_after_arrival_reason'),
+
     createdBy: uuid('created_by')
       .notNull()
       .references(() => appUser.id),
@@ -313,6 +323,13 @@ export const payable = pgTable(
           or (${t.cancelledAt} is not null and ${t.cancelledBy} is not null
               and coalesce(btrim(${t.cancelReason}), '') <> '')`,
     ),
+    // 0426, C-98 — on names who set it and when; only an import is paid after arrival.
+    check(
+      'payable_pay_after_arrival_named',
+      sql`not ${t.payAfterArrival} or (${t.payAfterArrivalSetBy} is not null and ${t.payAfterArrivalSetAt} is not null)`,
+    ),
+    check('payable_pay_after_arrival_import', sql`not ${t.payAfterArrival} or ${t.payableTypeCode} = 'import'`),
+    index('payable_pay_after_arrival_idx').on(t.payAfterArrival).where(sql`${t.payAfterArrival}`),
   ],
 );
 
@@ -525,6 +542,14 @@ export const payableExchangeDifference = pgTable(
       .notNull()
       .references(() => appUser.id),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * 0427 — the difference undone, once, when a payment of the import is
+     * reversed (the import is no longer fully paid): its journal mirrored and
+     * what it closed owing again. All three or none.
+     */
+    reversedAt: timestamp('reversed_at', { withTimezone: true }),
+    reversedBy: uuid('reversed_by').references(() => appUser.id),
+    reversalJournalEntryId: uuid('reversal_journal_entry_id'),
   },
   (t) => [
     index('payable_exchange_difference_payable_idx').on(t.payableId),

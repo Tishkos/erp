@@ -26,6 +26,7 @@ import { formatMoney, type Locale } from '@/i18n/config';
 import { DueDateText } from '@/components/admin/due-date-text';
 import { can } from '@domain/permissions';
 import { parseDecimal, toDecimalString } from '@domain/money';
+import { PAYMENT_TIMINGS, paymentTimingOf } from '@domain/pay-after-arrival';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as payables from '@/server/services/payables';
@@ -88,6 +89,8 @@ export default async function PayablesWorkbench({
   const paymentFilter = payables.choiceOf(payables.WORKBENCH_PAYMENT_STATES, params.payment);
   const goodsFilter = payables.choiceOf(payables.WORKBENCH_GOODS_PLACES, params.goods);
   const stateFilter = payables.choiceOf(payables.WORKBENCH_STATES, params.state);
+  // 0426 — paid before the goods arrive, or after them.
+  const timingFilter = paymentTimingOf(params.timing);
   const pageNo = Number(params.page) > 0 ? Number(params.page) : 1;
   const viewParam = typeof params.view === 'string' && params.view ? params.view : null;
   // The Filter's window of document dates and the order — newest first unless asked (2026-10-07).
@@ -121,6 +124,7 @@ export default async function PayablesWorkbench({
         stageCode: stageFilter,
         payment: paymentFilter,
         goods: goodsFilter,
+        timing: timingFilter,
         state: stateFilter,
         search: outcome.q || null,
         page: pageNo,
@@ -168,6 +172,7 @@ export default async function PayablesWorkbench({
     ...(stageFilter ? { stage: stageFilter } : {}),
     ...(paymentFilter ? { payment: paymentFilter } : {}),
     ...(goodsFilter ? { goods: goodsFilter } : {}),
+    ...(timingFilter ? { timing: timingFilter } : {}),
     ...(stateFilter ? { state: stateFilter } : {}),
   };
 
@@ -315,6 +320,13 @@ export default async function PayablesWorkbench({
                 options={payables.WORKBENCH_GOODS_PLACES.map((place) => ({ value: place, label: t(`journey_now_place_${place}`) }))}
               />
               <Select
+                defaultValue={timingFilter ?? ''}
+                emptyLabel={t('filter_any_timing')}
+                label={t('filter_timing')}
+                name="timing"
+                options={PAYMENT_TIMINGS.map((timing) => ({ value: timing, label: t(`filter_timing_${timing}`) }))}
+              />
+              <Select
                 defaultValue={stateFilter ?? ''}
                 emptyLabel={t('filter_state_live')}
                 label={t('filter_state')}
@@ -375,6 +387,13 @@ export default async function PayablesWorkbench({
                     </td>
                     <td className={s.sapNum}>
                       <bdi dir="ltr">{money(row.paidTxn, row.currency)}</bdi>
+                      {row.payAfterArrival ? (
+                        <div>
+                          <span className="status status--draft" data-pay-after-arrival="" data-status="draft">
+                            {t('pay_after_arrival_chip')}
+                          </span>
+                        </div>
+                      ) : null}
                       {Number(row.paidTxn) > 0 ? (
                         <div className="muted">
                           {t('remaining_short')}{' '}

@@ -45,7 +45,7 @@ describe('TA2 · the Status filter', () => {
     expect(statusesOf('pending')).toEqual(['draft', 'submitted', 'approved', 'sent']);
     expect(statusesOf('not_with_bank')).toEqual(['draft', 'submitted', 'approved']);
     expect(statusesOf('paid')).toEqual(['confirmed', 'debited']);
-    expect(statusesOf('closed')).toEqual(['rejected', 'cancelled']);
+    expect(statusesOf('closed')).toEqual(['rejected', 'cancelled', 'reversed']);
     expect(statusesOf('sent')).toEqual(['sent']);
     expect(statusesOf('waiting')).toEqual(['sent']);
     expect(statusesOf('to_approve')).toEqual(['submitted']);
@@ -55,7 +55,8 @@ describe('TA2 · the Status filter', () => {
 
   it('pending and closed together are every status', () => {
     const all = new Set([...STATUS_GROUPS.pending, ...STATUS_GROUPS.paid, ...STATUS_GROUPS.closed]);
-    expect(all.size).toBe(8);
+    // Nine since 0427: a paid application can be reversed.
+    expect(all.size).toBe(9);
   });
 });
 

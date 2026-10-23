@@ -514,3 +514,24 @@ export async function threadFor(tx: Tx, holdId: string) {
     .where(eq(payableHoldUpdate.holdId, holdId))
     .orderBy(asc(payableHoldUpdate.changedAt));
 }
+
+/**
+ * The stops in one lane still waiting for their reason (§19.1) — what
+ * `payables.assertLaneEditable` refuses on. A screen of that lane (the
+ * payment application, 2026-10-24) shows them and asks the reason there,
+ * so the refusal is never a dead end.
+ */
+export async function pendingInLane(tx: Tx, payableId: string, laneCode: string) {
+  return tx
+    .select({ id: payableHold.id, startedAt: payableHold.startedAt, checkCode: payableHold.checkCode })
+    .from(payableHold)
+    .where(
+      and(
+        eq(payableHold.payableId, payableId),
+        eq(payableHold.status, 'open'),
+        eq(payableHold.reasonCode, PENDING_REASON),
+        eq(payableHold.laneCode, laneCode),
+      ),
+    )
+    .orderBy(asc(payableHold.startedAt));
+}

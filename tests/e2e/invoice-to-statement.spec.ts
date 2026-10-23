@@ -253,11 +253,22 @@ test.describe('a purchase invoice reaches the supplier statement', () => {
     await expect(page.locator('[data-account-balance]').first()).toContainText(/Balance: IQD [\d,]+/, { timeout: 30_000 });
 
     // Payable in advance: two choices only since 2026-10-08 — no percentage.
-    // With Import ticked it opens on "by amount" with the box empty.
+    // It opens on "No upfront payment", Import ticked or not (2026-10-24: a
+    // payment application is not mandatory); "by amount" draws the empty box.
     const basis = page.locator('select[name="advance_basis"]');
-    await expect(basis).toHaveValue('amount');
+    await expect(basis).toHaveValue('none');
     await expect(basis.locator('option')).toHaveCount(2);
+    await expect(page.locator('input[name="advance_amount"]')).toHaveCount(0);
+    await basis.selectOption('amount');
     await expect(page.locator('input[name="advance_amount"]')).toHaveValue('');
+    // Paid after the goods arrive (0426): nothing in front, the selection locked; unticked, it is the person's again.
+    await page.locator('input[name="pay_after_arrival"]').check();
+    await expect(basis).toBeDisabled();
+    await expect(basis).toHaveValue('none');
+    await expect(page.locator('[data-advance-pays-later]')).toBeVisible();
+    await page.locator('input[name="pay_after_arrival"]').uncheck();
+    await expect(basis).toBeEnabled();
+    await basis.selectOption('amount');
     // 1,000 of 7,500 in front: 6,500 is left to pay, and no share is said.
     await page.locator('input[name="advance_amount"]').fill('1000');
     await expect(page.locator('[data-left-to-pay]')).toContainText('IQD 6,500');

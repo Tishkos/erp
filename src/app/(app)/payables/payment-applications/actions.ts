@@ -8,6 +8,7 @@ import type { InstalmentDraft } from '@/server/domain/payment-applications';
 import * as applications from '@/server/services/payment-applications';
 import * as attachments from '@/server/services/attachments';
 import * as events from '@/server/services/payable-events';
+import * as holds from '@/server/services/payable-holds';
 import * as payables from '@/server/services/payables';
 
 /**
@@ -160,6 +161,37 @@ export async function cancelApplication(formData: FormData): Promise<void> {
   await runAdminAndReturn(
     async (tx, ctx) =>
       applications.cancel(tx, ctx, (await applications.loadByNo(tx, applicationNo)).id, text(formData, 'reason')),
+    record(applicationNo),
+  );
+}
+
+/**
+ * The import's payment lane stopped over its time limit (§19.1): its reason,
+ * owner and next action given from the application itself, back to the
+ * application (2026-10-24 — the approval was refused with nowhere to answer).
+ */
+export async function completeLaneHold(formData: FormData): Promise<void> {
+  const applicationNo = text(formData, 'application_no');
+  await runAdminAndReturn(
+    async (tx, ctx) =>
+      holds.complete(tx, ctx, {
+        holdId: text(formData, 'hold_id'),
+        reasonCode: text(formData, 'reason_code'),
+        detail: text(formData, 'detail') || null,
+        ownerUserId: text(formData, 'owner'),
+        nextAction: text(formData, 'next_action'),
+        nextActionDue: text(formData, 'next_action_due'),
+      }),
+    record(applicationNo),
+  );
+}
+
+/** A paid application undone, with its reason (0427, 2026-10-24) — the payment it posted reversed with it. */
+export async function reverseApplication(formData: FormData): Promise<void> {
+  const applicationNo = text(formData, 'application_no');
+  await runAdminAndReturn(
+    async (tx, ctx) =>
+      applications.reverse(tx, ctx, (await applications.loadByNo(tx, applicationNo)).id, { reason: text(formData, 'reason') }),
     record(applicationNo),
   );
 }

@@ -14,6 +14,8 @@ export const STATUS_CHIP: Readonly<Record<string, string>> = {
   debited: 'settled',
   rejected: 'rejected',
   cancelled: 'cancelled',
+  // Paid, then undone (0427): the shared chip for a reversed document.
+  reversed: 'reversed',
 };
 
 /** "SWIFT pending" / "SWIFT confirmed" — the diagram's wording when the method is SWIFT; "Sent for approval". */

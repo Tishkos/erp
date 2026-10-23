@@ -99,6 +99,12 @@ export interface GoodsJourneyFacts {
     readonly paid: { readonly applicationNo: string; readonly on: string | null } | null;
     readonly waiting: { readonly applicationNo: string } | null;
   } | null;
+  /**
+   * 0426 — the import is paid after the goods arrive, since this business day: nothing waits for a
+   * SWIFT, so its goods are In Process from the start (or from that day, when they were held before).
+   * Null or absent for every other import.
+   */
+  readonly payAfterArrival?: { readonly on: string | null } | null;
   /** Null when the viewer may not read B/Ls and containers. */
   readonly shipping: {
     readonly bls: readonly { readonly blNo: string; readonly blDate: string | null }[];
@@ -140,8 +146,8 @@ const latest = (dates: readonly (string | null | undefined)[]): string | null =>
 /** Whether the import's goods were ever held for an advance — the first step is drawn only then. */
 export function heldForAdvance(facts: GoodsJourneyFacts): boolean {
   if (!facts.advance) return false;
-  // Agreed and not posted yet: the hold is what the posting will do.
-  if (!facts.advance.posted) return true;
+  // Agreed and not posted yet: the hold is what the posting will do — none for an import paid after arrival (0426).
+  if (!facts.advance.posted) return !facts.payAfterArrival;
   return facts.heldNow || facts.heldOn !== null || facts.released !== null;
 }
 
@@ -179,7 +185,7 @@ export function goodsJourney(facts: GoodsJourneyFacts): GoodsStepView[] {
       steps.push(step('on_process', 'pending', { document: invoice, detail: phrase('journey_on_process_unposted') }));
     } else {
       // Held at posting; done once the goods left the hold for In Process.
-      const done = !facts.heldNow && facts.released !== null;
+      const done = !facts.heldNow && (facts.released !== null || Boolean(facts.payAfterArrival));
       steps.push(
         step('on_process', done ? 'done' : 'partial', {
           on: facts.heldOn,
@@ -193,7 +199,7 @@ export function goodsJourney(facts: GoodsJourneyFacts): GoodsStepView[] {
         }),
       );
     }
-    // ── 2 · In Process — the advance paid, the goods released.
+    // ── 2 · In Process — the advance paid, the goods released; or released to be paid after arrival (0426).
     steps.push(
       facts.released
         ? step('in_process', 'done', {
@@ -201,7 +207,9 @@ export function goodsJourney(facts: GoodsJourneyFacts): GoodsStepView[] {
             document: { kind: 'payment_application', no: facts.released.applicationNo },
             detail: phrase('journey_released'),
           })
-        : step('in_process', 'pending', { detail: phrase('journey_released_pending') }),
+        : facts.payAfterArrival && !facts.heldNow
+          ? step('in_process', 'done', { on: facts.payAfterArrival.on, detail: phrase('journey_pay_after_arrival') })
+          : step('in_process', 'pending', { detail: phrase('journey_released_pending') }),
     );
   } else if (facts.legacy && !facts.posted) {
     // ── A migrated import has no invoice here: its payment applications stand for the advance.
@@ -215,6 +223,9 @@ export function goodsJourney(facts: GoodsJourneyFacts): GoodsStepView[] {
       );
     } else if (shipped) {
       steps.push(step('in_process', 'done', { detail: phrase('journey_legacy_shipped') }));
+    } else if (facts.payAfterArrival) {
+      // 0426 — nothing waits for a SWIFT: the goods are In Process and are paid for once they arrive.
+      steps.push(step('in_process', 'done', { on: facts.payAfterArrival.on, detail: phrase('journey_pay_after_arrival') }));
     } else if (waiting) {
       steps.push(
         step('on_process', 'partial', { document: { kind: 'payment_application', no: waiting.applicationNo }, detail: phrase('journey_legacy_waiting') }),
@@ -414,11 +425,17 @@ export function containerWhere(
 export function goodsWhereNow(facts: GoodsJourneyFacts): GoodsWhereNow {
   // A migrated import with no invoice here: waiting for its first SWIFT is the hold; a SWIFT is In Process.
   const legacy = facts.legacy && !facts.posted ? facts.legacy : null;
-  const waitsForSwift = Boolean(legacy && legacy.waiting && !legacy.paid && (facts.shipping?.bls.length ?? 0) === 0);
+  const waitsForSwift = Boolean(
+    legacy && legacy.waiting && !legacy.paid && !facts.payAfterArrival && (facts.shipping?.bls.length ?? 0) === 0,
+  );
   const held = facts.heldNow || (facts.advance !== null && heldForAdvance(facts) && facts.released === null && facts.advance.posted) || waitsForSwift;
   const containers = (facts.shipping?.containers ?? []).map((box) => containerWhere(box, held));
   if (containers.length === 0) {
-    const place: GoodsPlace | null = held ? 'on_process' : facts.posted || facts.released || legacy?.paid ? 'in_process' : null;
+    const place: GoodsPlace | null = held
+      ? 'on_process'
+      : facts.posted || facts.released || legacy?.paid || (legacy && facts.payAfterArrival)
+        ? 'in_process'
+        : null;
     return { place, counts: place ? [{ place, count: 0, warehouses: [] }] : [], containers };
   }
   const order: GoodsPlace[] = [...GOODS_PLACES, 'missing'];

@@ -29,13 +29,20 @@ import { BALANCE_OBJECT, isReserved } from '@domain/payment-applications';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as applications from '@/server/services/payment-applications';
+import * as holdsService from '@/server/services/payable-holds';
+import * as payablesService from '@/server/services/payables';
+import * as settingsService from '@/server/services/payables-settings';
+import * as users from '@/server/services/users';
+import { PENDING_REASON } from '@domain/payables';
 import {
   addApplicationPaper,
   approveApplication,
   cancelApplication,
+  completeLaneHold,
   confirmBeforeCutOver,
   debitApplication,
   rejectApplication,
+  reverseApplication,
   submitApplication,
 } from '../actions';
 import { STATUS_CHIP, statusKey } from '../status';
@@ -74,13 +81,14 @@ export default async function PaymentApplicationPage({
 
   const { applicationNo: raw } = await params;
   const applicationNo = decodeURIComponent(raw);
-  const [t, admin, page, locale, context, outcome] = await Promise.all([
+  const [t, admin, page, locale, context, outcome, holdT] = await Promise.all([
     getTranslations('admin.payment_applications'),
     getTranslations('admin'),
     getTranslations('page'),
     getLocale(),
     requireContext(),
     outcomeOf(searchParams),
+    getTranslations('admin.payables'),
   ]);
 
   const { principal } = context;
@@ -88,11 +96,20 @@ export default async function PaymentApplicationPage({
     return <Denied object={page('payment_applications')} />;
   }
 
+  // Whoever may answer an import's stop (§19.2) may answer it from here.
+  const mayAnswerStop = can(principal, 'edit_draft', payablesService.PERMISSION_OBJECT);
   const found = await withCurrentUser(async (tx) => {
     try {
       const seen = await applications.view(tx, applicationNo);
+      // The import's payment lane stopped over its time limit with no reason yet:
+      // every step of this application is refused until it has one (§19.1).
+      const laneHolds = await holdsService.pendingInLane(tx, seen.payable.id, 'payment');
+      const answering = laneHolds.length > 0 && mayAnswerStop;
       return {
         ...seen,
+        laneHolds,
+        stopReasons: answering ? await settingsService.activeHoldReasons(tx) : [],
+        stopOwners: answering ? await users.pickable(tx) : [],
         doors: await readDoors(tx, principal, { object: applications.PERMISSION_OBJECT, recordId: seen.application.id }),
         // What each paper is (2026-10-06): the files the paperclip lists, with their kind.
         papers: await applications.papersOf(tx, seen.application.id),
@@ -135,6 +152,9 @@ export default async function PaymentApplicationPage({
   const mayReject = row.status === 'submitted' && can(principal, 'approve', applications.PERMISSION_OBJECT);
   const mayCancel =
     (row.status === 'draft' || row.status === 'submitted') && can(principal, 'edit_draft', applications.PERMISSION_OBJECT);
+  // Paid, and then undone with a reason (0427, 2026-10-24): whoever may reverse on applications.
+  const reversal = found.reversal;
+  const mayReverse = reversal !== null && can(principal, 'reverse_cancel', applications.PERMISSION_OBJECT);
   const paperLabel = (kind: string) => t(`paper_${kind}`);
   const failing = checks.filter((check) => check.outcome === 'fail');
 
@@ -283,6 +303,19 @@ export default async function PaymentApplicationPage({
     ...(row.closedReason
       ? [{ label: t('closed_reason'), value: <bdi dir="auto">{row.closedReason}</bdi>, status: statusChip, wide: true }]
       : []),
+    ...(row.status === 'reversed'
+      ? [
+          {
+            label: t('reversed_by'),
+            value: (
+              <bdi dir="auto">
+                {people.reversedBy ?? '—'} · <bdi dir="ltr">{row.reversedAt ? day(businessDateOf(row.reversedAt)) : '—'}</bdi>
+              </bdi>
+            ),
+          },
+          { label: t('reversal_reason'), value: <bdi dir="auto">{row.reversalReason}</bdi>, status: statusChip, wide: true },
+        ]
+      : []),
     ...(row.note ? [{ label: t('note'), value: <bdi dir="auto">{row.note}</bdi>, wide: true }] : []),
   ];
 
@@ -414,6 +447,64 @@ export default async function PaymentApplicationPage({
     >
       <Flash error={outcome.error} errorTitle={admin('error_title')} saved={outcome.saved} savedLabel={admin('saved')} />
 
+      {found.laneHolds.length > 0 ? (
+        <div className={`${s.sapNote} mb-4`} data-lane-hold="" role="note">
+          <span className="status status--rejected" data-status="rejected">
+            {holdT('banner_needs_reason')}
+          </span>{' '}
+          {t('lane_held_body', { payableNo: found.payable.payableNo })}{' '}
+          <bdi dir="ltr">{day(businessDateOf(found.laneHolds[0]!.startedAt))}</bdi>
+          {mayAnswerStop ? (
+            found.laneHolds.map((hold) => (
+              <NewRecordDialog
+                buttonLabel={t('lane_held_action')}
+                closeLabel={admin('close')}
+                key={hold.id}
+                openOnLoad={Boolean(outcome.error)}
+                title={t('lane_held_title', { payableNo: found.payable.payableNo })}
+              >
+                <p className="muted">{t('lane_held_note')}</p>
+                <Form action={completeLaneHold}>
+                  <Hidden name="application_no" value={row.applicationNo} />
+                  <Hidden name="hold_id" value={hold.id} />
+                  <Grid>
+                    <Select
+                      label={holdT('reason')}
+                      name="reason_code"
+                      options={found.stopReasons
+                        .filter((reason) => reason.code !== PENDING_REASON)
+                        .map((reason) => ({ value: reason.code, label: `${reason.code} — ${reason.name}` }))}
+                      required
+                    />
+                    <Field id={`lh-detail-${hold.id}`} label={holdT('detail')} name="detail" />
+                    <Select
+                      defaultValue={principal.userId}
+                      label={holdT('owner')}
+                      name="owner"
+                      options={found.stopOwners.map((person) => ({ value: person.id, label: person.displayName }))}
+                      required
+                    />
+                    <Field id={`lh-na-${hold.id}`} label={holdT('next_action')} name="next_action" required />
+                    <Field
+                      id={`lh-nad-${hold.id}`}
+                      label={holdT('next_action_due')}
+                      name="next_action_due"
+                      required
+                      type="date"
+                    />
+                  </Grid>
+                  <SubmitRow>
+                    <Submit label={holdT('complete_save')} />
+                  </SubmitRow>
+                </Form>
+              </NewRecordDialog>
+            ))
+          ) : (
+            <> {t('lane_held_ask')}</>
+          )}
+        </div>
+      ) : null}
+
       {goesBelowZero ? (
         <p className={`${s.sapNote} mb-4`} data-overdraft-warning="" role="note">
           <strong>{t('overdraft_title', { account: account.code })}</strong> {t('overdraft_body')}
@@ -516,6 +607,49 @@ export default async function PaymentApplicationPage({
                 reasonLabel={t('cancel_reason')}
                 tone="secondary"
               />
+            ) : null}
+            {mayReverse && reversal ? (
+              <NewRecordDialog
+                buttonLabel={t('reverse')}
+                closeLabel={admin('close')}
+                title={t('reverse_title', { applicationNo: row.applicationNo })}
+              >
+                <p className="muted">{t('reverse_note')}</p>
+                <ul className="muted" data-reversal-plan="">
+                  {reversal.document ? (
+                    <li>
+                      {t(`reverse_undoes_${reversal.document.kind}`)}{' '}
+                      {documentHref ? (
+                        <Link className={s.sapLink} href={documentHref}>
+                          <bdi dir="ltr">{reversal.document.no}</bdi>
+                        </Link>
+                      ) : (
+                        <bdi dir="ltr">{reversal.document.no}</bdi>
+                      )}
+                    </li>
+                  ) : null}
+                  {reversal.openingInvoiceNo ? (
+                    <li>{t('reverse_undoes_opening', { invoiceNo: reversal.openingInvoiceNo })}</li>
+                  ) : null}
+                  {reversal.exchangeDifference ? <li>{t('reverse_undoes_exchange')}</li> : null}
+                  {reversal.loanNo ? <li>{t('reverse_undoes_loan', { loanNo: reversal.loanNo })}</li> : null}
+                  {reversal.statementMatched ? <li>{t('reverse_keeps_statement')}</li> : null}
+                  <li>{t('reverse_keeps_goods')}</li>
+                </ul>
+                {reversal.advanceAppliedTo.length > 0 ? (
+                  <p className={s.sapNote} role="note">
+                    {t('reverse_refused_applied', { invoices: reversal.advanceAppliedTo.join(', ') })}
+                  </p>
+                ) : (
+                  <Form action={reverseApplication}>
+                    <Hidden name="application_no" value={row.applicationNo} />
+                    <Field label={t('reversal_reason')} name="reason" required wide />
+                    <SubmitRow>
+                      <Submit label={t('reverse')} tone="danger" />
+                    </SubmitRow>
+                  </Form>
+                )}
+              </NewRecordDialog>
             ) : null}
           </>
         }

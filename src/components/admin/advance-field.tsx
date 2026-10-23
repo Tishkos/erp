@@ -33,6 +33,8 @@ export interface AdvanceFieldLabels {
   readonly overTotal: string;
   /** Said while no account is chosen to pay it from: nothing can be paid in front from nowhere. */
   readonly needsAccount?: string;
+  /** Said while "Pay after the goods arrive" is ticked: nothing is asked in front (0426). */
+  readonly paysLater?: string;
 }
 
 /**
@@ -55,9 +57,12 @@ export interface AdvanceFieldLabels {
  * would not take. No percentage is offered or shown; `advanceShare` stays for
  * the record page of an invoice agreed by percentage before 2026-10-08.
  *
- * With Import ticked the selection opens on Payable by amount with the box
- * empty, without it on No upfront payment; once the person chooses, the
- * choice is theirs.
+ * The selection opens on No upfront payment, Import ticked or not (2026-10-24,
+ * by direction: "import application shouldn't come with payment application —
+ * it is not mandatory"): an advance, and the payment application its posting
+ * raises, is asked only when somebody chooses Payable by amount. While "Pay
+ * after the goods arrive" is ticked (0426) the selection stays on No upfront
+ * payment and cannot be changed — such an import asks nothing in front.
  *
  * The lines are read off the form by name, the way `due-date-field.tsx`
  * watches the partner and the date: a form-level `input` listener, because the
@@ -70,6 +75,7 @@ export function AdvanceField({
   ledgerRates,
   locale,
   importField,
+  payLaterField,
   accountField,
 }: {
   readonly labels: AdvanceFieldLabels;
@@ -80,8 +86,10 @@ export function AdvanceField({
    * bank account is it going to be issued from?").
    */
   readonly accountField?: string;
-  /** The Import tick box: ticked, the selection opens on Payable by percentage. */
+  /** The Import tick box: "Pay after the goods arrive" counts only while it is ticked. */
   readonly importField?: string;
+  /** 0426 — "Pay after the goods arrive": ticked (with Import), no advance is asked. */
+  readonly payLaterField?: string;
   /**
    * The form field holding the currency the invoice is agreed in, so the
    * advance is said in that currency as well as in dinars (2026-10-03).
@@ -94,11 +102,10 @@ export function AdvanceField({
 }) {
   const select = useRef<HTMLSelectElement>(null);
   const box = useRef<HTMLInputElement>(null);
-  const [choice, setChoice] = useState<AdvanceChoice>(importField ? 'amount' : 'none');
-  const choiceRef = useRef<AdvanceChoice>(importField ? 'amount' : 'none');
+  const [choice, setChoice] = useState<AdvanceChoice>('none');
   const [typed, setTyped] = useState('');
-  // Once the person has chosen, the Import box no longer moves the selection.
-  const chosenRef = useRef(false);
+  // Paid after the goods arrive (0426): the advance is none and locked while ticked.
+  const [paysLater, setPaysLater] = useState(false);
   const [total, setTotal] = useState<bigint>(0n);
   const [agreed, setAgreed] = useState(ledgerCurrency);
   // Whether an account to pay it from is chosen; without one the advance is "none" and locked.
@@ -151,30 +158,29 @@ export function AdvanceField({
     };
 
     /*
-     * The selection follows the Import box until the person chooses: an
-     * import opens on Payable by amount with the box empty, a local purchase
-     * or an expense on No upfront payment.
+     * "Pay after the goods arrive" counts only for an import: read from the
+     * two tick boxes on every change, so unticking either gives the
+     * selection back.
      */
-    const followImport = () => {
-      if (!importField || chosenRef.current) return;
-      const tick = form.elements.namedItem(importField);
-      const ticked = tick instanceof HTMLInputElement ? tick.checked : true;
-      const next: AdvanceChoice = ticked ? 'amount' : 'none';
-      if (next === choiceRef.current) return;
-      choiceRef.current = next;
-      setChoice(next);
-      setTyped('');
+    const readPayLater = () => {
+      if (!payLaterField) return;
+      const ticked = (name: string | undefined) => {
+        if (!name) return true;
+        const tick = form.elements.namedItem(name);
+        return tick instanceof HTMLInputElement ? tick.checked : false;
+      };
+      setPaysLater(ticked(payLaterField) && ticked(importField));
     };
 
     readTotal();
-    followImport();
+    readPayLater();
     form.addEventListener('input', readTotal);
-    form.addEventListener('input', followImport);
+    form.addEventListener('change', readPayLater);
     return () => {
       form.removeEventListener('input', readTotal);
-      form.removeEventListener('input', followImport);
+      form.removeEventListener('change', readPayLater);
     };
-  }, [currencyField, importField]);
+  }, [currencyField, importField, payLaterField]);
 
   /*
    * What the box comes to. By percentage, the share by the same steps the
@@ -183,8 +189,9 @@ export function AdvanceField({
    * the screen is the one that is wrong: the server's figure is the one the
    * bank is asked for.
    */
-  // No account, no advance: what is shown and sent is "none" until one is chosen.
-  const shownChoice: AdvanceChoice = hasAccount ? choice : 'none';
+  // No account, no advance: what is shown and sent is "none" until one is chosen — and while it is paid after arrival.
+  const locked = !hasAccount || paysLater;
+  const shownChoice: AdvanceChoice = locked ? 'none' : choice;
   const payable = shownChoice === 'percent' ? advanceShare(total, typed) : shownChoice === 'amount' ? amountOf(typed) : null;
   const over = shownChoice === 'amount' && payable !== null && total > 0n && payable > total;
   const left = payable !== null && !over ? total - payable : null;
@@ -208,11 +215,9 @@ export function AdvanceField({
         <span className={styles.sapLabel}>{labels.basis}</span>
         <IntentSelect
           aria-label={labels.basis}
-          disabled={!hasAccount}
+          disabled={locked}
           name="advance_basis"
           onChange={(event) => {
-            chosenRef.current = true;
-            choiceRef.current = event.target.value as AdvanceChoice;
             setChoice(event.target.value as AdvanceChoice);
             setTyped('');
           }}
@@ -223,8 +228,12 @@ export function AdvanceField({
           <option value="amount">{labels.amount}</option>
         </IntentSelect>
         {/* A disabled select is not sent: the form still says "none". */}
-        {hasAccount ? null : <input name="advance_basis" type="hidden" value="none" />}
-        {!hasAccount && labels.needsAccount ? (
+        {locked ? <input name="advance_basis" type="hidden" value="none" /> : null}
+        {paysLater && labels.paysLater ? (
+          <span className={styles.sapEnteredNote} data-advance-pays-later="">
+            {labels.paysLater}
+          </span>
+        ) : !hasAccount && labels.needsAccount ? (
           <span className={styles.sapEnteredNote} data-advance-needs-account="">
             {labels.needsAccount}
           </span>

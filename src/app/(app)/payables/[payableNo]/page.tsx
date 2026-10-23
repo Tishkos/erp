@@ -65,6 +65,7 @@ import {
   completeHold,
   linkInvoice,
   resolveHold,
+  setPayAfterArrivalAction,
   setTerms,
   updateHold,
   updatePiLines,
@@ -373,6 +374,33 @@ export default async function PayablePage({
     { label: t('quantity'), value: row.quantity ? <bdi dir="ltr">{formatQuantity(row.quantity, locale as Locale)}</bdi> : '—' },
     { label: t('terms'), value: row.paymentTermsText ?? '—', wide: true },
     { label: t('rail'), value: railChips, wide: true },
+    /*
+     * 0426 — paid after the goods arrive: said beside the rail, with who said
+     * so, when and why, so nobody looks for a SWIFT that is not coming yet.
+     */
+    ...(row.payAfterArrival
+      ? [
+          {
+            label: t('pay_after_arrival'),
+            value: (
+              <span data-pay-after-arrival="">
+                {t('pay_after_arrival_line', {
+                  who: found.payAfterArrivalBy ?? '—',
+                  when: day(row.payAfterArrivalSetAt),
+                })}
+                {row.payAfterArrivalReason ? (
+                  <>
+                    {' — '}
+                    <bdi dir="auto">{row.payAfterArrivalReason}</bdi>
+                  </>
+                ) : null}
+              </span>
+            ),
+            status: 'draft',
+            wide: true,
+          },
+        ]
+      : []),
     { label: t('description'), value: <bdi dir="auto">{row.description}</bdi>, wide: true },
   ];
 
@@ -496,14 +524,38 @@ export default async function PayablePage({
           </>
         }
         actions={
-          mayEdit && !row.cancelledAt && !row.closedAt && mayCancel ? (
-            <ReasonForm
-              action={cancelPayable}
-              hidden={{ payable_no: row.payableNo }}
-              label={t('cancel')}
-              reasonLabel={t('cancel_reason')}
-            />
-          ) : null
+          <>
+            {/* 0426 — paid after the goods arrive, or before arrival again; the reason stays on the import. */}
+            {mayEdit && !row.cancelledAt && !row.closedAt && row.payableTypeCode === 'import' ? (
+              <NewRecordDialog
+                buttonLabel={row.payAfterArrival ? t('pay_before_arrival_action') : t('pay_after_arrival_action')}
+                closeLabel={admin('close')}
+                title={
+                  row.payAfterArrival
+                    ? t('pay_before_arrival_title', { payableNo: row.payableNo })
+                    : t('pay_after_arrival_title', { payableNo: row.payableNo })
+                }
+              >
+                <p className="muted">{row.payAfterArrival ? t('pay_before_arrival_note') : t('pay_after_arrival_note')}</p>
+                <Form action={setPayAfterArrivalAction}>
+                  <Hidden name="payable_no" value={row.payableNo} />
+                  <Hidden name="on" value={row.payAfterArrival ? '0' : '1'} />
+                  <Field id="pay-after-arrival-reason" label={t('pay_after_arrival_reason')} name="reason" required wide />
+                  <SubmitRow>
+                    <Submit label={row.payAfterArrival ? t('pay_before_arrival_action') : t('pay_after_arrival_action')} />
+                  </SubmitRow>
+                </Form>
+              </NewRecordDialog>
+            ) : null}
+            {mayEdit && !row.cancelledAt && !row.closedAt && mayCancel ? (
+              <ReasonForm
+                action={cancelPayable}
+                hidden={{ payable_no: row.payableNo }}
+                label={t('cancel')}
+                reasonLabel={t('cancel_reason')}
+              />
+            ) : null}
+          </>
         }
         documentType={type.name}
         fields={fields}

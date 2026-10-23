@@ -1714,7 +1714,7 @@ export async function cancel(tx: Tx, ctx: ActorContext, loanId: string, reason: 
     .where(
       and(
         eq(paymentApplication.loanId, loan.id),
-        sql`${paymentApplication.status} not in ('rejected','cancelled')`,
+        sql`${paymentApplication.status} not in ('rejected','cancelled','reversed')`,
       ),
     );
   if (naming.length > 0) {

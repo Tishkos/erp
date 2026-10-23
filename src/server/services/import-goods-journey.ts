@@ -136,7 +136,7 @@ export async function factsFor(tx: Tx, principal: Principal, payableId: string):
     const standing = await tx
       .select({ applicationNo: paymentApplication.applicationNo, status: paymentApplication.status, confirmedOn: paymentApplication.confirmedOn })
       .from(paymentApplication)
-      .where(and(eq(paymentApplication.payableId, payableId), notInArray(paymentApplication.status, ['rejected', 'cancelled'])))
+      .where(and(eq(paymentApplication.payableId, payableId), notInArray(paymentApplication.status, ['rejected', 'cancelled', 'reversed'])))
       .orderBy(asc(paymentApplication.confirmedOn), asc(paymentApplication.applicationNo));
     const paid = standing.find((one) => one.status === 'confirmed' || one.status === 'debited');
     legacy = {
@@ -220,6 +220,8 @@ export async function factsFor(tx: Tx, principal: Principal, payableId: string):
     released: releasedNo ? { applicationNo: releasedNo, on: releasing?.confirmedOn ? String(releasing.confirmedOn) : dayOf(releasedLine?.occurredAt) } : null,
     posted: posted ? { invoiceNo: posted.invoiceNo, on: dayOf(posted.postedAt) ?? (posted.invoiceDate ? String(posted.invoiceDate) : null) } : null,
     legacy,
+    // 0426 — paid after the goods arrive: nothing waits for a SWIFT.
+    payAfterArrival: owner.payAfterArrival ? { on: dayOf(owner.payAfterArrivalSetAt) } : null,
     shipping,
     customs,
     landed: landedCost,

@@ -16,6 +16,7 @@ import * as holds from '@/server/services/payable-holds';
 import * as landed from '@/server/services/landed-cost';
 import { parseDecimal } from '@/server/domain/money';
 import * as payables from '@/server/services/payables';
+import * as payAfterArrival from '@/server/services/pay-after-arrival';
 import * as paymentApplications from '@/server/services/payment-applications';
 import { businessToday } from '@/server/domain/business-date';
 
@@ -142,6 +143,25 @@ export async function cancelPayable(form: FormData): Promise<void> {
     async (tx, ctx) => {
       const row = await payables.loadByNo(tx, payableNo);
       await payables.cancel(tx, ctx, { payableId: row.id, reason: text(form, 'reason') });
+    },
+    back(payableNo),
+  );
+}
+
+/**
+ * 0426 — the import paid after the goods arrive, or before arrival again
+ * (`on` = "1" / "0"), with the reason the dialog asked.
+ */
+export async function setPayAfterArrivalAction(form: FormData): Promise<void> {
+  const payableNo = text(form, 'payable_no');
+  await runAdminAndReturn(
+    async (tx, ctx) => {
+      const row = await payables.loadByNo(tx, payableNo);
+      await payAfterArrival.setPayAfterArrival(tx, ctx, {
+        payableId: row.id,
+        on: text(form, 'on') === '1',
+        reason: text(form, 'reason'),
+      });
     },
     back(payableNo),
   );

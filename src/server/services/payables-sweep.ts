@@ -31,6 +31,7 @@ import * as shipments from './shipments';
 import * as loans from './loans';
 import * as notifications from './notifications';
 import { businessDateOf, businessToday } from '../domain/business-date';
+import { paymentClockStart } from '../domain/pay-after-arrival';
 
 export interface SweepResult {
   readonly asOf: string;
@@ -259,7 +260,8 @@ const CHECK_QUERIES: Readonly<Record<string, CheckQuery>> = {
   invoice_unfunded: async (tx) => {
     const result = await tx.execute(sql`
       select p.id, p.payable_type_code as "typeCode", p.supplier_id as "supplierId",
-             min(i.posted_at)::date::text as since, string_agg(i.invoice_no, ', ') as invoices
+             min(i.posted_at)::date::text as since, string_agg(i.invoice_no, ', ') as invoices,
+             p.pay_after_arrival as "payLater", ${ARRIVED_ON} as "arrivedOn"
         from payable p
         join ap_invoice i on i.payable_id = p.id
                          and i.status in ('posted', 'partially_executed')
@@ -279,8 +281,11 @@ const CHECK_QUERIES: Readonly<Record<string, CheckQuery>> = {
       supplierId: string;
       since: string;
       invoices: string;
+      payLater: boolean;
+      arrivedOn: string | null;
     }[];
-    return rows.map((row) => ({
+    // 0426 — an import paid after the goods arrive: no clock until they are all in, then from that day.
+    return clocked(rows).map((row) => ({
       payableId: row.id,
       laneCode: 'bank',
       since: row.since,
@@ -320,6 +325,25 @@ async function standingPds(tx: Tx, where: ReturnType<typeof sql>) {
 }
 
 /**
+ * 0426 — the day the last live container of an import (`p`) was received,
+ * when every one of them is; null while any is still on its way or the import
+ * has none. Only asked for an import paid after the goods arrive.
+ */
+const ARRIVED_ON = sql`(case when p.pay_after_arrival then (
+    select case when count(*) > 0 and count(*) = count(sc.received_on) then max(sc.received_on)::text end
+      from shipment_container sc join bill_of_lading bl on bl.id = sc.bl_id
+     where bl.payable_id = p.id and bl.cancelled_at is null and sc.cancelled_at is null
+       and sc.status_code <> 'missing_damaged') end)`;
+
+/** The rows whose payment clock runs, each from the day it starts (`paymentClockStart`). */
+function clocked<T extends { since: string; payLater: boolean; arrivedOn: string | null }>(rows: readonly T[]): T[] {
+  return rows.flatMap((row) => {
+    const since = paymentClockStart(row.since, Boolean(row.payLater), row.arrivedOn);
+    return since === null ? [] : [{ ...row, since }];
+  });
+}
+
+/**
  * The applications sent and waiting for the bank's answer, one offender per
  * application (the hold is per payable and check, so the oldest opens it).
  */
@@ -328,7 +352,7 @@ async function pendingApplications(tx: Tx, which: 'swift' | 'other'): Promise<Of
     select pa.payable_id as "payableId", pa.application_no as "applicationNo",
            pa.application_date::text as since, pa.payment_method_code as "methodCode",
            b.bank_code as "bankCode", p.payable_type_code as "typeCode", p.supplier_id as "supplierId",
-           b.code as "accountCode"
+           b.code as "accountCode", p.pay_after_arrival as "payLater", ${ARRIVED_ON} as "arrivedOn"
       from payment_application pa
       join payment_method m on m.code = pa.payment_method_code
       join bank_cash_account b on b.id = pa.bank_cash_account_id
@@ -346,8 +370,10 @@ async function pendingApplications(tx: Tx, which: 'swift' | 'other'): Promise<Of
     typeCode: string;
     supplierId: string;
     accountCode: string;
+    payLater: boolean;
+    arrivedOn: string | null;
   }[];
-  return rows.map((row) => ({
+  return clocked(rows).map((row) => ({
     payableId: row.payableId,
     laneCode: 'payment',
     since: row.since,

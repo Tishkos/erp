@@ -1821,6 +1821,20 @@
       "when": 1795900000232,
       "tag": "0425_bank_overdraft_payment_applications",
       "breakpoints": true
+    },
+    {
+      "idx": 260,
+      "version": "7",
+      "when": 1795900000233,
+      "tag": "0426_import_pay_after_arrival",
+      "breakpoints": true
+    },
+    {
+      "idx": 261,
+      "version": "7",
+      "when": 1795900000234,
+      "tag": "0427_payment_application_reversal",
+      "breakpoints": true
     }
   ]
 }

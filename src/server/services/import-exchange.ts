@@ -41,6 +41,7 @@ import * as advances from './supplier-advance';
 import * as events from './payable-events';
 import * as payables from './payables';
 import * as payments from './supplier-payment';
+import * as journal from './journal';
 import * as posting from './posting';
 
 export const EVENT_TYPE = 'payables.exchange_difference';
@@ -250,4 +251,96 @@ export async function settleIfFullyPaid(tx: Tx, ctx: ActorContext, payableId: st
     });
     return 'waiting';
   }
+}
+
+/** What a document settled down to `settled` of `whole` is: settled, part settled, or open. */
+const statusAfter = (settled: bigint, whole: bigint) => (settled >= whole ? 'settled' : settled > 0n ? 'partially_executed' : 'posted');
+
+/**
+ * A payment of the import is reversed (0427, 2026-10-24): the import is no
+ * longer fully paid, so the exchange difference it closed on is undone — its
+ * journal mirrored (`journal.reverse`), what it closed owing again (each
+ * invoice's settled dinars and status, each payment's allocated dinars, each
+ * deposit's settled dinars), and its rows stamped as undone. Null when the
+ * import has none standing. If the import is still fully paid after the
+ * reversal, the caller books it afresh (`settleIfFullyPaid`).
+ */
+export async function undo(
+  tx: Tx,
+  ctx: ActorContext,
+  payableId: string,
+  because: { readonly applicationNo: string; readonly reason: string },
+): Promise<{ entryNo: string } | null> {
+  const rows = await tx
+    .select()
+    .from(payableExchangeDifference)
+    .where(and(eq(payableExchangeDifference.payableId, payableId), isNull(payableExchangeDifference.reversedAt)))
+    .for('update');
+  if (rows.length === 0) return null;
+  const owner = await payables.load(tx, payableId);
+
+  for (const row of rows) {
+    const amount = parseDecimal(row.amountIqd, 4n);
+    if (row.sourceType === 'ap_invoice') {
+      const [invoice] = await tx.select().from(apInvoice).where(eq(apInvoice.id, row.sourceId)).for('update');
+      if (!invoice) continue;
+      const settled = parseDecimal(invoice.settledAmountIqd, 4n) - amount;
+      await tx
+        .update(apInvoice)
+        .set({ settledAmountIqd: toDecimalString(settled, 4n), status: statusAfter(settled, parseDecimal(invoice.totalIqd, 4n)), updatedAt: new Date() })
+        .where(eq(apInvoice.id, invoice.id));
+    } else if (row.sourceType === 'supplier_payment') {
+      const [payment] = await tx.select().from(supplierPayment).where(eq(supplierPayment.id, row.sourceId)).for('update');
+      if (!payment) continue;
+      await tx
+        .update(supplierPayment)
+        .set({ allocatedAmountIqd: toDecimalString(parseDecimal(payment.allocatedAmountIqd, 4n) - amount, 4n), updatedAt: new Date() })
+        .where(eq(supplierPayment.id, payment.id));
+    } else {
+      const [deposit] = await tx.select().from(supplierAdvance).where(eq(supplierAdvance.id, row.sourceId)).for('update');
+      if (!deposit) continue;
+      const settled = parseDecimal(deposit.settledAmountIqd, 4n) - amount;
+      await tx
+        .update(supplierAdvance)
+        .set({ settledAmountIqd: toDecimalString(settled, 4n), status: statusAfter(settled, parseDecimal(deposit.amountIqd, 4n)), updatedAt: new Date() })
+        .where(eq(supplierAdvance.id, deposit.id));
+    }
+  }
+
+  // One journal carried them all (`settle`); mirrored once.
+  const journals = [...new Set(rows.map((row) => row.journalEntryId))];
+  let entryNo = '';
+  for (const journalEntryId of journals) {
+    const reversal = await journal.reverse(tx, ctx, journalEntryId, {
+      reason: `${because.applicationNo} reversed — ${owner.payableNo} is no longer fully paid: ${because.reason}`,
+    });
+    entryNo = reversal.entryNo;
+    await tx
+      .update(payableExchangeDifference)
+      .set({ reversedAt: new Date(), reversedBy: ctx.principal.userId, reversalJournalEntryId: reversal.id })
+      .where(and(eq(payableExchangeDifference.journalEntryId, journalEntryId), isNull(payableExchangeDifference.reversedAt)));
+  }
+
+  await events.record(tx, {
+    payableId,
+    eventCode: 'EXCHANGE_DIFFERENCE_UNDONE',
+    summary: `Exchange difference undone (${entryNo}) — ${because.applicationNo} reversed, so ${owner.payableNo} is no longer fully paid in ${owner.currency}; it is booked again when it is`,
+    sourceType: DOCUMENT_TYPE,
+    sourceId: payableId,
+    sourceNo: owner.payableNo,
+    after: { reversalEntryNo: entryNo },
+    actorUserId: ctx.principal.userId,
+  });
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'payable.exchange_difference_undone',
+    objectType: payables.PERMISSION_OBJECT,
+    objectId: payableId,
+    branchCode: owner.branchCode,
+    after: { reversalEntryNo: entryNo, applicationNo: because.applicationNo },
+    reason: because.reason,
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+  return { entryNo };
 }

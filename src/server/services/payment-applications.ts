@@ -42,9 +42,13 @@ import {
   businessPartner,
   customsPd,
   fundingSource,
+  importOpeningSettlement,
   instalmentTrigger,
+  journalEntry,
   partnerBankAccount,
   payable,
+  payableEvent,
+  payableExchangeDifference,
   payableInstalment,
   payableStage,
   paymentApplication,
@@ -54,9 +58,11 @@ import {
   paymentMethod,
   shipmentContainer,
   supplierAdvance,
+  supplierAdvanceSettlement,
   supplierPayment,
 } from '../db/schema';
 import {
+  CLOSED_STATUSES,
   PaymentApplicationError,
   SendRefusedError,
   accountTypeFor,
@@ -70,6 +76,7 @@ import {
   isConfirmationKind,
   isLive,
   isReserved,
+  isReversible,
   keepsTheBank,
   needsPayeeAccount,
   payeeCheck,
@@ -198,7 +205,7 @@ export async function bankLockOf(tx: Tx, payableId: string): Promise<BankLock | 
     .where(
       and(
         eq(paymentApplication.payableId, payableId),
-        notInArray(paymentApplication.status, ['rejected', 'cancelled']),
+        notInArray(paymentApplication.status, [...CLOSED_STATUSES]),
         eq(bankCashAccount.accountType, 'bank'),
       ),
     )
@@ -482,7 +489,7 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateInput) {
       .where(
         and(
           eq(paymentApplication.instalmentId, instalment.id),
-          sql`${paymentApplication.status} not in ('rejected','cancelled')`,
+          notInArray(paymentApplication.status, [...CLOSED_STATUSES]),
         ),
       )
       .limit(1);
@@ -1413,6 +1420,214 @@ export const cancel = (tx: Tx, ctx: ActorContext, id: string, reason: string) =>
   close(tx, ctx, id, 'cancelled', reason);
 
 // ---------------------------------------------------------------------------
+// Reverse — a paid application undone, with a reason (0427, 2026-10-24)
+// ---------------------------------------------------------------------------
+
+/**
+ * What reversing a paid application undoes — read before anything moves, for
+ * the window that asks the reason, and by `reverse` itself.
+ */
+export interface ReversalPlan {
+  /** The supplier payment or deposit confirming posted; null for a sheet row confirmed before the cut-over. */
+  readonly document: { readonly kind: 'payment' | 'advance'; readonly no: string; readonly status: string } | null;
+  /** The deposit is applied to these invoices: the reversal is refused while it is. */
+  readonly advanceAppliedTo: readonly string[];
+  /** The import's exchange difference stands and is undone (the import is no longer fully paid). */
+  readonly exchangeDifference: boolean;
+  /** A before-cut-over payment's settlement of the opening balance, given back to it. */
+  readonly openingInvoiceNo: string | null;
+  /** The loan whose draw goes back to it. */
+  readonly loanNo: string | null;
+  /** The bank statement line the debit was matched to stays: the reversal's journal is money coming back. */
+  readonly statementMatched: boolean;
+}
+
+export async function reversalPlan(tx: Tx, row: typeof paymentApplication.$inferSelect): Promise<ReversalPlan> {
+  const [payment] = row.supplierPaymentId
+    ? await tx
+        .select({ no: supplierPayment.paymentNo, status: supplierPayment.status })
+        .from(supplierPayment)
+        .where(eq(supplierPayment.id, row.supplierPaymentId))
+        .limit(1)
+    : [];
+  const [deposit] = row.supplierAdvanceId
+    ? await tx
+        .select({ no: supplierAdvance.advanceNo, status: supplierAdvance.status })
+        .from(supplierAdvance)
+        .where(eq(supplierAdvance.id, row.supplierAdvanceId))
+        .limit(1)
+    : [];
+  const applied = row.supplierAdvanceId
+    ? await tx
+        .select({ invoiceNo: apInvoice.invoiceNo })
+        .from(supplierAdvanceSettlement)
+        .innerJoin(apInvoice, eq(apInvoice.id, supplierAdvanceSettlement.apInvoiceId))
+        .where(and(eq(supplierAdvanceSettlement.supplierAdvanceId, row.supplierAdvanceId), isNull(supplierAdvanceSettlement.reversedAt)))
+    : [];
+  const [difference] = await tx
+    .select({ id: payableExchangeDifference.id })
+    .from(payableExchangeDifference)
+    .where(and(eq(payableExchangeDifference.payableId, row.payableId), isNull(payableExchangeDifference.reversedAt)))
+    .limit(1);
+  const [opening] = await tx
+    .select({ invoiceNo: apInvoice.invoiceNo })
+    .from(importOpeningSettlement)
+    .innerJoin(apInvoice, eq(apInvoice.id, importOpeningSettlement.apInvoiceId))
+    .where(and(eq(importOpeningSettlement.paymentApplicationId, row.id), isNull(importOpeningSettlement.reversedAt)))
+    .limit(1);
+  const loan = row.loanId ? await loans.forApplication(tx, row.loanId) : null;
+  return {
+    document: payment
+      ? { kind: 'payment', no: payment.no, status: payment.status }
+      : deposit
+        ? { kind: 'advance', no: deposit.no, status: deposit.status }
+        : null,
+    advanceAppliedTo: applied.map((one) => one.invoiceNo),
+    exchangeDifference: Boolean(difference),
+    openingInvoiceNo: opening?.invoiceNo ?? null,
+    loanNo: loan?.loanNo ?? null,
+    statementMatched: Boolean(row.statementLineId),
+  };
+}
+
+/**
+ * A Paid or debited application undone (2026-10-24, by direction: "in payment
+ * application please even settled have to [be] reversed"). Whoever may
+ * reverse on payment applications (`reverse_cancel`), with a reason; dated
+ * today, so the current period must be open. What confirming did is undone,
+ * each part through its owner's service:
+ *
+ *   1. the import's exchange difference, if it stands — the import is no
+ *      longer fully paid (`import-exchange.undo`);
+ *   2. the supplier payment it posted — its journal mirrored, its
+ *      allocations undone, so the invoices (an opening balance among them)
+ *      owe again (`supplier-payment.reverse`) — or the deposit
+ *      (`supplier-advance.reverse`, refused while it is applied to an invoice);
+ *   3. the application is `reversed`, and a sheet row's settlement of the
+ *      opening balance before the cut-over is given back
+ *      (`import-opening-balance.undoBeforeCutOver`);
+ *   4. the loan's draw goes back to the loan;
+ *   5. if the import is still fully paid in its currency, its exchange
+ *      difference is booked again.
+ *
+ * Not undone: the goods an advance released from On Process (Without SWIFT)
+ * stay in In Process (the import's log says so), and a bank statement match
+ * stays — the statement did show the money leave; the reversal's journal is
+ * the money coming back, matched to its own line. Not blocked by a stop over
+ * the payment lane's time limit: a correction is never held up by the clock.
+ */
+export async function reverse(tx: Tx, ctx: ActorContext, id: string, input: { reason: string }) {
+  const row = await lock(tx, id);
+  await authz.authorize(ctx.principal, 'reverse_cancel', PERMISSION_OBJECT, { branchCode: row.branchCode });
+  if (!isReversible(row.status)) {
+    throw new PaymentApplicationError(
+      `${row.applicationNo} is '${row.status}'; only a paid application is reversed — before it is paid it is rejected or cancelled.`,
+    );
+  }
+  await move(tx, row, 'reversed');
+  const reason = input.reason?.trim() ?? '';
+  if (!reason) throw new PaymentApplicationError(`Say why ${row.applicationNo} is reversed.`);
+
+  const owner = await payables.load(tx, row.payableId);
+  if (owner.cancelledAt) {
+    throw new PaymentApplicationError(`${owner.payableNo} is cancelled; nothing on it is reversed any more.`);
+  }
+  const plan = await reversalPlan(tx, row);
+  if (plan.advanceAppliedTo.length > 0) {
+    throw new PaymentApplicationError(
+      `${row.applicationNo} paid deposit ${plan.document?.no ?? ''}, which is applied to ${plan.advanceAppliedTo.join(', ')}: ` +
+        'the deposit pays that invoice now. Reverse the invoice first, or keep the payment.',
+    );
+  }
+  const on = businessToday();
+  const because = `${row.applicationNo} reversed: ${reason}`;
+
+  // 1 — the exchange difference the import closed on, while it was fully paid.
+  const undoneDifference = await exchange.undo(tx, ctx, row.payableId, { applicationNo: row.applicationNo, reason });
+
+  // 2 — the document confirming posted.
+  let reversalNo: string | null = null;
+  if (row.supplierPaymentId) {
+    const [payment] = await tx.select({ status: supplierPayment.status }).from(supplierPayment).where(eq(supplierPayment.id, row.supplierPaymentId)).limit(1);
+    if (payment?.status === 'posted') {
+      const done = await payments.reverse(tx, ctx, row.supplierPaymentId, { reversalDate: on, reason: because });
+      reversalNo = await entryNoOf(tx, done.reversalEntryId);
+    }
+  } else if (row.supplierAdvanceId) {
+    const done = await advances.reverse(tx, ctx, row.supplierAdvanceId, { reason: because, reversalDate: on });
+    reversalNo = await entryNoOf(tx, done.reversalEntryId);
+  }
+
+  // 3 — the application itself, then what the cut-over settled on its word.
+  await tx
+    .update(paymentApplication)
+    .set({ status: 'reversed', reversedBy: ctx.principal.userId, reversedAt: new Date(), reversalReason: reason, updatedAt: new Date() })
+    .where(eq(paymentApplication.id, id));
+  const opening = await (await import('./import-opening-balance')).undoBeforeCutOver(tx, ctx, row, reason);
+
+  // 4 — the loan's draw goes back to it.
+  if (row.loanId) await loans.release(tx, ctx, row, `reversed: ${reason}`);
+
+  const undone = [
+    plan.document && reversalNo ? `${plan.document.no} reversed (${reversalNo})` : null,
+    opening ? `opening balance ${opening.invoiceNo} owes it again (${opening.entryNo})` : null,
+    undoneDifference ? `exchange difference undone (${undoneDifference.entryNo})` : null,
+  ].filter(Boolean);
+  // The goods this application released from On Process (Without SWIFT) stay where they went.
+  const [released] = await tx
+    .select({ id: payableEvent.id })
+    .from(payableEvent)
+    .where(and(eq(payableEvent.payableId, row.payableId), eq(payableEvent.eventCode, 'ADVANCE_RELEASED'), eq(payableEvent.sourceNo, row.applicationNo)))
+    .limit(1);
+  await events.record(tx, {
+    payableId: row.payableId,
+    eventCode: 'PAYMENT_REVERSED',
+    summary:
+      `${row.applicationNo} reversed — ${row.currency} ${shown(parseDecimal(row.amountTxn, MONEY_SCALE))} is no longer paid: ${reason}` +
+      (undone.length > 0 ? `; ${undone.join('; ')}` : '') +
+      (released ? '; goods it released from On Process (Without SWIFT) stay in In Process' : '') +
+      (plan.statementMatched ? '; the bank statement line it was matched to stays — match the money coming back to its own line' : ''),
+    sourceType: PERMISSION_OBJECT,
+    sourceId: row.id,
+    sourceNo: row.applicationNo,
+    after: { status: 'reversed', reversalEntryNo: reversalNo, documentNo: plan.document?.no ?? null },
+    actorUserId: ctx.principal.userId,
+  });
+
+  // 5 — still fully paid in its currency (paid over what it owed): booked afresh.
+  if (undoneDifference && owner.currency !== 'IQD' && (await totalsFor(tx, row.payableId)).fullyPaid) {
+    await exchange.settleIfFullyPaid(tx, ctx, row.payableId, on);
+  }
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'payment_application.reversed',
+    objectType: PERMISSION_OBJECT,
+    objectId: id,
+    branchCode: row.branchCode,
+    before: { status: row.status, confirmedOn: row.confirmedOn ? String(row.confirmedOn) : null, documentNo: plan.document?.no ?? null },
+    after: {
+      status: 'reversed',
+      reversedAt: new Date().toISOString(),
+      reversalEntryNo: reversalNo,
+      exchangeDifferenceUndone: undoneDifference?.entryNo ?? null,
+      openingSettlementUndone: opening?.entryNo ?? null,
+      loanNo: plan.loanNo,
+    },
+    reason,
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+  await payables.recomputeStage(tx, row.payableId, ctx.principal.userId);
+  return { applicationNo: row.applicationNo, reversalEntryNo: reversalNo };
+}
+
+async function entryNoOf(tx: Tx, journalEntryId: string): Promise<string | null> {
+  const [entry] = await tx.select({ entryNo: journalEntry.entryNo }).from(journalEntry).where(eq(journalEntry.id, journalEntryId)).limit(1);
+  return entry?.entryNo ?? null;
+}
+
+// ---------------------------------------------------------------------------
 // The papers — what each attachment is, and what it does (2026-10-06)
 // ---------------------------------------------------------------------------
 
@@ -1913,7 +2128,7 @@ export async function view(tx: Tx, applicationNo: string) {
     .where(
       inArray(
         appUser.id,
-        [row.createdBy, row.approvedBy, row.sentBy, row.confirmedBy, row.closedBy, row.overrideBy].filter(
+        [row.createdBy, row.approvedBy, row.sentBy, row.confirmedBy, row.closedBy, row.overrideBy, row.reversedBy].filter(
           (value): value is string => Boolean(value),
         ),
       ),
@@ -1958,9 +2173,12 @@ export async function view(tx: Tx, applicationNo: string) {
       confirmedBy: nameOf(row.confirmedBy),
       closedBy: nameOf(row.closedBy),
       overrideBy: nameOf(row.overrideBy),
+      reversedBy: nameOf(row.reversedBy),
     },
     checks,
     position,
+    // What Reverse would undo — read only while the application is paid (0427).
+    reversal: isReversible(row.status) ? await reversalPlan(tx, row) : null,
     // An import with an opening balance (0422) is paid as a bill, as `confirm` does.
     confirmPostsAs:
       owing.length > 0 || (await (await import('./import-opening-balance')).hasOpening(tx, row.payableId))

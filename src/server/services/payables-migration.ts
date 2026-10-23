@@ -509,7 +509,7 @@ async function erpTotals(tx: Tx, keys: readonly string[]) {
            (select coalesce(sum(a.amount_txn), 0) from payment_application a
              where a.payable_id in (select id from imports) and a.status in ('confirmed', 'debited'))::text as paid,
            (select coalesce(sum(a.amount_txn), 0) from payment_application a
-             where a.payable_id in (select id from imports) and a.status not in ('rejected', 'cancelled'))::text as applied`);
+             where a.payable_id in (select id from imports) and a.status not in ('rejected', 'cancelled', 'reversed'))::text as applied`);
   const row = result.rows[0] as { invoiced: string; paid: string; applied: string };
   return { invoiced: money(dec(row.invoiced)), paid: money(dec(row.paid)), applied: money(dec(row.applied)) };
 }

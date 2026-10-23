@@ -88,6 +88,8 @@ test.describe('AP-17 · a dollar invoice shows its dinars', () => {
     expect(Math.abs(dollarEdge - dinarEdge)).toBeLessThanOrEqual(1);
 
     // An amount in front (no percentage on the form since 2026-10-08): said in dinars under the box.
+    // It opens on No upfront payment since 2026-10-24 (a payment application is not mandatory).
+    await page.locator('select[name="advance_basis"]').selectOption('amount');
     const advance = page.locator('input[name="advance_amount"]');
     const inFront = Math.round(dollars * 0.2);
     await advance.fill(String(inFront));

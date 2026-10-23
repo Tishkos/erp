@@ -5,6 +5,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  CLOSED_STATUSES,
+  STATUS_GROUPS,
   PaymentApplicationError,
   SendRefusedError,
   accountTypeFor,
@@ -18,10 +20,12 @@ import {
   isLive,
   isPaid,
   isReserved,
+  isReversible,
   needsPayeeAccount,
   payeeCheck,
   pendingCheckFor,
   planAmounts,
+  statusesOf,
   totals,
 } from '@domain/payment-applications';
 
@@ -208,5 +212,41 @@ describe('§15.5 · Applied / Paid / Remaining', () => {
     expect(instalmentStatus(['rejected', 'sent'])).toBe('applied');
     expect(instalmentStatus(['confirmed'])).toBe('paid');
     expect(addDays('2026-09-01', 60)).toBe('2026-10-31');
+  });
+});
+
+describe('0427 · a paid application reversed', () => {
+  const rows = [
+    { fromStatus: 'confirmed', toStatus: 'reversed', active: true },
+    { fromStatus: 'debited', toStatus: 'reversed', active: true },
+  ];
+
+  it('is reversible only once paid: confirmed or debited', () => {
+    expect(['confirmed', 'debited'].filter(isReversible)).toEqual(['confirmed', 'debited']);
+    for (const status of ['draft', 'submitted', 'approved', 'sent', 'rejected', 'cancelled', 'reversed']) expect(isReversible(status)).toBe(false);
+    expect(() => assertTransition('PA-1', rows, 'confirmed', 'reversed')).not.toThrow();
+    expect(() => assertTransition('PA-1', rows, 'sent', 'reversed')).toThrow(/reversed, with a reason, after/);
+  });
+
+  it('a reversed application is closed: not live, applied, paid or reserved, and frees its instalment', () => {
+    expect(CLOSED_STATUSES).toContain('reversed');
+    expect(isLive('reversed')).toBe(false);
+    expect(isApplied('reversed')).toBe(false);
+    expect(isPaid('reversed')).toBe(false);
+    expect(isReserved('reversed')).toBe(false);
+    expect(instalmentStatus(['reversed'])).toBe('planned');
+    expect(instalmentStatus(['reversed', 'confirmed'])).toBe('paid');
+    expect(STATUS_GROUPS.closed).toContain('reversed');
+    expect(statusesOf('reversed')).toEqual(['reversed']);
+  });
+
+  it('counts nothing towards what is paid', () => {
+    const sums = totals(m('1000'), [
+      { status: 'reversed', amountTxn: m('1000'), amountIqd: m('1000') },
+      { status: 'confirmed', amountTxn: m('400'), amountIqd: m('400') },
+    ]);
+    expect(sums.paidTxn).toBe(m('400'));
+    expect(sums.appliedTxn).toBe(m('400'));
+    expect(sums.fullyPaid).toBe(false);
   });
 });

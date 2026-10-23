@@ -7,6 +7,26 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 
 ## Unreleased
 
+## 1.1.8 — 2026-10-24
+
+### Fixed — a payment application refused with nowhere to answer
+- Approving (or sending) a payment application whose import's payment lane is past its time limit was refused — "the stop has no reason yet" — and the form for the reason was only on the import's page, folded away. The application now shows the stop in red above its window with **Give the reason**: reason, owner, next action, and back to the application, which can then be approved. (Live had 50 such stops on the sheet imports, 17 of them in the payment lane.)
+
+### New — imports paid after the goods arrive
+- A new purchase invoice no longer asks for an advance by default: *Payable in advance* opens on *No upfront payment*, so no payment application is raised unless somebody asks for one.
+- **Pay after the goods arrive**: a tick box on the new purchase invoice (for the import it opens) and a button on an existing import (with *Pay before arrival again*), each with a reason. Such an import holds no goods in On Process (Without SWIFT) and raises no advance; switching it on releases what was held and closes its payment-lane stops; the nightly payment clocks start only once every container is received. Import Applications has a *Payment timing* filter (Before arrival / After arrival) and a *Paid after arrival* chip.
+
+### New — a paid payment application can be reversed
+- *Paid* or *Debit final* → **Reversed**, with a reason: the supplier payment (or deposit) it posted is reversed, the invoices owe again, an exchange difference or a before-cut-over settlement it closed is undone, a loan draw goes back, and the import's stage is worked out again. Refused while its deposit is applied to an invoice (reverse that first). Dollar payments come back in dollars at the rate they went out at.
+
+### Migrations
+- `0426_import_pay_after_arrival` — `payable.pay_after_arrival` and who/when/why, two checks (C-98), two log event codes.
+- `0427_payment_application_reversal` — status `reversed` and its transitions, `reversed_by/at`, `reversal_reason`, three log event codes, the exchange difference undoable once, the opening settlement trigger widened, the 0036 invoice-exception guard narrowed to real postings (C-99).
+- Rollback: the previous build; both migrations only add (the narrowed 0036 trigger and the widened settlement trigger are restored by re-running their earlier bodies).
+
+### Test evidence
+- Unit suite (167 files); integration `pal01-pay-after-arrival`, `par01-payment-application-reversal`, `adv01-advance-hold`, `pa02-funded-on-acceptance`, `ap03-payments`, `ta01-transfers-applications`, `iob01-import-opening-balances`, `imp01-import-journey-documents`, `ap01-holds-sweep`, `hd14-payable-record`, `fx3-import-invoice` (its USD-bank fixture now sits on a USD ledger account, as 1.1.3 requires), the supplier payment and advance suites.
+
 ## 1.1.7 — 2026-10-22
 
 ### Fixed — a dollar bank account's page printed its dinars as dollars

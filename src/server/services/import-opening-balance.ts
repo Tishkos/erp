@@ -731,3 +731,70 @@ export async function undoAbsorption(tx: Tx, ctx: ActorContext, invoiceId: strin
   });
   return true;
 }
+
+/**
+ * A migrated application confirmed before the cut-over is reversed (0427,
+ * 2026-10-24): the money it said had left before the books opened did not, so
+ * the opening balance owes it again — the settlement's journal mirrored, the
+ * opening's settled dinars and status put back, the row stamped (0427 lets
+ * that row be undone once, for a reversed application). Called after the
+ * application is marked reversed. Null when it settled nothing (no opening,
+ * or the opening owed nothing then).
+ */
+export async function undoBeforeCutOver(
+  tx: Tx,
+  ctx: ActorContext,
+  application: { readonly id: string; readonly applicationNo: string; readonly payableId: string },
+  reason: string,
+): Promise<{ invoiceNo: string; entryNo: string } | null> {
+  const [row] = await tx
+    .select()
+    .from(importOpeningSettlement)
+    .where(and(eq(importOpeningSettlement.paymentApplicationId, application.id), isNull(importOpeningSettlement.reversedAt)))
+    .limit(1);
+  if (!row) return null;
+  const [opening] = await tx.select().from(apInvoice).where(eq(apInvoice.id, row.apInvoiceId)).for('update');
+  if (!opening) return null;
+
+  const reversal = await journal.reverse(tx, ctx, row.journalEntryId, {
+    reason: `${application.applicationNo} reversed — it was not paid before the cut-over: ${reason}`,
+  });
+  const settled = parseDecimal(opening.settledAmountIqd, MONEY_SCALE) - parseDecimal(row.amountIqd, MONEY_SCALE);
+  const total = parseDecimal(opening.totalIqd, MONEY_SCALE);
+  await tx
+    .update(apInvoice)
+    .set({
+      settledAmountIqd: toDecimalString(settled),
+      status: settled >= total ? 'settled' : settled > 0n ? 'partially_executed' : 'posted',
+      updatedAt: new Date(),
+    })
+    .where(eq(apInvoice.id, opening.id));
+  await tx
+    .update(importOpeningSettlement)
+    .set({ reversedAt: new Date(), reversedBy: ctx.principal.userId, reversalJournalEntryId: reversal.id })
+    .where(eq(importOpeningSettlement.id, row.id));
+
+  await events.record(tx, {
+    payableId: application.payableId,
+    eventCode: 'OPENING_SETTLEMENT_UNDONE',
+    summary: `${application.applicationNo} reversed — opening balance ${opening.invoiceNo} owes IQD ${row.amountIqd} again (${reversal.entryNo})`,
+    sourceType: DOCUMENT_TYPE,
+    sourceId: opening.id,
+    sourceNo: opening.invoiceNo,
+    after: { applicationNo: application.applicationNo, reversalEntryNo: reversal.entryNo },
+    actorUserId: ctx.principal.userId,
+  });
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'ap_invoice.import_opening_settlement_undone',
+    objectType: DOCUMENT_TYPE,
+    objectId: opening.id,
+    branchCode: opening.branchCode,
+    before: { settledAmountIqd: opening.settledAmountIqd, status: opening.status },
+    after: { settledAmountIqd: toDecimalString(settled), applicationNo: application.applicationNo, reversalEntryNo: reversal.entryNo },
+    reason,
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+  return { invoiceNo: opening.invoiceNo, entryNo: reversal.entryNo };
+}

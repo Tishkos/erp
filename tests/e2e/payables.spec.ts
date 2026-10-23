@@ -99,6 +99,8 @@ test.describe('A22 · payables in a browser', () => {
     await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
     await page.locator('input[name="is_import"]').check();
     // The advance is an amount (2026-10-08: no percentage on the form): 6,000 of 20,000 in front.
+    // It opens on No upfront payment since 2026-10-24 (a payment application is not mandatory).
+    await page.locator('select[name="advance_basis"]').selectOption('amount');
     await page.locator('input[name="advance_amount"]').fill('6000');
     await page.getByRole('button', { name: 'Create' }).click();
 
@@ -205,6 +207,8 @@ test.describe('A22 · payables in a browser', () => {
     await page.getByLabel('Unit Price').first().fill('5000');
     await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
     await page.locator('input[name="is_import"]').check();
+    // It opens on No upfront payment since 2026-10-24 (a payment application is not mandatory).
+    await page.locator('select[name="advance_basis"]').selectOption('amount');
     await page.locator('input[name="advance_amount"]').fill('15000');
     await page.getByRole('button', { name: 'Create' }).click();
     await page.waitForURL(

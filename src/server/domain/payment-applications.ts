@@ -126,6 +126,8 @@ export const PAYMENT_APPLICATION_STATUSES = [
   'debited',
   'rejected',
   'cancelled',
+  // A paid application undone, with its reason (2026-10-24, by direction: "even settled have to be reversed").
+  'reversed',
 ] as const;
 export type ApplicationStatus = (typeof PAYMENT_APPLICATION_STATUSES)[number];
 
@@ -137,12 +139,26 @@ export type ApplicationStatus = (typeof PAYMENT_APPLICATION_STATUSES)[number];
  */
 export function statusLabelKey(status: string, kind?: string | null): string {
   if (status === 'submitted') return 'status_sent_for_approval';
+  // Its own words, as `submitted`'s: the shared order labels are not re-declared here (hd18).
+  if (status === 'reversed') return 'status_payment_reversed';
   return kind === 'swift' && (status === 'sent' || status === 'confirmed') ? `status_swift_${status}` : `status_${status}`;
 }
 
-/** Live: holds or has moved money. Rejected and cancelled are not. */
+/**
+ * Closed: rejected, cancelled, or paid and then reversed (0427). A closed
+ * application holds no money, frees its instalment and its loan draw, and does
+ * not tie the import to its bank.
+ */
+export const CLOSED_STATUSES = ['rejected', 'cancelled', 'reversed'] as const;
+
+/** Live: holds or has moved money. Rejected, cancelled and reversed are not. */
 export function isLive(status: string): boolean {
-  return status !== 'rejected' && status !== 'cancelled';
+  return !(CLOSED_STATUSES as readonly string[]).includes(status);
+}
+
+/** Reversible (0427): paid — confirmed or debited — and so posted. */
+export function isReversible(status: string): boolean {
+  return status === 'confirmed' || status === 'debited';
 }
 
 /** Reserved on the account: approved or sent, not yet confirmed (§15.6). */
@@ -170,7 +186,7 @@ export const STATUS_GROUPS = {
   pending: ['draft', 'submitted', 'approved', 'sent'],
   not_with_bank: ['draft', 'submitted', 'approved'],
   paid: ['confirmed', 'debited'],
-  closed: ['rejected', 'cancelled'],
+  closed: ['rejected', 'cancelled', 'reversed'],
 } as const satisfies Record<string, readonly ApplicationStatus[]>;
 
 /** The register's earlier view names, still read from an address that carries one. */
@@ -206,7 +222,7 @@ export function assertTransition(
     throw new PaymentApplicationError(
       `${applicationNo} is '${from}' and cannot become '${to}'. ` +
         'A payment application moves draft → approved → sent → confirmed → debited; ' +
-        'it is rejected or cancelled, with a reason, before it is confirmed.',
+        'it is rejected or cancelled, with a reason, before it is confirmed, and reversed, with a reason, after.',
     );
   }
 }

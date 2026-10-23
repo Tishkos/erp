@@ -25,6 +25,7 @@ import type { Tx } from '../db/client';
 import {
   apInvoice,
   apInvoiceLine,
+  appUser,
   branch,
   businessPartner,
   expenseCategory,
@@ -50,6 +51,7 @@ import {
 } from '../domain/payables';
 import { MONEY_SCALE, parseDecimal, say, toDecimalString } from '../domain/money';
 import { isApplied, totals as paymentTotalsOf } from '../domain/payment-applications';
+import type { PaymentTiming } from '../domain/pay-after-arrival';
 import { formatQuantity, parseQuantity } from '../domain/uom';
 import type { ActorContext } from './chart-of-accounts';
 import * as audit from './audit';
@@ -653,6 +655,9 @@ export async function assertLaneEditable(
 // Creation (§5.1, §14)
 // ---------------------------------------------------------------------------
 
+/** The reason kept on an import ticked "Pay after the goods arrive" on its invoice. */
+export const PAY_AFTER_ARRIVAL_AT_BIRTH = 'Set on the purchase invoice that opened the import';
+
 export interface PayableLineInput {
   readonly itemCode?: string | null;
   readonly expenseCategoryCode?: string | null;
@@ -686,6 +691,8 @@ export interface CreatePayableInput {
   readonly costCode?: string | null;
   /** Where goods-type order lines are ordered to; defaults to the branch's first main warehouse. */
   readonly defaultWarehouseCode?: string | null;
+  /** 0426 — an import paid after the goods arrive, from its birth (the invoice form's tick box). */
+  readonly payAfterArrival?: boolean;
 }
 
 async function defaultWarehouse(tx: Tx, branchCode: string): Promise<string> {
@@ -867,6 +874,11 @@ export async function create(
 
   const rail = await railFor(tx, type.code);
   const stageCode = deriveStage(rail, NO_FACTS);
+  // 0426 — only an import is paid after its goods arrive.
+  const payAfterArrival = Boolean(input.payAfterArrival);
+  if (payAfterArrival && type.code !== 'import') {
+    throw new PayableValidationError('pay_after_arrival', `only an import is paid after its goods arrive, not a ${type.name}.`);
+  }
 
   const [created] = await tx
     .insert(payable)
@@ -892,6 +904,14 @@ export async function create(
       wbsCode: assignment?.wbsCode ?? null,
       costCode: assignment?.costCode ?? null,
       stageCode,
+      ...(payAfterArrival
+        ? {
+            payAfterArrival: true,
+            payAfterArrivalSetBy: ctx.principal.userId,
+            payAfterArrivalSetAt: new Date(),
+            payAfterArrivalReason: PAY_AFTER_ARRIVAL_AT_BIRTH,
+          }
+        : {}),
       createdBy: ctx.principal.userId,
     })
     .returning({ id: payable.id });
@@ -949,6 +969,16 @@ export async function create(
     });
   }
 
+  if (payAfterArrival) {
+    await events.record(tx, {
+      payableId,
+      eventCode: 'PAY_AFTER_ARRIVAL_SET',
+      summary: `To be paid after the goods arrive — ${PAY_AFTER_ARRIVAL_AT_BIRTH}`,
+      after: { payAfterArrival: true },
+      actorUserId: ctx.principal.userId,
+    });
+  }
+
   if (input.paymentTermsText?.trim()) {
     await events.record(tx, {
       payableId,
@@ -964,7 +994,7 @@ export async function create(
     objectType: PERMISSION_OBJECT,
     objectId: payableId,
     branchCode: input.branchCode,
-    after: { payableNo: allocated.documentNo, type: type.code, reference: key },
+    after: { payableNo: allocated.documentNo, type: type.code, reference: key, payAfterArrival },
     outcome: 'success',
     requestId: ctx.requestId ?? null,
   });
@@ -1565,7 +1595,7 @@ function paymentStateSql(state: WorkbenchPaymentState) {
   switch (state) {
     case 'none':
       return sql`not exists (select 1 from payment_application pa
-         where pa.payable_id = payable.id and pa.status not in ('rejected', 'cancelled'))`;
+         where pa.payable_id = payable.id and pa.status not in ('rejected', 'cancelled', 'reversed'))`;
     case 'pending':
       return hasApplication(['draft', 'submitted', 'approved']);
     case 'at_bank':
@@ -1585,10 +1615,10 @@ const HELD_SQL = sql`(
     join ap_invoice ai on ai.id::text = im.source_document_id
    where ai.payable_id = payable.id and ai.status <> 'reversed'
      and wh.shipment_stage = 'without_swift' and cl.remaining_quantity > 0)
-  or (payable.source = 'sheet_import'
+  or (payable.source = 'sheet_import' and not payable.pay_after_arrival
     and not exists (select 1 from ap_invoice ai where ai.payable_id = payable.id and ai.status <> 'reversed' and ai.reversed_at is null and not ai.is_import_opening)
     and not exists (select 1 from payment_application pa where pa.payable_id = payable.id and pa.status in ('confirmed', 'debited'))
-    and exists (select 1 from payment_application pa where pa.payable_id = payable.id and pa.status not in ('rejected', 'cancelled'))
+    and exists (select 1 from payment_application pa where pa.payable_id = payable.id and pa.status not in ('rejected', 'cancelled', 'reversed'))
     and not exists (select 1 from bill_of_lading bl where bl.payable_id = payable.id and bl.cancelled_at is null)))`;
 
 /** In process before any container moves: an invoice posted (the journey's POSTED), or an application paid. */
@@ -1849,6 +1879,8 @@ export interface WorkbenchFilter {
   readonly supplierId?: string | null;
   readonly payment?: WorkbenchPaymentState | null;
   readonly goods?: WorkbenchGoodsPlace | null;
+  /** 0426 — paid before the goods arrive (the ordinary road) or after them. */
+  readonly timing?: PaymentTiming | null;
   /** Left out: open and cleared, as before. `includeCancelled` is the older way of asking for `all`. */
   readonly state?: WorkbenchState | null;
   readonly search?: string | null;
@@ -1911,6 +1943,8 @@ export async function workbench(tx: Tx, filter: WorkbenchFilter = {}) {
     filter.stopped === 'needs_reason' ? needsReason : undefined,
     filter.payment ? paymentStateSql(filter.payment) : undefined,
     filter.goods ? goodsPlaceSql(filter.goods) : undefined,
+    filter.timing === 'after_arrival' ? eq(payable.payAfterArrival, true) : undefined,
+    filter.timing === 'before_arrival' ? eq(payable.payAfterArrival, false) : undefined,
     state === 'all'
       ? undefined
       : state === 'cancelled'
@@ -1954,6 +1988,7 @@ export async function workbench(tx: Tx, filter: WorkbenchFilter = {}) {
       stageSequence: payableStage.sequence,
       stageSince: payable.stageSince,
       onHold: payable.onHold,
+      payAfterArrival: payable.payAfterArrival,
       needsReason,
       // None until an invoice of it had its due date set on purpose — an
       // advance's balance waits for its SWIFT (2026-10-07).
@@ -2111,6 +2146,15 @@ export async function view(tx: Tx, payableNo: string) {
     .where(eq(branch.code, row.branchCode))
     .limit(1);
 
+  // 0426 — who said it is paid after the goods arrive.
+  const [payLaterBy] = row.payAfterArrivalSetBy
+    ? await tx
+        .select({ name: appUser.displayName })
+        .from(appUser)
+        .where(eq(appUser.id, row.payAfterArrivalSetBy))
+        .limit(1)
+    : [];
+
   // Which stages' own rules hold — so the rail ticks only what is true. The
   // stage is the highest that holds (§6); a payment sent before the PD is
   // registered puts the import at "Payment in progress" without pretending
@@ -2133,5 +2177,6 @@ export async function view(tx: Tx, payableNo: string) {
     holds,
     supplier: supplier ?? null,
     branchName: branchRow?.name ?? row.branchCode,
+    payAfterArrivalBy: payLaterBy?.name ?? null,
   };
 }

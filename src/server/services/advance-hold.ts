@@ -155,7 +155,10 @@ export async function release(
   tx: Tx,
   ctx: ActorContext,
   payableId: string,
-  because: { readonly applicationNo: string; readonly on?: string | null },
+  because:
+    | { readonly applicationNo: string; readonly on?: string | null }
+    /** Released without a payment: the import is paid after the goods arrive (0426). */
+    | { readonly reason: string; readonly on?: string | null },
 ): Promise<bigint> {
   const invoices = await postedInvoicesOf(tx, payableId);
   const layers = await heldLayers(tx, invoices.map((invoice) => invoice.id));
@@ -204,14 +207,23 @@ export async function release(
     movedItems.push(first.itemCode);
   }
 
+  const items = [...new Set(movedItems)].join(', ');
   await events.record(tx, {
     payableId,
     eventCode: 'ADVANCE_RELEASED',
-    summary:
-      `${because.applicationNo} paid — the goods held for the advance (${[...new Set(movedItems)].join(', ')}) ` +
-      'moved from On Process (Without SWIFT) to In Process; the import goes on as any other.',
-    sourceType: 'payment_application',
-    sourceNo: because.applicationNo,
+    ...('applicationNo' in because
+      ? {
+          summary:
+            `${because.applicationNo} paid — the goods held for the advance (${items}) ` +
+            'moved from On Process (Without SWIFT) to In Process; the import goes on as any other.',
+          sourceType: 'payment_application',
+          sourceNo: because.applicationNo,
+        }
+      : {
+          summary:
+            `Paid after the goods arrive — the goods held for the advance (${items}) moved from ` +
+            `On Process (Without SWIFT) to In Process without a payment: ${because.reason}`,
+        }),
     actorUserId: ctx.principal.userId,
   });
   return moved;

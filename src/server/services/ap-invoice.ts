@@ -92,6 +92,7 @@ import * as items from './items';
 import { dispatch as dispatchAutomation, listening as automationListening } from './automation-dispatch';
 import * as workflow from './workflow';
 import { recordWindow } from '../domain/automation-events';
+import { assertNoAdvance } from '../domain/pay-after-arrival';
 import * as notifications from './notifications';
 
 export const DOCUMENT_TYPE = 'ap_invoice';
@@ -254,6 +255,12 @@ export interface CreateApInvoiceInput {
    * (or, with `payableId`, this invoice joins an existing one).
    */
   readonly isImport?: boolean;
+  /**
+   * 0426 — the import this invoice opens is paid after the goods arrive. With
+   * an existing import named (`payableId`), that import's own flag rules; an
+   * invoice of an import paid after arrival agrees no advance.
+   */
+  readonly payAfterArrival?: boolean;
   /** D13 — the supplier's terms as written on the PDF, kept verbatim on the application. */
   readonly paymentTermsText?: string | null;
   /**
@@ -763,6 +770,12 @@ export async function create(
    * record, the print and the posting all use.
    */
   const advance = advanceTermsOf(input);
+  // 0426 — an import paid after the goods arrive asks nothing in front.
+  if (input.isImport) {
+    const joined = input.payableId ? await payables.load(tx, input.payableId) : null;
+    const paysLater = joined ? joined.payAfterArrival : Boolean(input.payAfterArrival);
+    if (paysLater) assertNoAdvance(joined?.payableNo ?? null, advance.basis !== null);
+  }
   // No advance, nothing to keep: an account or a method left on the form then means nothing and is not kept.
   const hasAdvance = advance.basis !== null;
   const advancePaidFromAccountId = hasAdvance ? input.advancePaidFromAccountId?.trim() || null : null;
@@ -993,6 +1006,7 @@ export async function create(
         })),
         defaultWarehouseCode:
           destinationWarehouse ?? input.lines.find((line) => line.warehouseCode)?.warehouseCode ?? null,
+        payAfterArrival: Boolean(input.payAfterArrival),
       });
       payableId = opened.id;
       importPayableNo = opened.payableNo;
@@ -1995,7 +2009,10 @@ export async function post(
    */
   // By percentage or by amount (0411) — `invoiceAdvance` over the lines as they stand.
   const agreed = agreedAdvanceOf(invoice, lines);
-  const agreesAdvance = invoice.isImport && Boolean(invoice.payableId) && agreed !== null;
+  // 0426 — an import paid after the goods arrive holds nothing for an advance and raises none,
+  // whatever a draft typed before the import was switched to it says.
+  const paysLater = invoice.isImport && invoice.payableId ? (await payables.load(tx, invoice.payableId)).payAfterArrival : false;
+  const agreesAdvance = invoice.isImport && Boolean(invoice.payableId) && agreed !== null && !paysLater;
   // An import whose advance is already Paid holds nothing more: a second
   // invoice linked to it goes to In Process with the goods released before it
   // (2026-10-07, by direction: "linked purchases cannot go back to steps").
@@ -2266,7 +2283,20 @@ export async function post(
       actorUserId: ctx.principal.userId,
     });
   }
-  if (advanceIqd !== null && !invoice.advanceApplicationId) {
+  if (paysLater && advanceIqd !== null && invoice.payableId) {
+    await payableEvents.record(tx, {
+      payableId: invoice.payableId,
+      eventCode: 'ADVANCE_NOT_RAISED',
+      sourceType: PERMISSION_OBJECT,
+      sourceId: id,
+      sourceNo: invoice.invoiceNo,
+      summary:
+        `${invoice.invoiceNo} agrees ${advancePercent} in front, but this import is paid after the goods arrive — ` +
+        'no payment application was raised and its goods go to In Process. Raise one by hand if it is wanted.',
+      actorUserId: ctx.principal.userId,
+    });
+  }
+  if (advanceIqd !== null && !invoice.advanceApplicationId && !paysLater) {
     if (!invoice.payableId) {
       // A payment application belongs to an import application; an invoice
       // with none has nowhere to hang the request.
