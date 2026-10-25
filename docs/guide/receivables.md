@@ -201,6 +201,7 @@ Lines:
 - **Posted — partly paid** (مُرحَّلة — مدفوعة جزئيًا) — a receipt or a credit has settled part of it.
 - **Settled** (مسوّى) — receipts and credits cover the whole invoice.
 - **Reversed** (معكوس) — undone by Reverse invoice.
+- **The printed copy** (PDF, Excel, Word — the printer icon) carries one line under the lines, **Customer statement balance** (رصيد كشف حساب العميل): *Balance before this invoice* — the customer's balance on the statement line above it; *This invoice*; *Balance after this invoice* — the balance on its own statement line. A draft's line says it is not posted yet and reads as the statement would once it posts. Shown only to people who may read Customer Statements.
 
 ### Refusals — Sales Invoices
 - "Add a customer first." / "N customer(s) exist and none is active and approved. Approve or reactivate one on the Customers screen." / "Add a stock item first." / "N item(s) exist and none is a stock item that is active. Check them on the Items screen." / "Set up a warehouse first." — shown instead of the New invoice form; create or approve that master data first (a warehouse must exist in your Active branch).

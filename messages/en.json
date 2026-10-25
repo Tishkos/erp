@@ -9210,6 +9210,14 @@
     "amount": "Amount",
     "amount_in_words": "Amount in words",
     "amount_words_only": "{amount} only",
+    "statement_balance": {
+      "customer": "Customer statement balance",
+      "supplier": "Supplier statement balance",
+      "before": "Balance before this invoice",
+      "this_invoice": "This invoice",
+      "after": "Balance after this invoice",
+      "not_posted": "not posted yet: as it would stand once posted"
+    },
     "totals": "Totals",
     "all": "All",
     "search": "Search",

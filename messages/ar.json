@@ -9210,6 +9210,14 @@
     "amount": "المبلغ",
     "amount_in_words": "المبلغ كتابةً",
     "amount_words_only": "فقط {amount} لا غير",
+    "statement_balance": {
+      "customer": "رصيد كشف حساب العميل",
+      "supplier": "رصيد كشف حساب المورد",
+      "before": "الرصيد قبل هذه الفاتورة",
+      "this_invoice": "هذه الفاتورة",
+      "after": "الرصيد بعد هذه الفاتورة",
+      "not_posted": "غير مرحّلة بعد: كما سيكون بعد الترحيل"
+    },
     "totals": "الإجماليات",
     "all": "الكل",
     "search": "بحث",

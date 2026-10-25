@@ -1,9 +1,9 @@
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
-import type { Principal } from '@domain/permissions';
+import { can, type Principal } from '@domain/permissions';
 import { parseDecimal, toDecimalString } from '@domain/money';
 import type { Tx } from '../db/client';
-import { businessPartner, chartOfAccount } from '../db/schema';
+import { businessPartner, chartOfAccount, subledgerEntry } from '../db/schema';
 import * as ap from '../services/ap-invoice';
 import * as ar from '../services/ar-invoice';
 import * as goodsReturns from '../services/goods-return';
@@ -19,7 +19,7 @@ import { advanceShareOf, invoiceAdvance } from '../domain/payment-applications';
 import { parseQuantity } from '../domain/uom';
 import { average, lineTotal, sumMoney, sumQuantity } from './decimal';
 import type { Messages } from './i18n';
-import type { Column, Fact, PrintModel, Row } from './model';
+import type { Column, Fact, PrintModel, Row, Table } from './model';
 
 /**
  * The documents of the Operations Build, as their record screens show them.
@@ -97,6 +97,88 @@ const base = (
   sheetName: input.title,
   ...input,
 });
+
+/**
+ * The party's statement around an invoice, in one line: the balance before it, the invoice, the balance after
+ * (2026-10-25, by direction: "before after the statement of the customer and supplier before current invoice and
+ * after in one line pdf xlsx … when invoicing").
+ *
+ * Read from the subledger the statement screens read (`partner-statement.statementFor`), in the statement's own
+ * order — posting date, then the order the entries were written — so "before" is exactly the balance on the line
+ * above the invoice's own on the customer's or supplier's statement, and "after" the balance on its line. A posted
+ * invoice is its posting journal's entries for that party; a draft is not on the statement yet, so "before" is
+ * everything up to its date and the invoice is its lines' total — what the statement would read once it posts.
+ * Shown only to whoever may read the statements (`view` on the partner), as the statement screens ask.
+ */
+async function balanceAroundInvoice(
+  ctx: BuildContext,
+  input: {
+    readonly side: 'customer' | 'supplier';
+    readonly partyCode: string | null;
+    readonly journalEntryId: string | null;
+    readonly invoiceDate: string;
+    readonly draftAmountIqd: bigint;
+  },
+): Promise<Table | null> {
+  const { tx, m, principal } = ctx;
+  if (!input.partyCode || !can(principal, 'view', 'business_partner')) return null;
+  const owed = (debit: string, credit: string) => {
+    const d = parseDecimal(debit, 4n);
+    const c = parseDecimal(credit, 4n);
+    return input.side === 'supplier' ? c - d : d - c;
+  };
+  const party = and(eq(subledgerEntry.subledgerType, input.side), eq(subledgerEntry.partyCode, input.partyCode));
+  const sums = {
+    debit: sql<string>`coalesce(sum(${subledgerEntry.debitIqd}), 0)::text`,
+    credit: sql<string>`coalesce(sum(${subledgerEntry.creditIqd}), 0)::text`,
+  };
+
+  const [own] = input.journalEntryId
+    ? await tx
+        .select({
+          ...sums,
+          postingDate: sql<string | null>`min(${subledgerEntry.postingDate})::text`,
+          firstId: sql<string | null>`min(${subledgerEntry.id})::text`,
+        })
+        .from(subledgerEntry)
+        .where(and(party, eq(subledgerEntry.journalEntryId, input.journalEntryId)))
+    : [];
+  const posted = Boolean(own?.firstId && own.postingDate);
+  const [earlier] = await tx
+    .select(sums)
+    .from(subledgerEntry)
+    .where(
+      and(
+        party,
+        posted
+          ? sql`(${subledgerEntry.postingDate} < ${own!.postingDate}::date
+                 or (${subledgerEntry.postingDate} = ${own!.postingDate}::date and ${subledgerEntry.id} < ${own!.firstId}::bigint))`
+          : sql`${subledgerEntry.postingDate} <= ${input.invoiceDate}::date`,
+      ),
+    );
+
+  const before = owed(earlier!.debit, earlier!.credit);
+  const invoice = posted ? owed(own!.debit, own!.credit) : input.draftAmountIqd;
+  const title = input.side === 'supplier' ? m.print('statement_balance.supplier') : m.print('statement_balance.customer');
+  return {
+    title: posted ? title : `${title} — ${m.print('statement_balance.not_posted')}`,
+    columns: [
+      { key: 'before', label: m.print('statement_balance.before'), kind: 'money' },
+      { key: 'invoice', label: m.print('statement_balance.this_invoice'), kind: 'money' },
+      { key: 'after', label: m.print('statement_balance.after'), kind: 'money' },
+    ],
+    rows: [
+      {
+        cells: {
+          before: toDecimalString(before, 4n),
+          invoice: toDecimalString(invoice, 4n),
+          after: toDecimalString(before + invoice, 4n),
+        },
+      },
+    ],
+    empty: '—',
+  };
+}
 
 /** Journal Entry — the same print/export model used by every other document. */
 export async function journalEntry(ctx: BuildContext, entryNo: string): Promise<Built | null> {
@@ -281,6 +363,13 @@ export async function purchaseInvoice(ctx: BuildContext, invoiceNo: string): Pro
     { label: m.admin('ap_invoices.posted_by'), value: postedBy ?? m.admin('none') },
   ];
   const title = m.print('titles.purchase_invoice');
+  const balance = await balanceAroundInvoice(ctx, {
+    side: 'supplier',
+    partyCode: supplier?.code ?? null,
+    journalEntryId: invoice.journalEntryId,
+    invoiceDate: invoice.invoiceDate,
+    draftAmountIqd: linesIqd,
+  });
   return {
     model: base({
       title,
@@ -298,6 +387,7 @@ export async function purchaseInvoice(ctx: BuildContext, invoiceNo: string): Pro
             cells: { total_price: sumMoney(rows.map((row) => row.cells.total_price)) },
           },
         },
+        ...(balance ? [balance] : []),
       ],
       signatures: true,
       fileName: invoice.invoiceNo,
@@ -363,6 +453,13 @@ export async function salesInvoice(ctx: BuildContext, invoiceNo: string): Promis
     { label: m.admin('ar_invoices.posted_by'), value: postedByName ?? m.admin('none') },
   ];
   const title = m.print('titles.sales_invoice');
+  const balance = await balanceAroundInvoice(ctx, {
+    side: 'customer',
+    partyCode: customer?.code ?? null,
+    journalEntryId: invoice.journalEntryId,
+    invoiceDate: invoice.invoiceDate,
+    draftAmountIqd: parseDecimal(sumMoney(lines.map((line) => line.netIqd)), 4n),
+  });
   return {
     model: base({
       title,
@@ -380,6 +477,7 @@ export async function salesInvoice(ctx: BuildContext, invoiceNo: string): Promis
             cells: { total_price: sumMoney(lines.map((line) => line.netIqd)) },
           },
         },
+        ...(balance ? [balance] : []),
       ],
       signatures: true,
       fileName: invoice.invoiceNo,

@@ -42,6 +42,7 @@ import { formatStatementAmount } from '@/i18n/config';
 import type { ActorContext } from '@/server/services/chart-of-accounts';
 import { mayExport, EXPORT_KEYS, type ExportKey } from '@/server/print/access';
 import { runExport, type ExportRequest, type ExportResult } from '@/server/print/export';
+import * as documents from '@/server/print/documents';
 import { messagesFor } from '@/server/print/i18n';
 import type { ExportFormat, PrintModel } from '@/server/print/model';
 import { renderPdf } from '@/server/print/pdf';
@@ -629,6 +630,75 @@ describe('documents · every format carries the number and the service’s total
     const reconciliation = await takeAll('item_reconciliation', { id: doc.adjustment!.no });
     expect(reconciliation.docx.text).toContain(doc.adjustment!.no);
     expect(reconciliation.docx.text).toContain('Out');
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe('an invoice carries its party’s statement balance before and after it, in one line (2026-10-25)', () => {
+  const build = (reader: ActorContext, key: 'purchase_invoice' | 'sales_invoice', no: string) =>
+    withScope(scope(reader), (tx) => {
+      const ctx = { tx, principal: reader.principal, branchCode: BAGHDAD, locale: 'en' as const, m: messagesFor('en') };
+      return key === 'purchase_invoice' ? documents.purchaseInvoice(ctx, no) : documents.salesInvoice(ctx, no);
+    });
+  const line = async (reader: ActorContext, key: 'purchase_invoice' | 'sales_invoice', no: string) => {
+    const built = await build(reader, key, no);
+    const table = built!.model.tables.find((t) => t.columns.some((c) => c.key === 'after'));
+    if (!table) return null;
+    const cells = table.rows[0]!.cells;
+    return { title: table.title, before: Number(cells.before), invoice: Number(cells.invoice), after: Number(cells.after) };
+  };
+
+  it('reads the supplier’s statement: what stood above the invoice, the invoice, and the balance on its line', async () => {
+    // SUP-A's statement: +25,000,000 invoice, −10,000,000 payment, −1,250,000 return, then the shipment's +1,800,000.
+    expect(await line(manager, 'purchase_invoice', doc.purchase!.no)).toEqual({
+      title: 'Supplier statement balance', before: 0, invoice: 25_000_000, after: 25_000_000,
+    });
+    expect(await line(manager, 'purchase_invoice', doc.shipment!.no)).toEqual({
+      title: 'Supplier statement balance', before: 13_750_000, invoice: 1_800_000, after: 15_550_000,
+    });
+    // The balance after it is the statement's own line for that invoice.
+    const statementLines = await withScope(scope(manager), (tx) => statement.statementFor(tx, 'supplier', 'SUP-A', { to: YEAR.to }));
+    expect(statementLines.lines.map((l) => Number(l.balance))).toContain(15_550_000);
+  });
+
+  it('a draft says it is not posted yet, and reads as the statement would once it posts', async () => {
+    expect(await line(manager, 'purchase_invoice', doc.draftPurchase!.no)).toEqual({
+      title: 'Supplier statement balance — not posted yet: as it would stand once posted',
+      before: 15_550_000,
+      invoice: 3_000_000,
+      after: 18_550_000,
+    });
+  });
+
+  it('reads the customer’s statement for a sales invoice', async () => {
+    expect(await line(manager, 'sales_invoice', doc.sale!.no)).toEqual({
+      title: 'Customer statement balance', before: 0, invoice: 12_000_000, after: 12_000_000,
+    });
+  });
+
+  it('is in the PDF, the workbook and the Word file, and leaves the invoice’s own total alone', async () => {
+    const files = await takeAll('purchase_invoice', { id: doc.shipment!.no });
+    for (const text of [files.pdf.text, files.docx.text]) {
+      expect(text).toContain('Balance before this invoice');
+      expect(text).toContain('Balance after this invoice');
+      expect(text).toContain(money(13_750_000));
+      expect(text).toContain(money(15_550_000));
+    }
+    // A workbook's money heading names its currency.
+    expect(files.xlsx.strings).toContain('Balance before this invoice (IQD)');
+    expect(files.xlsx.strings).toContain('Balance after this invoice (IQD)');
+    expect([...files.xlsx.cells.values()].map((cell) => cell.number)).toEqual(expect.arrayContaining([13_750_000, 1_800_000, 15_550_000]));
+    // One total, the invoice's: the balance line adds nothing up.
+    expect(workbookTotals(files.xlsx)).toEqual([expect.objectContaining({ stored: 1_800_000, evaluated: 1_800_000 })]);
+  });
+
+  it('is left out for a reader who may not read the statements', async () => {
+    const withoutStatements: ActorContext = {
+      ...manager,
+      principal: { ...manager.principal, grants: manager.principal.grants.filter((g) => g.object !== 'business_partner') },
+    };
+    expect(await line(withoutStatements, 'purchase_invoice', doc.shipment!.no)).toBeNull();
+    expect(await line(withoutStatements, 'sales_invoice', doc.sale!.no)).toBeNull();
   });
 });
 
