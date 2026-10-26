@@ -343,7 +343,7 @@ Each form saves on its own button and answers "Saved." (or "Your password has be
 Path: your own menu (your picture in the top bar) → Profile settings (إعدادات الملف الشخصي) → the **Security** (الأمان) panel → **Set up authenticator** (إعداد تطبيق المصادقة) or **Manage** (إدارة); it also opens by itself when your account must enrol an authenticator and the time allowed has passed
 Address: /profile/security
 Needs: to be signed in.
-What it is for: Setting up the second step of signing in — an authenticator app on your phone that shows a six-digit code. Required for a Super User and for roles an administrator marked as privileged; optional for everybody else.
+What it is for: Setting up the second step of signing in — an authenticator app on your phone that shows a six-digit code. Required for a Super User and for roles an administrator marked as privileged; optional for everybody else. **Since 26 October 2026 the company has switched the requirement off for everyone** (the server setting `ERP_SECOND_FACTOR=off`): nobody is asked for a code at sign-in, there is no enrolment deadline and no reminder, and **Required for this account** reads No. An authenticator already set up is kept — if the requirement is switched back on, its code is asked again with nothing to redo.
 
 ### How to enrol an authenticator — Security
 1. Install an authenticator app on your phone (Google Authenticator, Microsoft Authenticator, Aegis…).

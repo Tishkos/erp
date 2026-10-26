@@ -42,7 +42,7 @@ The Settings (الإعدادات) module opens a menu whose first heading is Adm
 - The Super user mark is shown on the Users list and on the user's record, but there is no button on any screen to switch it on or off.
 - A Super user is still bound by maker-checker: they cannot approve a document they raised themselves, unless that document's own rules say a Super user may.
 - A Super user is not automatically a Department Manager, and does not automatically hold the CEO role. Creating roles, changing permissions and giving roles to people need the CEO role even for a Super user (see "The CEO role").
-- A Super user account must sign in with an authenticator code (see "Sign-in rules").
+- A Super user account must sign in with an authenticator code (see "Sign-in rules") — unless the company has switched the requirement off for everyone, as it did on 26 October 2026 (server setting `ERP_SECOND_FACTOR=off`).
 - A deactivated account is refused everything, Super user included.
 
 ### The CEO role and who may change access — Administration concept

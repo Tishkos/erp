@@ -187,6 +187,17 @@ export class SecondFactorNotEnrolledError extends Error {
 }
 
 /**
+ * The company's switch (2026-10-26, by direction: "remove the authenticator for mandatory for everyone"):
+ * `ERP_SECOND_FACTOR=off` on the host makes the authenticator nobody's obligation — no code is asked at
+ * sign-in, no enrolment deadline runs, no reminder is raised. Enrolments are kept, so turning it back on
+ * (removing the line) asks the enrolled for their code again at once. Anything else, or unset, is the rule
+ * below.
+ */
+export function secondFactorSwitchedOff(setting: string | undefined): boolean {
+  return (setting ?? '').trim().toLowerCase() === 'off';
+}
+
+/**
  * Whether this account must present a second factor.
  *
  * Super User is always in scope, and that is not a configuration choice: §5.1

@@ -22,6 +22,7 @@ import {
   assertSessionUsable,
   base32Encode,
   requiresSecondFactor,
+  secondFactorSwitchedOff,
   verifyTotp,
   type PasswordPolicy,
 } from '../domain/authentication';
@@ -197,6 +198,8 @@ export function temporaryPasswordExpired(
 export async function secondFactorRequirement(tx: Tx, userId: string) {
   // The demo asks nobody (domain/demo.ts): its one account is shared by name.
   if (demoMode()) return { required: false, reason: '' };
+  // The company may make it nobody's obligation (domain › secondFactorSwitchedOff).
+  if (secondFactorSwitchedOff(process.env.ERP_SECOND_FACTOR)) return { required: false, reason: '' };
 
   const [user] = await tx
     .select({ isSuperUser: appUser.isSuperUser })

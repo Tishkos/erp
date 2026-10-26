@@ -82,6 +82,7 @@ in escrow:
 | `ATTACHMENT_DIR` | `/var/lib/qs-erp/attachments` — **must be set**: unset, the store is `cwd/var/attachments`, and the standalone server's cwd is inside `.next`, which every deploy replaces (OP-3) |
 | `LOG_LEVEL` | `info` |
 | `EXPORT_ROW_CAP` | optional; 20000 unless set (OP-9) |
+| `ERP_SECOND_FACTOR` | optional; `off` makes the authenticator nobody's obligation — no code at sign-in, no enrolment deadline, no reminder; enrolments are kept. Unset (or anything else): super users and roles marked `requires_mfa` must use it. On the live host since 2026-10-26, by direction. `pm2 restart qs-erp --update-env` after changing it |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | the e-mail channel (HARDEN-3) |
 | `LEDGER_CURRENCY`, `REPORTING_CURRENCY` | `IQD`, `USD` |
 | `BACKUP_ROOT`, `JOB_STATE_DIR`, `JOB_LOG_DIR` | optional; the defaults are the paths in § 3 |

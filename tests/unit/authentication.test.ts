@@ -21,6 +21,7 @@ import {
   base32Decode,
   base32Encode,
   requiresSecondFactor,
+  secondFactorSwitchedOff,
   totpAt,
   verifyTotp,
 } from '@domain/authentication';
@@ -152,6 +153,13 @@ describe('§25 · multi-factor for privileged roles', () => {
         { enrolled: true, verified: true },
       ),
     ).not.toThrow();
+  });
+
+  it('is switched off for everyone only by ERP_SECOND_FACTOR=off (2026-10-26)', () => {
+    expect(secondFactorSwitchedOff('off')).toBe(true);
+    expect(secondFactorSwitchedOff(' OFF ')).toBe(true);
+    // Unset, empty or anything else keeps the rule.
+    for (const setting of [undefined, '', 'on', 'false', '0', 'no']) expect(secondFactorSwitchedOff(setting)).toBe(false);
   });
 });
 

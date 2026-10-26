@@ -85,4 +85,36 @@ describe('HD4 · the second factor', () => {
     expect(result.ok && result.restriction).toBeNull();
     expect(result.ok && result.enrolmentDue).toBeNull();
   });
+
+  it('asks nobody for a code with ERP_SECOND_FACTOR=off, and asks the enrolled again once it is removed (2026-10-26)', async () => {
+    const { id, email } = await createUser('accounting_manager');
+    await ownerPool.query(`update app_user set is_super_user = true, mfa_required_since = '2026-09-01' where id = $1`, [id]);
+    const principal = await withScope({ userId: id, branchCode: BAGHDAD }, (tx) => authz.loadPrincipal(tx, id));
+    const { secret } = await withScope({ userId: id, branchCode: BAGHDAD }, (tx) => authn.beginMfaEnrolment(tx, id));
+    const now = new Date('2026-10-26T10:00:00Z');
+    const at = Math.floor(now.getTime() / 1000);
+    await withScope({ userId: id, branchCode: BAGHDAD }, (tx) =>
+      authn.confirmMfaEnrolment(tx, { principal, branchCode: BAGHDAD }, id, totpAt(secret, Math.floor(at / 30)), at),
+    );
+    const { id: notEnrolledId, email: notEnrolled } = await createUser('accounting_manager');
+    await ownerPool.query(`update app_user set mfa_required_since = '2026-09-01' where id = $1`, [notEnrolledId]);
+
+    const before = process.env.ERP_SECOND_FACTOR;
+    process.env.ERP_SECOND_FACTOR = 'off';
+    try {
+      // A super user with an enrolled authenticator, and one long past the enrolment grace, both get in without a code.
+      const enrolled = await signIn(email, PASSWORD, null, now);
+      expect(enrolled.ok && enrolled.restriction).toBeNull();
+      const late = await signIn(notEnrolled, PASSWORD, null, now);
+      expect(late.ok && late.restriction).toBeNull();
+      expect(late.ok && late.enrolmentDue).toBeNull();
+      const status = await withScope({ userId: id, branchCode: BAGHDAD }, (tx) => authn.mfaStatus(tx, id, now));
+      expect(status).toEqual(expect.objectContaining({ required: false, enrolled: true }));
+    } finally {
+      if (before === undefined) delete process.env.ERP_SECOND_FACTOR;
+      else process.env.ERP_SECOND_FACTOR = before;
+    }
+    // The enrolment was kept: without the switch the code is asked again.
+    expect(await signIn(email, PASSWORD, null, now)).toEqual({ ok: false, refusal: 'second_factor_required' });
+  });
 });
