@@ -65,6 +65,7 @@ export * from './bank-statement';
 export * from './cash-advance';
 export * from './bank-reconciliation';
 export * from './other-receipt';
+export * from './money-out';
 export * from './money-transfer-client';
 export * from './client-import';
 export * from './money-transfer';

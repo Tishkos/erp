@@ -270,6 +270,12 @@ export const businessPartner = pgTable(
     priceListCode: text('price_list_code').references(() => priceList.code),
     /** §4.3 — the terms their invoices fall due on. */
     paymentTermsCode: text('payment_terms_code').references(() => paymentTerms.code),
+    /**
+     * The currency they deal in (0428, 2026-10-26: "add a currency selection field when creating a
+     * customer"). What their payments and receipts offer first; a currency of Currencies and Rates
+     * (foreign key in the migration). Null — not said.
+     */
+    currency: char('currency', { length: 3 }),
 
     /**
      * §15 — the *"priority"* a payment proposal ranks by. 1 is the most urgent.

@@ -413,8 +413,10 @@ export async function resetTestData(): Promise<void> {
   await client.query('delete from kyc_required_document');
   await client.query('delete from kyc_risk_rating');
 
-  // Other receipts before the accounts they arrived in.
+  // Other receipts before the accounts they arrived in; customer and expense payments (0428) likewise.
   await client.query('delete from other_receipt');
+  await client.query('delete from customer_payment');
+  await client.query('delete from expense_payment');
 
   // Reconciliations before the statements and journals they match together.
   await client.query('delete from bank_reconciliation_match_line');
@@ -1015,6 +1017,8 @@ export async function resetTestData(): Promise<void> {
                          -- Receivables, migration 0280.
                          'CUSTOMER_CREDIT_NOTE', 'CUSTOMER_DEBIT_NOTE', 'CASH_COUNT', 'BANK_TRANSFER',
                          'PAYMENT_PROPOSAL', 'PAYMENT_BATCH', 'BANK_STATEMENT', 'CASH_ADVANCE', 'BANK_RECONCILIATION', 'OTHER_RECEIPT',
+                         -- 0428.
+                         'CUSTOMER_PAYMENT', 'EXPENSE_PAYMENT',
                          -- Phase 09, seeded by migrations 0120-0125.
                          'MT_CLIENT_ACCOUNT', 'MT_CLIENT_DEPOSIT', 'MONEY_TRANSFER', 'MT_EXPENSE',
                          'CLIENT_IMPORT_FILE', 'CLIENT_IMPORT_PAYMENT', 'CLIENT_GOODS_DELIVERY',

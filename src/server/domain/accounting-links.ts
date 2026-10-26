@@ -50,6 +50,10 @@ export function moneyDocumentHref(type: string | null, no: string | null): strin
       return `/treasury/transfers/${enc(no)}`;
     case 'other_receipt':
       return profileHref('deposit', no);
+    case 'customer_payment':
+      return profileHref('customer_payment', no);
+    case 'expense_payment':
+      return profileHref('expense_payment', no);
     case 'bank_loan':
       return profileHref('loan', no);
     case 'payroll_run':

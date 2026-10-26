@@ -308,6 +308,12 @@ export default async function BusinessPartnerPage({
                 </span>
               </li>
               <li>
+                <span>{t('partners.currency')}</span>
+                <span>
+                  <bdi dir="ltr">{row.currency?.trim() || t('partners.currency_none')}</bdi>
+                </span>
+              </li>
+              <li>
                 <span>{t('partners.address')}</span>
                 <span>{row.address ?? t('none')}</span>
               </li>
@@ -438,6 +444,15 @@ export default async function BusinessPartnerPage({
                       none of them — carried through a save, not asked. */}
                   <input name="creditLimitIqd" type="hidden" value={row.creditLimitIqd ?? ''} />
                   <input name="creditTermsDays" type="hidden" value={row.creditTermsDays ?? ''} />
+                  {/* The currency they deal in (0428). */}
+                  <Select
+                    defaultValue={row.currency?.trim() ?? ''}
+                    emptyLabel={t('partners.currency_none')}
+                    hint={t('partners.currency_hint')}
+                    label={t('partners.currency')}
+                    name="currency"
+                    options={currencyRows.map((currency) => ({ value: currency.code.trim(), label: `${currency.code.trim()} · ${currency.name}` }))}
+                  />
                   <Field
                     defaultValue={row.address}
                     label={t('partners.address')}

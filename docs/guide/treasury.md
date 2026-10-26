@@ -457,6 +457,42 @@ The record offers only Approve and Post; it has no edit, cancel or reverse butto
 - "Permission denied: 'create' on 'other_receipt' is not granted to this user." — you can see the Cash deposit button but your role cannot create the deposit; ask for the permission.
 - "Cannot post into <period>: …" — the deposit date is in a period that is not open.
 
+## Expense Payments (مدفوعات المصاريف)
+Path: Accounting → Treasury & Banking → Expense Payments   |   Arabic: المحاسبة ← الخزينة والبنوك ← مدفوعات المصاريف
+Address: /treasury/expense-payments (list) · /treasury/expense-payments/new · /treasury/expense-payments/<payment number> (EXV-…)
+Needs: `view` on `expense_payment` to open; `create` to write one; `approve` and `post` to approve and post it; `edit_draft` to cancel a draft; `reverse_cancel` to reverse a posted one; `print` / `export` for copies. Whoever keeps Manual Deposits or Supplier Payments keeps Expense Payments.
+What it is for: A general expense paid straight from a bank or cash account with no supplier invoice — rent, fuel, a courier, a government fee. The mirror of a Manual Deposit: the money leaves an account and is charged to the expense account named. A customer is paid by a Customer Payment, a supplier by a Supplier Payment.
+
+### How to pay an expense — Expense Payments
+1. Open Accounting → Treasury & Banking → Expense Payments and press **New expense payment** (دفع مصروف جديد).
+2. Type **Paid to** (المستفيد) — who was paid — and pick the **Expense account** (حساب المصروف); expense accounts are listed first, and control accounts are never offered.
+3. Pick the **Bank/Cash account** the money leaves (its name shows its currency) and check the **Date**.
+4. Type the **Amount** (المبلغ) in that account's currency and **What it is for** (الغرض). Optionally the **Department** (القسم) — needed when the expense account asks for one —, the **Payment method**, a **Reference** and a **Note**.
+5. Press **Create** (إنشاء). It gets its number (EXV-…) and opens as a **Draft**.
+
+### How to approve and post an expense payment — Expense Payments
+1. Somebody other than whoever wrote it opens the draft and presses **Approve and post** (اعتماد وترحيل). A super user may approve their own.
+2. Status: **Posted**. The money has left the account and the expense is in the ledger.
+
+### Fields — Expense Payments
+- **Paid to** (المستفيد) — required; free text.
+- **Expense account** (حساب المصروف) — required; an approved posting account that is not a control account.
+- **Bank/Cash account** — required; the payment is in that account's currency. **In dinars** (بالدينار) is worked out at the date's rate and fixed when it posts.
+- **Amount** (المبلغ) — required, above zero. **What it is for** (الغرض) — required. **Department**, **Payment method**, **Reference**, **Note** — optional.
+- **How it posts** (كيف تُرحَّل): Debit the expense account / Credit the account it leaves.
+
+### After you save — Expense Payments
+- **Draft** → **Approved** → **Posted** → **Reversed**; a draft or approved one can be **Cancelled** with a reason. Never deleted.
+- On posting: Debit the expense account (with its department) / Credit the bank or cash account's ledger account, in that account's currency. It is listed on Payments & Receipts as "Expense payment".
+- **Reverse** (عكس), with a reason, mirrors the journal today.
+
+### Refusals — Expense Payments
+- "<code> is the control account for the <kind> subledger, and an Expense Payment cannot debit one. …" — choose an expense account.
+- "<number> was written by you; somebody else approves it."
+- "Say who was paid …" / "Say what the expense is for." / "Say why the payment is cancelled." / "Say why the payment is reversed."
+- "There is no USD rate for <date> …" — enter the day's rate under Currencies and Rates first.
+- A bank account below zero refuses the payment (the bank rule C-20): fund it first.
+
 ## Payments & Receipts (المدفوعات والمقبوضات)
 Path: Accounting → Treasury & Banking → Payments & Receipts   |   Arabic: المحاسبة ← الخزينة والبنوك ← المدفوعات والمقبوضات
 Address: /treasury/payments-receipts

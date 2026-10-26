@@ -87,6 +87,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   ar_invoices: 'document',
   cash_sales: 'document',
   customer_receipts: 'document',
+  customer_payments: 'document',
   credit_control: 'workspace',
   sales_returns: 'document',
   customer_credit_memos: 'document',
@@ -265,6 +266,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   cash_forecast: 'report',
   treasury_reports: 'report',
   bank_deposits: 'document',
+  expense_payments: 'document',
 
   // 14 — Fixed Assets
   asset_categories: 'document',
@@ -502,6 +504,9 @@ const DELIVERED: ReadonlySet<string> = new Set([
   // Payments and Receipts.
   '/payables/supplier-payments',
   '/sales/customer-receipts',
+  // 0428 — money out to a customer, and a general expense paid from a bank or cash account.
+  '/sales/customer-payments',
+  '/treasury/expense-payments',
   // Invoice Status Tracking — absorbed by In-Transit Inventory (REQ-LOG-001);
   // /inventory/in-transit redirects there (next.config.ts).
   '/logistics/in-transit',

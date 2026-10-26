@@ -28,6 +28,8 @@ function inputFrom(formData: FormData) {
     phone: text(formData, 'phone') || null,
     address: text(formData, 'address') || null,
     paymentTermsCode: text(formData, 'paymentTermsCode') || null,
+    // Only a form that asks the currency changes it (0428).
+    ...(formData.has('currency') ? { currency: text(formData, 'currency') || null } : {}),
     creditLimitIqd: text(formData, 'creditLimitIqd') || null,
     creditTermsDays: text(formData, 'creditTermsDays') || null,
   };

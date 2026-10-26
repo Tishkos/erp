@@ -389,6 +389,9 @@ export const MONEY_DOCUMENT_TYPES = [
   'supplier_advance',
   'bank_transfer',
   'other_receipt',
+  // 0428.
+  'customer_payment',
+  'expense_payment',
   'bank_loan',
   'payroll_run',
   'employee_request',
@@ -465,6 +468,8 @@ const DOCUMENT_OF = sql`left join lateral (
     union all select 'supplier_advance', a.advance_no from supplier_advance a where a.journal_entry_id = m.source_entry_id
     union all select 'bank_transfer', t.transfer_no from bank_transfer t where t.journal_entry_id = m.source_entry_id
     union all select 'other_receipt', o.receipt_no from other_receipt o where o.journal_entry_id = m.source_entry_id
+    union all select 'customer_payment', cp.payment_no from customer_payment cp where cp.journal_entry_id = m.source_entry_id
+    union all select 'expense_payment', ep.payment_no from expense_payment ep where ep.journal_entry_id = m.source_entry_id
     union all select 'bank_loan', bl.loan_no from bank_loan bl
                where bl.disbursement_journal_entry_id = m.source_entry_id or bl.commission_journal_entry_id = m.source_entry_id
     union all select 'bank_loan', bl.loan_no from bank_loan_repayment rp join bank_loan bl on bl.id = rp.loan_id

@@ -44,6 +44,7 @@ export function PairedPicker({
   placeholder,
   required = false,
   plain = false,
+  defaultValue,
 }: {
   readonly codeLabel: string;
   readonly nameLabel: string;
@@ -52,6 +53,8 @@ export function PairedPicker({
   readonly options: readonly PairedOption[];
   readonly placeholder?: string | undefined;
   readonly required?: boolean;
+  /** The option chosen when the page opens (its value), e.g. the customer a link came from. */
+  readonly defaultValue?: string | undefined;
   /**
    * The application's own field chrome rather than the document window's.
    *
@@ -63,8 +66,9 @@ export function PairedPicker({
 }) {
   const codeList = useId();
   const nameList = useId();
-  const [code, setCode] = useState('');
-  const [label, setLabel] = useState('');
+  const opening = defaultValue ? options.find((option) => option.value === defaultValue) : undefined;
+  const [code, setCode] = useState(opening?.code ?? '');
+  const [label, setLabel] = useState(opening?.name ?? '');
 
   const chosen = options.find((option) => option.code === code && option.name === label);
 

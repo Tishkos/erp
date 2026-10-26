@@ -124,8 +124,9 @@ describe('the screen catalogue covers the approved tree', () => {
     // + Manual Stock Additions (2026-10-06): one document screen.
     // + Project Initiation (2026-10-12, the Project Guide): one document screen.
     // + Opportunities and the Pipeline Board (2026-10-21, Leads → Opportunities → Projects): a list and a workspace.
-    expect(allMenuItems()).toHaveLength(257);
-    expect(Object.keys(SCREENS)).toHaveLength(257);
+    // + Customer Payments and Expense Payments (0428, 2026-10-26): two document screens.
+    expect(allMenuItems()).toHaveLength(259);
+    expect(Object.keys(SCREENS)).toHaveLength(259);
   });
 
   it('uses only declared archetypes', () => {
@@ -159,7 +160,8 @@ describe('the screen catalogue covers the approved tree', () => {
     // + 2 (Manual Stock Additions, a document: the register and the record, 2026-10-06).
     // + 2 (Project Initiation, a document: the register and the record, 2026-10-12).
     // + 1 (Opportunities, a list) + 1 (the Pipeline Board, a workspace), 2026-10-21.
-    expect(total).toBe(376);
+    // + 2 + 2 (Customer Payments and Expense Payments, documents: each a register and a record, 0428).
+    expect(total).toBe(380);
   });
 });
 
@@ -214,7 +216,8 @@ describe('every screen has one address', () => {
     expect(shared).toEqual({});
     // 254: Manual Stock Additions (2026-10-06). 255: Project Initiation (2026-10-12).
     // 256–257: Opportunities and the Pipeline Board (2026-10-21).
-    expect(screenRoutes().size).toBe(257);
+    // 258–259: Customer Payments and Expense Payments (0428, 2026-10-26).
+    expect(screenRoutes().size).toBe(259);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -403,6 +406,8 @@ describe('every screen has one address', () => {
       '/sales/credit-notes',
       // Receivables (2026-10-04) — the customer's credits and advances.
       '/sales/customer-credits',
+      // 0428 — money paid out to a customer.
+      '/sales/customer-payments',
       // Block 6 — Receipts.
       '/sales/customer-receipts',
       // Receivables (2026-10-04) — the subledger against the control account.
@@ -422,6 +427,8 @@ describe('every screen has one address', () => {
       '/treasury/cash-forecast',
       // §17 — Bank and Cash Reporting, beside the accounts it reports on.
       '/treasury/deposits',
+      // 0428 — a general expense paid straight from a bank or cash account.
+      '/treasury/expense-payments',
       '/treasury/loans',
       // REQ-ACC-001 Part D — Payments & Receipts.
       '/treasury/payments-receipts',

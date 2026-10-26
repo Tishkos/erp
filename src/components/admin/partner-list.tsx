@@ -23,6 +23,7 @@ import { Denied } from '@/components/denied';
 import { can } from '@domain/permissions';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as partners from '@/server/services/partners';
+import * as rates from '@/server/services/exchange-rates';
 import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
 import { savedViewsFor } from '@/server/saved-views-gate';
 import { partnerRegister } from '@/server/services/screen-registers';
@@ -78,9 +79,11 @@ export async function PartnerList({
   const saved = await savedViewsFor(role === 'supplier' ? 'payables.suppliers' : 'sales.customers', searchParams);
   const status = saved?.current.params['status'] ?? '';
 
-  const { shown } = await withCurrentUser(async (tx) => ({
+  const { shown, currencies } = await withCurrentUser(async (tx) => ({
     // The rows and filters are `partnerRegister` — the pinned count on Home asks the same function.
     ...(await partnerRegister(tx, role, { q: outcome.q, status })),
+    // The currencies a new partner may deal in (0428) — Currencies and Rates', in use.
+    currencies: mayCreate ? (await rates.currencies(tx)).filter((c) => c.isActive) : [],
   }));
 
   return (
@@ -108,6 +111,15 @@ export async function PartnerList({
                     contact information. The trade name, the registration
                     number and the tax identifier are none of those; their
                     columns remain, and a partner that has them keeps them. */}
+                {/* The currency they deal in (0428, 2026-10-26: "add a currency selection field
+                    when creating a customer") — what their payments and receipts offer first. */}
+                <Select
+                  emptyLabel={t('partners.currency_none')}
+                  hint={t('partners.currency_hint')}
+                  label={t('partners.currency')}
+                  name="currency"
+                  options={currencies.map((c) => ({ value: c.code.trim(), label: `${c.code.trim()} · ${c.name}` }))}
+                />
                 <Field label={t('partners.email')} name="email" type="email" />
                 <Field label={t('partners.phone')} name="phone" />
                 {/* Neither a customer nor a supplier is asked for payment terms

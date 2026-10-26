@@ -106,6 +106,12 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
     ],
   },
   {
+    // 0428 — money paid out to a customer: the receipt's mirror, held to the same control account.
+    // The bank side is the account the money left, named on the payment.
+    event: 'sales.customer_payment',
+    lines: [line('customer_receivable', 'debit', true, 'customer')],
+  },
+  {
     event: 'sales.customer_receipt_identified',
     // The clearing account is emptied and the customer credited: the money
     // arrived earlier, and this is only the moment it found its owner.

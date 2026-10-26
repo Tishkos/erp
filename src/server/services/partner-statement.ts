@@ -33,6 +33,7 @@ import {
   arInvoice,
   customerCreditMemo,
   customerNote,
+  customerPayment,
   customerReceipt,
   goodsReturn,
   journalEntry,
@@ -60,6 +61,7 @@ export type StatementCurrency = 'IQD' | 'USD';
 export type DocumentKind =
   | 'ar_invoice'
   | 'customer_receipt'
+  | 'customer_payment'
   | 'customer_credit_memo'
   | 'customer_note'
   | 'ap_invoice'
@@ -177,6 +179,16 @@ const CUSTOMER_RECEIPT: DocumentSource = {
       .where(inArray(customerReceipt.id, ids)),
 };
 
+/** 0428 — money paid out to a customer posts under its own id. */
+const CUSTOMER_PAYMENT: DocumentSource = {
+  kind: 'customer_payment',
+  find: (tx, ids) =>
+    tx
+      .select({ id: customerPayment.id, number: customerPayment.paymentNo })
+      .from(customerPayment)
+      .where(inArray(customerPayment.id, ids)),
+};
+
 const CUSTOMER_CREDIT_MEMO: DocumentSource = {
   kind: 'customer_credit_memo',
   find: (tx, ids) =>
@@ -230,7 +242,7 @@ const GOODS_RETURN: DocumentSource = {
 };
 
 const RAISED_BY: Readonly<Record<PartySide, readonly DocumentSource[]>> = {
-  customer: [AR_INVOICE, CUSTOMER_RECEIPT, CUSTOMER_CREDIT_MEMO, CUSTOMER_NOTE],
+  customer: [AR_INVOICE, CUSTOMER_RECEIPT, CUSTOMER_PAYMENT, CUSTOMER_CREDIT_MEMO, CUSTOMER_NOTE],
   supplier: [AP_INVOICE, SUPPLIER_PAYMENT, GOODS_RETURN],
   // Money arrives from a customer and leaves to a supplier; a bank account
   // sees both halves and neither of its own.

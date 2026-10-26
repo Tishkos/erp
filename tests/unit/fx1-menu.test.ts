@@ -106,11 +106,13 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
   });
 
   it('Treasury & Banking holds what money moved, in the Accounting navbar’s order (2026-10-04)', () => {
-    expect(keysOf('treasury').slice(0, 7)).toEqual([
+    expect(keysOf('treasury').slice(0, 8)).toEqual([
       'bank_reconciliation',
       'bank_transfers',
       'loans',
       'bank_deposits',
+      // 0428 (2026-10-26) — a general expense paid straight from a bank or cash account, beside the deposits.
+      'expense_payments',
       'payments_receipts',
       'treasury_reports',
       'cash_forecast',
@@ -123,7 +125,8 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
   it('Receivables is three headings, grouped by what they do like Payables (2026-10-07)', () => {
     // By direction: "receivable … should be grouped based on their functionality, like payable".
     expect(keysOf('sales').slice(0, 3)).toEqual(['ar_invoices', 'customer_credit_memos', 'sales_returns']);
-    expect(keysOf('sales_receipts')).toEqual(['customer_receipts', 'ar_allocations']);
+    // 0428 (2026-10-26) — money paid out to a customer, beside the receipts it mirrors.
+    expect(keysOf('sales_receipts')).toEqual(['customer_receipts', 'customer_payments', 'ar_allocations']);
     expect(keysOf('sales_balances').slice(0, 3)).toEqual(['ar_statements', 'ar_open_items', 'ar_reconciliation']);
     const route = (sectionKey: string, itemKey: string) =>
       routeFor(section(sectionKey).items.find((item) => item.key === itemKey)!, sectionKey);

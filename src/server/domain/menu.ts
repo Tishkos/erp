@@ -160,6 +160,9 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     ordinal: 32,
     items: [
       page('customer_receipts', 'customer_receipt', '/sales/customer-receipts'),
+      // 0428 — money paid out to a customer: the receipts' mirror, so a customer's account holds
+      // receipts and payments and nothing else.
+      page('customer_payments', 'customer_payment', '/sales/customer-payments'),
       // An object anybody who reads receipts already holds: the credits are
       // receipts' remainders first, and applying one is the receipt's own
       // `execute`.
@@ -569,6 +572,8 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       // (route kept, D-FX-1) and the deposits made into it by hand (D-FX-2).
       page('loans', 'bank_loan', '/treasury/loans'),
       page('bank_deposits', 'bank_cash_account', '/treasury/deposits'),
+      // 0428 — a general expense paid straight from a bank or cash account (the deposits' mirror).
+      page('expense_payments', 'expense_payment', '/treasury/expense-payments'),
       page('payments_receipts', 'bank_account', '/treasury/payments-receipts'),
       // Bank and Cash Reporting — every account's balance and what it is
       // made of (2026-09-29).

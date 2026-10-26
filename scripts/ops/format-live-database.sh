@@ -143,6 +143,8 @@ ar_invoice
 sales_order_line
 sales_order
 other_receipt
+customer_payment
+expense_payment
 ap_match_exception
 supplier_credit_application
 supplier_credit_memo

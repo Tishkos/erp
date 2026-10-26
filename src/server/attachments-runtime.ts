@@ -37,6 +37,8 @@ import {
   goodsReturn,
   journalEntry,
   otherReceipt,
+  customerPayment,
+  expensePayment,
   payable,
   paymentApplication,
   payrollRun,
@@ -270,6 +272,21 @@ const otherReceiptParentAccess = async (tx: Tx, principal: Principal, objectId: 
   const [row] = await tx.select({ id: otherReceipt.id }).from(otherReceipt).where(eq(otherReceipt.id, objectId)).limit(1);
   return Boolean(row);
 };
+
+/** 0428 — money out to a customer, and a general expense; each under its own grant, its branch by row security. */
+const customerPaymentParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'customer_payment') || !UUID_SHAPE.test(objectId)) return false;
+  const [row] = await tx.select({ id: customerPayment.id }).from(customerPayment).where(eq(customerPayment.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+const expensePaymentParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'expense_payment') || !UUID_SHAPE.test(objectId)) return false;
+  const [row] = await tx.select({ id: expensePayment.id }).from(expensePayment).where(eq(expensePayment.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * REQ-ACC-001 — the bank's statement file and the reconciliation's working
@@ -593,6 +610,8 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('bank_loan', loanParentAccess);
   attachments.registerParentAccessCheck('bank_transfer', bankTransferParentAccess);
   attachments.registerParentAccessCheck('other_receipt', otherReceiptParentAccess);
+  attachments.registerParentAccessCheck('customer_payment', customerPaymentParentAccess);
+  attachments.registerParentAccessCheck('expense_payment', expensePaymentParentAccess);
   attachments.registerParentAccessCheck('bank_statement', bankStatementParentAccess);
   attachments.registerParentAccessCheck('tax_code', taxCodeParentAccess);
   attachments.registerParentAccessCheck('recurring_journal', recurringJournalParentAccess);

@@ -9,6 +9,7 @@ import * as landedCostDocuments from './landed-cost-documents';
 import * as inventoryDocuments from './inventory-documents';
 import * as inventoryReports from './inventory-reports';
 import * as manualStockAdditionDocuments from './manual-stock-addition';
+import * as moneyOutDocuments from './money-out-documents';
 import type { BuildContext, Built } from './documents';
 import * as reports from './reports';
 import * as projectReports from './project-reports';
@@ -54,6 +55,8 @@ const BUILDERS = {
   sales_invoice: byId(documents.salesInvoice),
   supplier_payment: byId(documents.supplierPayment),
   customer_receipt: byId(documents.customerReceipt),
+  customer_payment: byId(moneyOutDocuments.customerPayment),
+  expense_payment: byId(moneyOutDocuments.expensePayment),
   customer_note: byId(documents.customerNote),
   sales_return: byId(documents.salesReturn),
   purchase_return: byId(documents.purchaseReturn),

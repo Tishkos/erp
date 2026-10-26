@@ -28,7 +28,8 @@
  */
 import { and, asc, eq, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
-import { businessPartner, itemSupplier, paymentTerms } from '../db/schema';
+import { businessPartner, currency as currencyTable, itemSupplier, paymentTerms } from '../db/schema';
+import * as audit from './audit';
 import {
   AdminNotFoundError,
   AdminValidationError,
@@ -59,6 +60,38 @@ export interface PartnerInput {
   readonly paymentTermsCode?: string | null;
   readonly creditLimitIqd?: string | null;
   readonly creditTermsDays?: string | null;
+  /** The currency they deal in (0428): one of Currencies and Rates', or empty for not said. */
+  readonly currency?: string | null;
+}
+
+/** A currency named for a partner must be one of Currencies and Rates', in use. Empty is "not said". */
+async function assertCurrency(tx: Tx, code: string | null | undefined): Promise<string | null> {
+  const wanted = (code ?? '').trim().toUpperCase();
+  if (!wanted) return null;
+  const [row] = await tx
+    .select({ code: currencyTable.code, active: currencyTable.isActive })
+    .from(currencyTable)
+    .where(eq(currencyTable.code, wanted))
+    .limit(1);
+  if (!row?.active) throw new AdminValidationError('currency', `'${wanted}' is not a currency in use. Choose one from Currencies and Rates.`);
+  return row.code;
+}
+
+/** Sets the partner's currency, audited with before and after. */
+async function setCurrency(tx: Tx, ctx: ActorContext, partnerId: string, currency: string | null): Promise<void> {
+  const [before] = await tx.select({ code: businessPartner.code, currency: businessPartner.currency }).from(businessPartner).where(eq(businessPartner.id, partnerId)).limit(1);
+  if (!before || (before.currency ?? null) === currency) return;
+  await tx.update(businessPartner).set({ currency, updatedAt: new Date() }).where(eq(businessPartner.id, partnerId));
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'business_partner.currency_set',
+    objectType: PERMISSION_OBJECT,
+    objectId: partnerId,
+    branchCode: ctx.branchCode,
+    before: { code: before.code, currency: before.currency },
+    after: { code: before.code, currency },
+    outcome: 'success',
+  });
 }
 
 /**
@@ -246,6 +279,9 @@ export async function createInRole(
       .set({ paymentTermsCode: terms })
       .where(eq(businessPartner.id, created.id));
   }
+  // The currency they deal in, chosen on the New customer form (0428).
+  const currency = await assertCurrency(tx, input.currency);
+  if (currency) await setCurrency(tx, ctx, created.id, currency);
   return created;
 }
 
@@ -268,6 +304,8 @@ export async function updateByCode(tx: Tx, ctx: ActorContext, code: string, inpu
     .update(businessPartner)
     .set({ paymentTermsCode: terms })
     .where(eq(businessPartner.id, before.id));
+  // A form that asks the currency sends it; one that does not leaves it as it is (0428).
+  if (input.currency !== undefined) await setCurrency(tx, ctx, before.id, await assertCurrency(tx, input.currency));
   return getByCode(tx, code);
 }
 
@@ -382,6 +420,8 @@ export async function listActiveInRole(tx: Tx, role: PartnerRole) {
       // Carried with the partner because the documents they head need it: a
       // due date the screen can fill before the invoice is saved (§16).
       paymentTermsCode: businessPartner.paymentTermsCode,
+      // The currency they deal in (0428) — what a payment or receipt form says beside their name.
+      currency: businessPartner.currency,
     })
     .from(businessPartner)
     .where(

@@ -1835,6 +1835,13 @@
       "when": 1795900000234,
       "tag": "0427_payment_application_reversal",
       "breakpoints": true
+    },
+    {
+      "idx": 262,
+      "version": "7",
+      "when": 1795900000235,
+      "tag": "0428_customer_payment_expense_payment",
+      "breakpoints": true
     }
   ]
 }

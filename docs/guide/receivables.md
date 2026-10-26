@@ -68,7 +68,7 @@ What it is for: The customer master — who the company sells to. A customer and
 ### How to add a customer — Customers
 1. Open Accounting → Master Data — Financial → Customers (the customer master moved there on 2026-10-06; the address is still /sales/customers).
 2. Press **New customer** (عميل جديد) at the top. A dialog opens.
-3. Type the **Legal name** (الاسم القانوني). Optionally fill **Email** (البريد الإلكتروني), **Phone** (الهاتف) and the **Address** (العنوان). The New customer form does not ask for payment terms (since 2026-10-06): a customer is created with none, so its sales invoices fall due on the invoice date. Terms can still be set later on the profile's **Update** form if a customer ever needs them.
+3. Type the **Legal name** (الاسم القانوني). Optionally choose the **Currency** (العملة) the customer deals in (since 2026-10-26; from Currencies and Rates — shown beside their name on payment forms, and on their profile, where the Update form changes it) and fill **Email** (البريد الإلكتروني), **Phone** (الهاتف) and the **Address** (العنوان). The New customer form does not ask for payment terms (since 2026-10-06): a customer is created with none, so its sales invoices fall due on the invoice date. Terms can still be set later on the profile's **Update** form if a customer ever needs them.
 4. Press **Create** (إنشاء). The system gives the customer its code; you cannot type it.
 5. The customer's profile opens with "Saved.". If you hold the approval permission the customer is **Active** (نشط) at once; otherwise it is a **Prospect** (محتمل) and shows "awaiting approval" (بانتظار الاعتماد) until somebody approves it.
 If the name you type is exactly the legal name of an existing supplier, no second record is made: that supplier is given the customer role and its profile opens.
@@ -288,6 +288,45 @@ What it is for: Recording money received from a customer into a bank or cash acc
 - "Receipt <no> has nothing left to apply, or the customer has no invoice still owing. Money with no debt to settle stays unapplied and appears on the unapplied report (§16)." — nothing to do; the remainder is the customer's advance.
 - "Receipt <no> is from a different customer than invoice <no>. One customer’s money does not settle another’s debt…".
 - "Nothing outstanding for this customer." (لا يوجد متبقٍ لهذا العميل.) — not a refusal: the customer has no open invoice, so there is nothing to allocate to.
+
+## Customer Payments (مدفوعات العملاء)
+Receivables → Customer Receipts & Credits → Customer Payments   |   Arabic: الذمم المدينة ← مقبوضات العملاء وأرصدتهم الدائنة ← مدفوعات العملاء
+Address: /sales/customer-payments (list) · /sales/customer-payments/new · /sales/customer-payments/<payment number> (CPY-…)
+Needs: `view` on `customer_payment` to open; `create` to write one; `approve` and `post` to approve and post it; `edit_draft` to cancel a draft; `reverse_cancel` to reverse a posted one; `print` / `export` for copies. Whoever keeps Customer Receipts keeps Customer Payments.
+What it is for: Money paid OUT to a customer from a bank or cash account — a refund, an overpayment given back, a settlement — without a bank transfer or a goods return. It is the receipt's mirror: a receipt credits the customer, a payment debits them, so a customer's account can hold receipts and payments and nothing else.
+
+### How to pay a customer — Customer Payments
+1. Open Receivables → Customer Receipts & Credits → Customer Payments and press **New customer payment** (دفعة جديدة لعميل).
+2. Pick the **Customer** (by code or name; the name shows the customer's currency when one is set).
+3. Pick the **Bank/Cash account** the money leaves (its name shows its currency) and check the **Date** (today by default).
+4. Type the **Amount** (المبلغ) in that account's currency, and **What it is for** (الغرض) — required. Optionally the **Payment method**, **Reference** and a **Note**.
+5. Press **Create** (إنشاء). It gets its number (CPY-…) and opens as a **Draft** (مسودة). Nothing is paid yet.
+
+### How to approve and post a customer payment — Customer Payments
+1. Somebody other than whoever wrote it opens the draft and presses **Approve and post** (اعتماد وترحيل). A super user may approve their own.
+2. Status: **Posted** (مرحّل). The money has left the account and the customer's statement shows the payment.
+
+### Fields — Customer Payments
+- **Customer** — required; an active customer.
+- **Bank/Cash account** — required; an active account with a ledger account behind it. The payment is in that account's currency: a dollar account pays dollars.
+- **Date** — required; the payment's date and its journal's.
+- **Amount** (المبلغ) — required, above zero, in the account's currency. **In dinars** (بالدينار) is worked out at that date's rate (shown when the account is not in dinars) and fixed when it posts.
+- **What it is for** (الغرض) — required. **Payment method**, **Reference** (المرجع), **Note** (ملاحظة) — optional.
+- The lines, **How it posts** (كيف تُرحَّل): Debit the customer's receivable (the customer named) / Credit the account it leaves.
+
+### After you save — Customer Payments
+- **Draft** → **Approved** → **Posted** → **Reversed** (معكوس); a draft or approved one can be **Cancelled** (ملغى) with a reason. Never deleted.
+- On posting: Debit Customer receivable (naming the customer) / Credit the bank or cash account's ledger account, in the account's currency; the customer's balance goes up by the amount (they owe it back, or their credit is used up).
+- **Reverse** (عكس), with a reason: the journal is mirrored today, in the currencies it went out in; the money is back in the account and the customer's balance comes down again.
+- The four icons in the title bar: printer, paperclip, notes, clock — as on every record.
+
+### Refusals — Customer Payments
+- "<number> was written by you; somebody else approves it." — ask a colleague (or a super user).
+- "Say what the payment is for …" / "Say why the payment is cancelled." / "Say why the payment is reversed."
+- "<code> is not a customer, so a Customer Payment cannot pay it." — give the partner the customer role first.
+- "There is no USD rate for <date> …" — enter the day's rate under Currencies and Rates first.
+- "<number> is posted; a posted payment is reversed, not cancelled."
+- A bank account below zero refuses the payment (the bank rule C-20): fund it first.
 
 ## Customer Credits & Advances (الأرصدة الدائنة للعملاء والدفعات المقدمة)
 Receivables → Customer Receipts & Credits → Customer Credits & Advances   |   Arabic: الذمم المدينة ← مقبوضات العملاء وأرصدتهم الدائنة ← الأرصدة الدائنة للعملاء والدفعات المقدمة

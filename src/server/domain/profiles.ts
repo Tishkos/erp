@@ -55,6 +55,9 @@ export const PROFILE_KINDS = [
   'sales_invoice',
   'supplier_payment',
   'customer_receipt',
+  // 0428 — money out to a customer, and a general expense paid from a bank or cash account.
+  'customer_payment',
+  'expense_payment',
   'sales_return',
   'goods_return',
   'purchase_order',
@@ -145,6 +148,8 @@ const BASES: Readonly<Record<ProfileKind, string | null>> = {
   sales_invoice: '/sales/ar-invoices',
   supplier_payment: '/payables/supplier-payments',
   customer_receipt: '/sales/customer-receipts',
+  customer_payment: '/sales/customer-payments',
+  expense_payment: '/treasury/expense-payments',
   sales_return: '/sales/sales-returns',
   goods_return: '/payables/goods-returns',
   purchase_order: '/payables/purchase-orders',

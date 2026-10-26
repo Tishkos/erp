@@ -179,6 +179,9 @@ const TARGETS = new Map<string, NoteTarget>([
   // A deposit is a bank transfer (cash) or an other receipt (bank); each asks the grant its own screen asks.
   ['bank_transfer', target('bank_cash_account', 'create', inTable('bank_transfer', 'id', 'branch_code'))],
   ['other_receipt', target('other_receipt', 'create', inTable('other_receipt', 'id', 'branch_code'))],
+  // 0428 — money out to a customer, and a general expense.
+  ['customer_payment', target('customer_payment', 'create', inTable('customer_payment', 'id', 'branch_code'))],
+  ['expense_payment', target('expense_payment', 'create', inTable('expense_payment', 'id', 'branch_code'))],
   ['bank_reconciliation', target('bank_reconciliation', 'edit_draft', inTable('bank_reconciliation', 'id', 'branch_code'))],
   // REQ-ACC-001 — the statement is the reconciliation's record from its draft; a recurring journal is
   // a journal's; a tax code and a period are master records, written in the writer's branch.
